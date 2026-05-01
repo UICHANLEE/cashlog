@@ -1,5 +1,4 @@
 import {
-  type ChangeEvent,
   type FormEvent,
   useCallback,
   useEffect,
@@ -8,32 +7,53 @@ import {
   useState,
 } from 'react'
 import './App.css'
+import { analyzePhoto } from './ai/analyzePhoto'
 import { captureFrameFromVideo } from './camera/captureFromVideo'
 import {
-  analyzePhoto,
   categoryTree,
   type CategoryId,
   createExpenseFromAnalysis,
   createManualExpense,
   type Expense,
+  dayExpenseTotal,
+  dayIncomeTotal,
   formatCategoryLabel,
   formatCurrency,
+  formatIncomeCategoryLabel,
+  formatLedgerCategory,
   generateDailyLog,
   getCalendarDays,
-  getCategoryMeta,
+  getStoryEntriesForDate,
+  getStoryEntriesForMonth,
   getExpensesForDate,
-  getMonthlyTotal,
+  getCategoryMeta,
+  getIncomeCategoryMeta,
+  getMonthlyExpenseTotal,
+  getMonthlyIncomeTotal,
+  type IncomeCategoryId,
+  incomeCategoryTree,
+  type LedgerCategoryId,
+  type LedgerKind,
+  ledgerAccentColor,
   migrateCategoryId,
+  migrateIncomeCategoryId,
   type PhotoAnalysis,
 } from './domain/cashlog'
+import {
+  formatDayLogRelativeKo,
+  formatMonthLogRelativeKo,
+} from './domain/relativeLabelsKo'
+import { StoryReel, type StorySlide } from './story/StoryReel'
 
 type AddMode = 'closed' | 'choice' | 'photo' | 'manual'
+type StoryMode = null | 'day' | 'month'
 
 type ExpenseForm = {
   title: string
   amount: string
-  category: CategoryId
+  category: LedgerCategoryId
   memo: string
+  kind: LedgerKind
 }
 
 const STORAGE_KEY = 'cashlog.expenses'
@@ -45,22 +65,35 @@ const loadExpenses = (): Expense[] => {
     const stored = localStorage.getItem(STORAGE_KEY)
     if (!stored) return []
     const parsed = JSON.parse(stored) as Expense[]
-    return parsed.map((expense) => ({
-      ...expense,
-      category: migrateCategoryId(String(expense.category)),
-    }))
+    return parsed.map((expense) => {
+      const kind = expense.kind === 'income' ? 'income' : 'expense'
+      const category =
+        kind === 'income'
+          ? migrateIncomeCategoryId(String(expense.category))
+          : migrateCategoryId(String(expense.category))
+      return {
+        ...expense,
+        kind,
+        category,
+        createdAt: expense.createdAt ?? expense.updatedAt ?? expense.dateTime,
+        updatedAt: expense.updatedAt ?? expense.createdAt ?? expense.dateTime,
+      }
+    })
   } catch {
     return []
   }
 }
 
-const defaultLeafId = categoryTree[0]?.leaves[0]?.id ?? 'misc_uncat'
+const defaultExpenseLeafId = categoryTree[0]?.leaves[0]?.id ?? 'misc_uncat'
+const defaultIncomeLeafId =
+  incomeCategoryTree[0]?.leaves[0]?.id ?? ('inc_uncat' as IncomeCategoryId)
 
 const emptyForm = (): ExpenseForm => ({
   title: '',
   amount: '',
-  category: defaultLeafId,
+  category: defaultExpenseLeafId,
   memo: '',
+  kind: 'expense',
 })
 
 function App() {
@@ -75,6 +108,13 @@ function App() {
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const [storyMode, setStoryMode] = useState<StoryMode>(null)
+  const [relativeMinuteTick, setRelativeMinuteTick] = useState(0)
+
+  useEffect(() => {
+    const id = window.setInterval(() => setRelativeMinuteTick((x) => x + 1), 60_000)
+    return () => window.clearInterval(id)
+  }, [])
 
   const stopCamera = useCallback(() => {
     setCameraStream((current) => {
@@ -97,18 +137,28 @@ function App() {
   }, [])
 
   const applyPhotoFile = useCallback(async (file: File) => {
-    const nextAnalysis = await analyzePhoto(file)
+    setCameraError(null)
     setPhotoPreview((prev) => {
       if (prev.startsWith('blob:')) URL.revokeObjectURL(prev)
       return URL.createObjectURL(file)
     })
-    setAnalysis(nextAnalysis)
-    setForm({
-      title: nextAnalysis.suggestedTitle,
-      amount: String(nextAnalysis.suggestedAmount),
-      category: nextAnalysis.suggestedCategory,
-      memo: nextAnalysis.suggestedMemo,
-    })
+    setAnalysis(null)
+
+    try {
+      const nextAnalysis = await analyzePhoto(file)
+      setAnalysis(nextAnalysis)
+      setForm({
+        title: nextAnalysis.suggestedTitle,
+        amount: String(nextAnalysis.suggestedAmount),
+        category: nextAnalysis.suggestedCategory,
+        memo: nextAnalysis.suggestedMemo,
+        kind: 'expense',
+      })
+    } catch (e) {
+      const message = e instanceof Error ? e.message : '사진 분석에 실패했어요.'
+      setCameraError(message)
+      setForm(emptyForm())
+    }
   }, [])
 
   useEffect(() => {
@@ -147,8 +197,39 @@ function App() {
     () => getCalendarDays(visibleMonth.year, visibleMonth.month),
     [visibleMonth],
   )
-  const yearMonth = `${visibleMonth.year}-${String(visibleMonth.month + 1).padStart(2, '0')}`
-  const monthlyTotal = getMonthlyTotal(expenses, yearMonth)
+  const yearMonth = useMemo(
+    () => `${visibleMonth.year}-${String(visibleMonth.month + 1).padStart(2, '0')}`,
+    [visibleMonth.year, visibleMonth.month],
+  )
+  const monthlyExpense = getMonthlyExpenseTotal(expenses, yearMonth)
+  const monthlyIncome = getMonthlyIncomeTotal(expenses, yearMonth)
+
+  const expenseToSlide = useCallback((expense: Expense, mode: 'day' | 'month') => {
+    const dt = new Date(expense.dateTime)
+    const relLabel =
+      mode === 'day' ? formatDayLogRelativeKo(dt) : formatMonthLogRelativeKo(dt)
+    const img = expense.imageUrl?.trim()
+    const baseDetail = `${formatLedgerCategory(expense)}${expense.memo ? ` · ${expense.memo}` : ''}`
+    return {
+      id: expense.id,
+      ...(img ? { imageUrl: img } : {}),
+      headline: expense.title,
+      amountLabel: formatCurrency(expense.amount),
+      amountWon: expense.amount,
+      isIncome: expense.kind === 'income',
+      detail: `${relLabel} · ${baseDetail}`,
+    } satisfies StorySlide
+  }, [])
+
+  const dayStorySlides: StorySlide[] = useMemo(() => {
+    void relativeMinuteTick
+    return getStoryEntriesForDate(expenses, selectedDate).map((e) => expenseToSlide(e, 'day'))
+  }, [expenseToSlide, expenses, relativeMinuteTick, selectedDate])
+
+  const monthStorySlides: StorySlide[] = useMemo(() => {
+    void relativeMinuteTick
+    return getStoryEntriesForMonth(expenses, yearMonth).map((e) => expenseToSlide(e, 'month'))
+  }, [expenseToSlide, expenses, relativeMinuteTick, yearMonth])
 
   const openChoice = () => {
     stopCamera()
@@ -213,14 +294,6 @@ function App() {
     await applyPhotoFile(file)
   }
 
-  const handlePhoto = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
-    stopCamera()
-    await applyPhotoFile(file)
-  }
-
   const handleSave = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
@@ -228,25 +301,44 @@ function App() {
     if (!form.title.trim() || Number.isNaN(amount) || amount <= 0) return
 
     const dateTime = new Date(`${selectedDate}T12:00:00`).toISOString()
+    const categoryNormalized: LedgerCategoryId =
+      form.kind === 'income'
+        ? migrateIncomeCategoryId(String(form.category))
+        : migrateCategoryId(String(form.category))
     const expense =
-      addMode === 'photo' && analysis
-        ? {
-            ...createExpenseFromAnalysis({
-              analysis,
+      addMode === 'photo' && photoPreview
+        ? analysis
+          ? {
+              ...createExpenseFromAnalysis({
+                analysis,
+                imageUrl: photoPreview,
+                dateTime,
+              }),
+              title: form.title.trim(),
+              amount,
+              category: categoryNormalized,
+              memo: form.memo.trim(),
+              kind: form.kind,
+            }
+          : {
+              ...createManualExpense({
+                title: form.title.trim(),
+                amount,
+                category: categoryNormalized,
+                memo: form.memo.trim(),
+                dateTime,
+                kind: form.kind,
+              }),
+              source: 'photo' as const,
               imageUrl: photoPreview,
-              dateTime,
-            }),
-            title: form.title.trim(),
-            amount,
-            category: form.category,
-            memo: form.memo.trim(),
-          }
+            }
         : createManualExpense({
             title: form.title.trim(),
             amount,
-            category: form.category,
+            category: categoryNormalized,
             memo: form.memo.trim(),
             dateTime,
+            kind: form.kind,
           })
 
     setExpenses((current) => [expense, ...current])
@@ -254,9 +346,19 @@ function App() {
     setAddMode('closed')
   }
 
-  const updateForm = (field: keyof ExpenseForm, value: string) => {
+  const updateForm = (field: keyof ExpenseForm, value: string | LedgerKind) => {
     setForm((current) => ({ ...current, [field]: value }))
   }
+
+  const closeStory = useCallback(() => setStoryMode(null), [])
+
+  const handleLedgerKindChange = useCallback((kind: LedgerKind) => {
+    setForm((f) => ({
+      ...f,
+      kind,
+      category: kind === 'expense' ? defaultExpenseLeafId : defaultIncomeLeafId,
+    }))
+  }, [])
 
   return (
     <main className="app-shell">
@@ -265,13 +367,21 @@ function App() {
           <p className="eyebrow">Photo first money diary</p>
           <h1>Cashlog</h1>
           <p className="hero-copy">
-            사진 한 장으로 지출과 하루의 기억을 함께 남기는 웹 가계부 MVP입니다.
+            찍은 사진 기록만 모아 오늘이나 한 달을 스토리처럼 되감습니다. 수입·지출을 간단히 입력할 수 있어요.
           </p>
         </div>
         <div className="hero-actions">
-          <div>
-            <span>이번 달 지출</span>
-            <strong>{formatCurrency(monthlyTotal)}</strong>
+          <div className="hero-month-stats">
+            <div>
+              <span>이번 달 지출</span>
+              <strong>{formatCurrency(monthlyExpense)}</strong>
+            </div>
+            <div>
+              <span>이번 달 수입</span>
+              <strong className={monthlyIncome > 0 ? 'hero-stat-income' : undefined}>
+                {formatCurrency(monthlyIncome)}
+              </strong>
+            </div>
           </div>
           <button type="button" className="primary-button" onClick={openChoice}>
             + 기록 추가
@@ -281,11 +391,22 @@ function App() {
 
       <section className="dashboard-grid">
         <div className="calendar-card">
-          <div className="section-heading">
-            <p className="eyebrow">Calendar</p>
-            <h2>
-              {visibleMonth.year}년 {visibleMonth.month + 1}월
-            </h2>
+          <div className="section-heading section-heading-toolbar">
+            <div>
+              <p className="eyebrow">Calendar</p>
+              <h2>
+                {visibleMonth.year}년 {visibleMonth.month + 1}월
+              </h2>
+            </div>
+            <button
+              type="button"
+              className="ghost-button story-launch-btn"
+              disabled={monthStorySlides.length === 0}
+              onClick={() => setStoryMode('month')}
+              title="이번 달 기록 재생"
+            >
+              📽 한 달 스토리
+            </button>
           </div>
           <div className="weekday-row">
             {['일', '월', '화', '수', '목', '금', '토'].map((day) => (
@@ -295,7 +416,8 @@ function App() {
           <div className="calendar-grid">
             {calendarDays.map((day) => {
               const dayExpenses = getExpensesForDate(expenses, day.isoDate)
-              const total = dayExpenses.reduce((sum, expense) => sum + expense.amount, 0)
+              const spent = dayExpenseTotal(dayExpenses)
+              const earned = dayIncomeTotal(dayExpenses)
               const hasPhoto = dayExpenses.some((expense) => expense.source === 'photo')
 
               return (
@@ -310,8 +432,13 @@ function App() {
                   onClick={() => setSelectedDate(day.isoDate)}
                 >
                   <span>{day.day}</span>
-                  {total > 0 && <strong>{formatCurrency(total)}</strong>}
-                  {hasPhoto && <small>사진 로그</small>}
+                  <span className="calendar-day-money">
+                    {spent > 0 && <strong>{formatCurrency(spent)}</strong>}
+                    {earned > 0 && (
+                      <small className="calendar-day-income">수입 {formatCurrency(earned)}</small>
+                    )}
+                  </span>
+                  {hasPhoto && <small className="calendar-day-photo">사진 로그</small>}
                 </button>
               )
             })}
@@ -319,9 +446,20 @@ function App() {
         </div>
 
         <aside className="daily-card">
-          <div className="section-heading">
-            <p className="eyebrow">Daily log</p>
-            <h2>{selectedDate}</h2>
+          <div className="section-heading section-heading-toolbar">
+            <div>
+              <p className="eyebrow">Daily log</p>
+              <h2>{selectedDate}</h2>
+            </div>
+            <button
+              type="button"
+              className="ghost-button story-launch-btn"
+              disabled={dayStorySlides.length === 0}
+              onClick={() => setStoryMode('day')}
+              title="선택한 날의 기록 재생"
+            >
+              📷 하루 스토리
+            </button>
           </div>
           <p className="daily-summary">{dailyLog.summary}</p>
 
@@ -330,23 +468,39 @@ function App() {
               <div className="empty-state">아직 기록이 없어요. + 버튼으로 첫 로그를 남겨보세요.</div>
             ) : (
               selectedExpenses.map((expense) => {
-                const { group } = getCategoryMeta(expense.category)
+                const accent = ledgerAccentColor(expense)
                 return (
-                  <article className="expense-card" key={expense.id}>
+                  <article
+                    className={`expense-card ${expense.kind === 'income' ? 'is-income' : ''}`}
+                    key={expense.id}
+                  >
                     {expense.imageUrl && (
                       <img src={expense.imageUrl} alt="" className="expense-image" />
                     )}
                     <div>
+                      <time
+                        dateTime={expense.dateTime}
+                        className="timeline-relative"
+                      >
+                        {formatDayLogRelativeKo(new Date(expense.dateTime))}
+                      </time>
                       <div className="expense-title-row">
-                        <h3>{expense.title}</h3>
-                        <strong>{formatCurrency(expense.amount)}</strong>
+                        <h3>
+                          {expense.kind === 'income' && (
+                            <span className="ledger-kind-badge ledger-kind-badge-income">
+                              수입
+                            </span>
+                          )}
+                          {expense.title}
+                        </h3>
+                        <strong className={expense.kind === 'income' ? 'amount-income' : undefined}>
+                          {expense.kind === 'income' ? '+' : ''}
+                          {formatCurrency(expense.amount)}
+                        </strong>
                       </div>
                       <p>
-                        <span
-                          className="category-label"
-                          style={{ color: group.color }}
-                        >
-                          {formatCategoryLabel(expense.category)}
+                        <span className="category-label" style={{ color: accent }}>
+                          {formatLedgerCategory(expense)}
                         </span>
                         {expense.memo && ` · ${expense.memo}`}
                       </p>
@@ -365,7 +519,7 @@ function App() {
             <div className="sheet-header">
               <div>
                 <p className="eyebrow">Add record</p>
-                <h2>오늘의 소비를 남겨요</h2>
+                <h2>기록 추가</h2>
               </div>
               <button
                 type="button"
@@ -384,12 +538,12 @@ function App() {
                 <button
                   type="button"
                   className="choice-card"
-                  aria-label="카메라/사진 선택"
+                  aria-label="카메라로 촬영"
                   onClick={() => setAddMode('photo')}
                 >
                   <span>사진</span>
-                  <strong>카메라/사진 선택</strong>
-                  <small>사진을 기반으로 금액과 카테고리를 추천해요.</small>
+                  <strong>바로 카메라 촬영</strong>
+                  <small>찍어서 저장하고, 로그에서는 스토리로 모아 보여요.</small>
                 </button>
                 <button
                   type="button"
@@ -406,23 +560,14 @@ function App() {
 
             {addMode === 'photo' && (
               <div className="photo-flow">
-                <div className="photo-source-row" role="group" aria-label="사진 입력 방식">
+                <div className="photo-source-row camera-only-row" role="group" aria-label="카메라">
                   <button type="button" className="camera-start-button" onClick={startCamera}>
-                    실시간 카메라
+                    카메라 열고 촬영
                   </button>
-                  <label className="file-picker file-picker-inline">
-                    갤러리·파일에서 선택
-                    <input
-                      aria-label="사진 파일 선택"
-                      type="file"
-                      accept="image/*"
-                      onChange={handlePhoto}
-                    />
-                  </label>
                 </div>
                 <p className="camera-permission-note">
-                  실시간 촬영 시 브라우저에서 <strong>카메라 권한</strong>을 요청합니다. (HTTPS 또는
-                  localhost 필요)
+                  <strong>촬영만</strong> 지원합니다. 브라우저에서 카메라 권한을 요청해요 (HTTPS 또는
+                  localhost).
                 </p>
                 {cameraError && <p className="camera-error">{cameraError}</p>}
                 {cameraStream && (
@@ -449,19 +594,47 @@ function App() {
                 )}
                 {analysis && (
                   <p className="analysis-note">
-                    Mock AI 분석 신뢰도 {Math.round(analysis.confidence * 100)}% ·{' '}
-                    {analysis.rawText}
+                    {analysis.engine === 'openai' ? 'Vision' : '목(mock)'} 분석 신뢰도{' '}
+                    {Math.round(analysis.confidence * 100)}% · {analysis.rawText}
                   </p>
                 )}
-                <ExpenseEditor form={form} onChange={updateForm} onSubmit={handleSave} />
+                <ExpenseEditor
+                  form={form}
+                  onChange={updateForm}
+                  onLedgerKindChange={handleLedgerKindChange}
+                  onSubmit={handleSave}
+                />
               </div>
             )}
 
             {addMode === 'manual' && (
-              <ExpenseEditor form={form} onChange={updateForm} onSubmit={handleSave} />
+              <ExpenseEditor
+                form={form}
+                onChange={updateForm}
+                onLedgerKindChange={handleLedgerKindChange}
+                onSubmit={handleSave}
+              />
             )}
           </div>
         </section>
+      )}
+      {storyMode === 'day' && dayStorySlides.length > 0 && (
+        <StoryReel
+          key={`story-day-${selectedDate}-${dayStorySlides.map((s) => s.id).join()}`}
+          title={`${selectedDate} 기록`}
+          aggregateLabel="선택일"
+          slides={dayStorySlides}
+          onClose={closeStory}
+        />
+      )}
+      {storyMode === 'month' && monthStorySlides.length > 0 && (
+        <StoryReel
+          key={`story-month-${visibleMonth.year}-${visibleMonth.month}-${monthStorySlides.map((s) => s.id).join()}`}
+          title={`${visibleMonth.year}년 ${visibleMonth.month + 1}월 기록`}
+          aggregateLabel={`${visibleMonth.year}년 ${visibleMonth.month + 1}월`}
+          slides={monthStorySlides}
+          onClose={closeStory}
+        />
       )}
     </main>
   )
@@ -470,22 +643,58 @@ function App() {
 function ExpenseEditor({
   form,
   onChange,
+  onLedgerKindChange,
   onSubmit,
 }: {
   form: ExpenseForm
-  onChange: (field: keyof ExpenseForm, value: string) => void
+  onChange: (field: keyof ExpenseForm, value: string | LedgerKind) => void
+  onLedgerKindChange: (kind: LedgerKind) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }) {
-  const activeGroup = getCategoryMeta(form.category).group
+  const expenseMeta = getCategoryMeta(form.category as CategoryId)
+  const expenseActiveGroup = expenseMeta.group
+  const incomeMeta = getIncomeCategoryMeta(form.category as IncomeCategoryId)
+  const incomeActiveGroup = incomeMeta.group
+
+  const categoryLegend =
+    form.kind === 'expense' ? '지출 카테고리 (편한가계부 분류)' : '수입 카테고리 (편한가계부 분류)'
+
+  const categoryHint =
+    form.kind === 'expense'
+      ? '편한가계부처럼 대분류를 고른 뒤 소분류를 선택하세요.'
+      : '수입은 지출과 다른 카테고리 트리로 정리합니다. 같은 방식으로 골라 주세요.'
 
   return (
     <form className="expense-form" onSubmit={onSubmit}>
+      <fieldset className="ledger-kind-fieldset">
+        <legend>종류</legend>
+        <div className="ledger-kind-toggle" role="group" aria-label="지출 또는 수입">
+          <button
+            type="button"
+            className={form.kind === 'expense' ? 'active' : ''}
+            aria-pressed={form.kind === 'expense'}
+            onClick={() => onLedgerKindChange('expense')}
+          >
+            지출
+          </button>
+          <button
+            type="button"
+            className={`kind-income${form.kind === 'income' ? ' active' : ''}`}
+            aria-pressed={form.kind === 'income'}
+            onClick={() => onLedgerKindChange('income')}
+          >
+            수입
+          </button>
+        </div>
+      </fieldset>
       <label>
         제목
         <input
           value={form.title}
           onChange={(event) => onChange('title', event.target.value)}
-          placeholder="예: 오늘의 카페 기록"
+          placeholder={
+            form.kind === 'income' ? '예: 급여, 캐시백' : '예: 오늘의 카페 기록'
+          }
         />
       </label>
       <label>
@@ -498,46 +707,90 @@ function ExpenseEditor({
         />
       </label>
       <fieldset className="category-fieldset">
-        <legend>카테고리</legend>
-        <p className="category-hint">
-          편한가계부처럼 대분류를 고른 뒤 소분류를 선택하세요.
-        </p>
-        <div className="category-groups" role="group" aria-label="대분류">
-          {categoryTree.map((group) => (
-            <button
-              key={group.id}
-              type="button"
-              className={
-                group.id === activeGroup.id ? 'category-pill active' : 'category-pill'
-              }
-              aria-pressed={group.id === activeGroup.id}
-              aria-label={`대분류: ${group.name}`}
-              onClick={() => onChange('category', group.leaves[0].id)}
-            >
-              <span aria-hidden>{group.icon}</span>
-              {group.name}
-            </button>
-          ))}
-        </div>
-        <div className="category-leaves" role="group" aria-label="소분류">
-          {activeGroup.leaves.map((leaf) => (
-            <button
-              key={leaf.id}
-              type="button"
-              className={
-                leaf.id === form.category ? 'category-leaf active' : 'category-leaf'
-              }
-              aria-pressed={leaf.id === form.category}
-              aria-label={`소분류: ${leaf.name}`}
-              onClick={() => onChange('category', leaf.id)}
-            >
-              {leaf.name}
-            </button>
-          ))}
-        </div>
-        <p className="category-selected">
-          선택: <strong>{formatCategoryLabel(form.category)}</strong>
-        </p>
+        <legend>{categoryLegend}</legend>
+        <p className="category-hint">{categoryHint}</p>
+        {form.kind === 'expense' ? (
+          <>
+            <div className="category-groups" role="group" aria-label="대분류">
+              {categoryTree.map((group) => (
+                <button
+                  key={group.id}
+                  type="button"
+                  className={
+                    group.id === expenseActiveGroup.id ? 'category-pill active' : 'category-pill'
+                  }
+                  aria-pressed={group.id === expenseActiveGroup.id}
+                  aria-label={`대분류: ${group.name}`}
+                  onClick={() => onChange('category', group.leaves[0].id)}
+                >
+                  <span aria-hidden>{group.icon}</span>
+                  {group.name}
+                </button>
+              ))}
+            </div>
+            <div className="category-leaves" role="group" aria-label="소분류">
+              {expenseActiveGroup.leaves.map((leaf) => (
+                <button
+                  key={leaf.id}
+                  type="button"
+                  className={
+                    leaf.id === form.category ? 'category-leaf active' : 'category-leaf'
+                  }
+                  aria-pressed={leaf.id === form.category}
+                  aria-label={`소분류: ${leaf.name}`}
+                  onClick={() => onChange('category', leaf.id)}
+                >
+                  {leaf.name}
+                </button>
+              ))}
+            </div>
+            <p className="category-selected">
+              선택: <strong>{formatCategoryLabel(form.category as CategoryId)}</strong>
+            </p>
+          </>
+        ) : (
+          <>
+            <div className="category-groups" role="group" aria-label="수입 대분류">
+              {incomeCategoryTree.map((group) => (
+                <button
+                  key={group.id}
+                  type="button"
+                  className={
+                    group.id === incomeActiveGroup.id ? 'category-pill active' : 'category-pill'
+                  }
+                  aria-pressed={group.id === incomeActiveGroup.id}
+                  aria-label={`수입 대분류: ${group.name}`}
+                  onClick={() => onChange('category', group.leaves[0].id)}
+                >
+                  <span aria-hidden>{group.icon}</span>
+                  {group.name}
+                </button>
+              ))}
+            </div>
+            <div className="category-leaves" role="group" aria-label="수입 소분류">
+              {incomeActiveGroup.leaves.map((leaf) => (
+                <button
+                  key={leaf.id}
+                  type="button"
+                  className={
+                    leaf.id === form.category ? 'category-leaf active' : 'category-leaf'
+                  }
+                  aria-pressed={leaf.id === form.category}
+                  aria-label={`수입 소분류: ${leaf.name}`}
+                  onClick={() => onChange('category', leaf.id)}
+                >
+                  {leaf.name}
+                </button>
+              ))}
+            </div>
+            <p className="category-selected">
+              선택:{' '}
+              <strong>
+                {formatIncomeCategoryLabel(form.category as IncomeCategoryId)}
+              </strong>
+            </p>
+          </>
+        )}
       </fieldset>
       <label>
         메모

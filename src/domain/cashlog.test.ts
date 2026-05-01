@@ -1,13 +1,21 @@
 import { describe, expect, it } from 'vitest'
+import { analyzePhoto } from '../ai/analyzePhoto'
 import {
-  analyzePhoto,
   categoryTree,
   createExpenseFromAnalysis,
+  createManualExpense,
   generateDailyLog,
   getCalendarDays,
   getExpensesForDate,
+  getMonthlyExpenseTotal,
+  getMonthlyIncomeTotal,
   getMonthlyTotal,
+  getPhotoExpensesForDate,
+  getPhotoExpensesForMonth,
+  getStoryEntriesForDate,
+  getStoryEntriesForMonth,
   migrateCategoryId,
+  migrateIncomeCategoryId,
 } from './cashlog'
 
 describe('cashlog domain', () => {
@@ -20,6 +28,7 @@ describe('cashlog domain', () => {
     expect(analysis.suggestedCategory).toBe('meal_cafe')
     expect(analysis.suggestedTitle).toContain('카페')
     expect(analysis.confidence).toBeGreaterThanOrEqual(0.7)
+    expect(analysis.engine).toBe('mock')
   })
 
   it('creates an editable expense from photo analysis', () => {
@@ -38,6 +47,7 @@ describe('cashlog domain', () => {
 
     expect(expense).toMatchObject({
       amount: 12800,
+      kind: 'expense',
       category: 'meal_dining',
       title: '브런치',
       memo: '친구와 브런치를 먹은 기록',
@@ -80,6 +90,7 @@ describe('cashlog domain', () => {
 
     expect(log.summary).toContain('아침 커피')
     expect(log.summary).toContain('전시 관람')
+    expect(log.summary).toMatch(/지출/)
     expect(log.highlights).toEqual(['아침 커피', '전시 관람'])
     expect(log.expenseIds).toHaveLength(2)
   })
@@ -113,7 +124,65 @@ describe('cashlog domain', () => {
     ]
 
     expect(getExpensesForDate(expenses, '2026-05-01')).toHaveLength(1)
+    expect(getMonthlyExpenseTotal(expenses, '2026-05')).toBe(32000)
+    expect(getMonthlyIncomeTotal(expenses, '2026-05')).toBe(0)
     expect(getMonthlyTotal(expenses, '2026-05')).toBe(32000)
+  })
+
+  it('orders same-day entries by createdAt when dateTime ties (먼저 입력 → 앞)', () => {
+    const iso = '2026-05-01T12:00:00.000Z'
+    const second = createManualExpense({
+      title: '나중 입력',
+      amount: 3000,
+      category: 'meal_cafe',
+      memo: '',
+      dateTime: iso,
+      kind: 'expense',
+    })
+    const first = createManualExpense({
+      title: '먼저 입력',
+      amount: 1000,
+      category: 'meal_dining',
+      memo: '',
+      dateTime: iso,
+      kind: 'expense',
+    })
+    const secondNewer = {
+      ...second,
+      createdAt: '2026-05-01T15:00:00.000Z',
+      id: 'expense-second',
+    }
+    const firstOlder = {
+      ...first,
+      createdAt: '2026-05-01T14:00:00.000Z',
+      id: 'expense-first',
+    }
+    const shuffled = [secondNewer, firstOlder]
+    const day = getExpensesForDate(shuffled, '2026-05-01')
+    expect(day.map((e) => e.title)).toEqual(['먼저 입력', '나중 입력'])
+  })
+
+  it('counts monthly expense and income totals separately', () => {
+    const coffee = createManualExpense({
+      title: '커피',
+      amount: 5000,
+      category: 'meal_cafe',
+      memo: '',
+      dateTime: '2026-05-01T10:00:00.000Z',
+      kind: 'expense',
+    })
+    const salary = createManualExpense({
+      title: '급여',
+      amount: 240000,
+      category: 'inc_pay_monthly',
+      memo: '',
+      dateTime: '2026-05-15T10:00:00.000Z',
+      kind: 'income',
+    })
+    const list = [coffee, salary]
+    expect(getMonthlyExpenseTotal(list, '2026-05')).toBe(5000)
+    expect(getMonthlyIncomeTotal(list, '2026-05')).toBe(240000)
+    expect(getMonthlyTotal(list, '2026-05')).toBe(5000)
   })
 
   it('builds a month grid with categories for UI badges', () => {
@@ -131,5 +200,56 @@ describe('cashlog domain', () => {
     expect(migrateCategoryId('transport')).toBe('transit_public')
     expect(migrateCategoryId('meal_cafe')).toBe('meal_cafe')
     expect(migrateCategoryId('unknown-xyz')).toBe('misc_uncat')
+  })
+
+  it('migrates income category: unknown or expense id becomes income 미분류', () => {
+    expect(migrateIncomeCategoryId('inc_pay_bonus')).toBe('inc_pay_bonus')
+    expect(migrateIncomeCategoryId('meal_cafe')).toBe('inc_uncat')
+    expect(migrateIncomeCategoryId('bogus')).toBe('inc_uncat')
+  })
+
+  it('collects photo expenses for a day and month', () => {
+    const withImage = createExpenseFromAnalysis({
+      analysis: {
+        suggestedAmount: 1000,
+        suggestedCategory: 'meal_cafe',
+        suggestedTitle: '커피',
+        suggestedMemo: '',
+        confidence: 0.9,
+        rawText: '',
+      },
+      imageUrl: 'blob:a',
+      dateTime: '2026-05-01T10:00:00.000Z',
+    })
+    const noImage = createExpenseFromAnalysis({
+      analysis: {
+        suggestedAmount: 2000,
+        suggestedCategory: 'meal_dining',
+        suggestedTitle: '점심',
+        suggestedMemo: '',
+        confidence: 0.9,
+        rawText: '',
+      },
+      imageUrl: '',
+      dateTime: '2026-05-01T12:00:00.000Z',
+    })
+    const nextDay = createExpenseFromAnalysis({
+      analysis: {
+        suggestedAmount: 3000,
+        suggestedCategory: 'life_goods',
+        suggestedTitle: '생필',
+        suggestedMemo: '',
+        confidence: 0.9,
+        rawText: '',
+      },
+      imageUrl: 'blob:b',
+      dateTime: '2026-05-02T12:00:00.000Z',
+    })
+    const list = [withImage, noImage, nextDay]
+
+    expect(getPhotoExpensesForDate(list, '2026-05-01')).toEqual([withImage])
+    expect(getPhotoExpensesForMonth(list, '2026-05')).toEqual([withImage, nextDay])
+    expect(getStoryEntriesForDate(list, '2026-05-01')).toHaveLength(2)
+    expect(getStoryEntriesForMonth(list, '2026-05')).toHaveLength(3)
   })
 })

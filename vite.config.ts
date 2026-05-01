@@ -7,6 +7,9 @@ export default defineConfig({
   server: {
     // localhost만 열려 있으면 같은 네트워크 폰 브라우저에서 접속 불가 → host: true
     host: true,
+    proxy: {
+      '/api': { target: 'http://127.0.0.1:3000', changeOrigin: true },
+    },
   },
   preview: {
     host: true,
