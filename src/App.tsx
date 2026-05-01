@@ -1,11 +1,14 @@
 import {
   type ChangeEvent,
   type FormEvent,
+  useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import './App.css'
+import { captureFrameFromVideo } from './camera/captureFromVideo'
 import {
   analyzePhoto,
   categoryTree,
@@ -69,10 +72,68 @@ function App() {
   const [form, setForm] = useState<ExpenseForm>(emptyForm)
   const [photoPreview, setPhotoPreview] = useState('')
   const [analysis, setAnalysis] = useState<PhotoAnalysis | null>(null)
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
+  const [cameraError, setCameraError] = useState<string | null>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  const stopCamera = useCallback(() => {
+    setCameraStream((current) => {
+      current?.getTracks().forEach((track) => track.stop())
+      return null
+    })
+    setCameraError(null)
+    const video = videoRef.current
+    if (video) {
+      video.srcObject = null
+    }
+  }, [])
+
+  const revokeAndClearPreview = useCallback(() => {
+    setPhotoPreview((prev) => {
+      if (prev.startsWith('blob:')) URL.revokeObjectURL(prev)
+      return ''
+    })
+    setAnalysis(null)
+  }, [])
+
+  const applyPhotoFile = useCallback(async (file: File) => {
+    const nextAnalysis = await analyzePhoto(file)
+    setPhotoPreview((prev) => {
+      if (prev.startsWith('blob:')) URL.revokeObjectURL(prev)
+      return URL.createObjectURL(file)
+    })
+    setAnalysis(nextAnalysis)
+    setForm({
+      title: nextAnalysis.suggestedTitle,
+      amount: String(nextAnalysis.suggestedAmount),
+      category: nextAnalysis.suggestedCategory,
+      memo: nextAnalysis.suggestedMemo,
+    })
+  }, [])
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video || !cameraStream) {
+      return undefined
+    }
+    video.srcObject = cameraStream
+    video.play().catch(() => {
+      setCameraError('카메라 화면을 재생할 수 없어요.')
+    })
+    return () => {
+      video.srcObject = null
+    }
+  }, [cameraStream])
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(expenses))
   }, [expenses])
+
+  useEffect(() => {
+    return () => {
+      stopCamera()
+    }
+  }, [stopCamera])
 
   const selectedExpenses = useMemo(
     () => getExpensesForDate(expenses, selectedDate),
@@ -90,34 +151,74 @@ function App() {
   const monthlyTotal = getMonthlyTotal(expenses, yearMonth)
 
   const openChoice = () => {
+    stopCamera()
+    revokeAndClearPreview()
     setForm(emptyForm())
-    setAnalysis(null)
-    setPhotoPreview('')
     setAddMode('choice')
   }
 
   const openManual = () => {
+    stopCamera()
+    revokeAndClearPreview()
     setForm(emptyForm())
-    setAnalysis(null)
-    setPhotoPreview('')
     setAddMode('manual')
+  }
+
+  const startCamera = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError('이 브라우저에서는 카메라를 사용할 수 없어요.')
+      return
+    }
+    setCameraError(null)
+    stopCamera()
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false,
+      })
+      setCameraStream(stream)
+    } catch {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        })
+        setCameraStream(stream)
+      } catch (err) {
+        const e = err as DOMException
+        if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+          setCameraError(
+            '카메라 권한이 필요해요. 브라우저 설정에서 허용한 뒤 다시 시도해 주세요.',
+          )
+        } else if (e.name === 'NotFoundError' || e.name === 'DevicesNotFoundError') {
+          setCameraError('사용할 수 있는 카메라를 찾지 못했어요.')
+        } else {
+          setCameraError('카메라를 켤 수 없어요. HTTPS 또는 localhost에서 다시 시도해 주세요.')
+        }
+      }
+    }
+  }
+
+  const handleCapturePhoto = async () => {
+    const video = videoRef.current
+    if (!video || !cameraStream) return
+    setCameraError(null)
+    const blob = await captureFrameFromVideo(video)
+    if (!blob) {
+      setCameraError('촬영 이미지를 만들지 못했어요. 잠시 후 다시 눌러 주세요.')
+      return
+    }
+    const file = new File([blob], `cashlog-capture-${Date.now()}.jpg`, { type: 'image/jpeg' })
+    stopCamera()
+    await applyPhotoFile(file)
   }
 
   const handlePhoto = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
+    event.target.value = ''
     if (!file) return
-
-    const nextAnalysis = await analyzePhoto(file)
-    const nextPreview = URL.createObjectURL(file)
-
-    setAnalysis(nextAnalysis)
-    setPhotoPreview(nextPreview)
-    setForm({
-      title: nextAnalysis.suggestedTitle,
-      amount: String(nextAnalysis.suggestedAmount),
-      category: nextAnalysis.suggestedCategory,
-      memo: nextAnalysis.suggestedMemo,
-    })
+    stopCamera()
+    await applyPhotoFile(file)
   }
 
   const handleSave = (event: FormEvent<HTMLFormElement>) => {
@@ -149,6 +250,7 @@ function App() {
           })
 
     setExpenses((current) => [expense, ...current])
+    stopCamera()
     setAddMode('closed')
   }
 
@@ -265,7 +367,14 @@ function App() {
                 <p className="eyebrow">Add record</p>
                 <h2>오늘의 소비를 남겨요</h2>
               </div>
-              <button type="button" className="ghost-button" onClick={() => setAddMode('closed')}>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => {
+                  stopCamera()
+                  setAddMode('closed')
+                }}
+              >
                 닫기
               </button>
             </div>
@@ -297,17 +406,47 @@ function App() {
 
             {addMode === 'photo' && (
               <div className="photo-flow">
-                <label className="file-picker">
-                  사진 파일 선택
-                  <input
-                    aria-label="사진 파일 선택"
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={handlePhoto}
-                  />
-                </label>
-                {photoPreview && <img src={photoPreview} alt="" className="preview-image" />}
+                <div className="photo-source-row" role="group" aria-label="사진 입력 방식">
+                  <button type="button" className="camera-start-button" onClick={startCamera}>
+                    실시간 카메라
+                  </button>
+                  <label className="file-picker file-picker-inline">
+                    갤러리·파일에서 선택
+                    <input
+                      aria-label="사진 파일 선택"
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhoto}
+                    />
+                  </label>
+                </div>
+                <p className="camera-permission-note">
+                  실시간 촬영 시 브라우저에서 <strong>카메라 권한</strong>을 요청합니다. (HTTPS 또는
+                  localhost 필요)
+                </p>
+                {cameraError && <p className="camera-error">{cameraError}</p>}
+                {cameraStream && (
+                  <div className="camera-live-wrap">
+                    <video
+                      ref={videoRef}
+                      className="camera-live"
+                      playsInline
+                      muted
+                      autoPlay
+                    />
+                    <div className="camera-actions">
+                      <button type="button" className="primary-button" onClick={handleCapturePhoto}>
+                        촬영하기
+                      </button>
+                      <button type="button" className="ghost-button" onClick={stopCamera}>
+                        카메라 끄기
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {photoPreview && !cameraStream && (
+                  <img src={photoPreview} alt="" className="preview-image" />
+                )}
                 {analysis && (
                   <p className="analysis-note">
                     Mock AI 분석 신뢰도 {Math.round(analysis.confidence * 100)}% ·{' '}
