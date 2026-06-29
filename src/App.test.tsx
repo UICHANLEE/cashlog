@@ -44,7 +44,49 @@ describe('Cashlog photo MVP', () => {
     await user.click(screen.getByRole('button', { name: /하루 스토리/i }))
     const dialog = screen.getByRole('dialog', { name: `${todaySlice} 기록` })
     expect(dialog).toBeInTheDocument()
+    expect(within(dialog).getAllByText(`${todaySlice} 기록`).length).toBeGreaterThan(0)
+    await user.click(within(dialog).getByRole('button', { name: '다음 장' }))
     expect(within(dialog).getByText('오늘의 카페')).toBeInTheDocument()
+  })
+
+  it('renders a saved short video entry inside the story reel', async () => {
+    const user = userEvent.setup()
+    const todaySlice = new Date().toISOString().slice(0, 10)
+    const video = createManualExpense({
+      title: '편의점 영상',
+      amount: 4200,
+      category: 'life_goods',
+      memo: '짧은 영상 기록',
+      dateTime: `${todaySlice}T12:00:00.000Z`,
+      kind: 'expense',
+      source: 'photo',
+      imageUrl: 'blob:cashlog-video',
+      mediaType: 'video',
+    })
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([video]))
+
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: /하루 스토리/i }))
+    const dialog = screen.getByRole('dialog', { name: `${todaySlice} 기록` })
+    await user.click(within(dialog).getByRole('button', { name: '다음 장' }))
+    expect(within(dialog).getByText('편의점 영상')).toBeInTheDocument()
+    expect(dialog.querySelector('video.story-reel-video')).toBeInTheDocument()
+  })
+
+  it('offers silent short-video duration presets in the capture flow', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '+ 기록 추가' }))
+    await user.click(screen.getByRole('button', { name: '카메라로 촬영' }))
+    await user.click(screen.getByRole('button', { name: '영상' }))
+
+    expect(screen.getByRole('group', { name: '영상 길이' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '2초' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '5초' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '10초' })).toBeInTheDocument()
+    expect(screen.getByText(/무음 촬영/)).toBeInTheDocument()
   })
 
   it('lets a user add a manual expense without a photo', async () => {
@@ -82,7 +124,23 @@ describe('Cashlog photo MVP', () => {
     expect(screen.getByRole('button', { name: /하루 스토리/i })).not.toBeDisabled()
     await user.click(screen.getByRole('button', { name: /하루 스토리/i }))
     const dialog = screen.getByRole('dialog', { name: `${todaySlice} 기록` })
+    await user.click(within(dialog).getByRole('button', { name: '다음 장' }))
     expect(within(dialog).getByText('메모만')).toBeInTheDocument()
+  })
+
+  it('moves the visible calendar month', async () => {
+    const user = userEvent.setup()
+    const now = new Date()
+    const currentLabel = `${now.getFullYear()}년 ${now.getMonth() + 1}월`
+    const next = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+    const nextLabel = `${next.getFullYear()}년 ${next.getMonth() + 1}월`
+    render(<App />)
+
+    expect(screen.getByRole('heading', { name: currentLabel })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '다음 달' }))
+    expect(screen.getByRole('heading', { name: nextLabel })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '이전 달' }))
+    expect(screen.getByRole('heading', { name: currentLabel })).toBeInTheDocument()
   })
 
   it('lets a user add manual income via 수입 toggle', async () => {

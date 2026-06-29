@@ -389,6 +389,8 @@ export type ExpenseSource = 'photo' | 'manual'
 
 export type LedgerKind = 'expense' | 'income'
 
+export type ExpenseMediaType = 'photo' | 'video'
+
 export type Expense = {
   id: string
   dateTime: string
@@ -399,7 +401,11 @@ export type Expense = {
   title: string
   memo: string
   source: ExpenseSource
+  mediaId?: string
   imageUrl?: string
+  thumbnailUrl?: string
+  mediaType?: ExpenseMediaType
+  mediaDurationSeconds?: number
   createdAt: string
   updatedAt: string
 }
@@ -451,10 +457,14 @@ export function compareExpensesChronological(a: Expense, b: Expense): number {
 export const createExpenseFromAnalysis = ({
   analysis,
   imageUrl,
+  mediaId,
+  thumbnailUrl,
   dateTime,
 }: {
   analysis: PhotoAnalysis
   imageUrl: string
+  mediaId?: string
+  thumbnailUrl?: string
   dateTime: string
 }): Expense => {
   const now = new Date().toISOString()
@@ -468,7 +478,10 @@ export const createExpenseFromAnalysis = ({
     title: analysis.suggestedTitle,
     memo: analysis.suggestedMemo,
     source: 'photo',
+    ...(mediaId ? { mediaId } : {}),
     imageUrl,
+    ...(thumbnailUrl ? { thumbnailUrl } : {}),
+    mediaType: 'photo',
     createdAt: now,
     updatedAt: now,
   }
@@ -481,6 +494,12 @@ export const createManualExpense = ({
   memo,
   dateTime,
   kind = 'expense',
+  source = 'manual',
+  mediaId,
+  imageUrl,
+  thumbnailUrl,
+  mediaType,
+  mediaDurationSeconds,
 }: {
   title: string
   amount: number
@@ -488,6 +507,12 @@ export const createManualExpense = ({
   memo: string
   dateTime: string
   kind?: LedgerKind
+  source?: ExpenseSource
+  mediaId?: string
+  imageUrl?: string
+  thumbnailUrl?: string
+  mediaType?: ExpenseMediaType
+  mediaDurationSeconds?: number
 }): Expense => {
   const now = new Date().toISOString()
 
@@ -499,7 +524,12 @@ export const createManualExpense = ({
     category,
     title,
     memo,
-    source: 'manual',
+    source,
+    ...(mediaId ? { mediaId } : {}),
+    ...(imageUrl ? { imageUrl } : {}),
+    ...(thumbnailUrl ? { thumbnailUrl } : {}),
+    ...(mediaType ? { mediaType } : {}),
+    ...(mediaDurationSeconds ? { mediaDurationSeconds } : {}),
     createdAt: now,
     updatedAt: now,
   }

@@ -11,8 +11,10 @@ import './StoryReel.css'
 
 export type StorySlide = {
   id: string
+  variant?: 'entry' | 'cover' | 'summary'
   /** 없으면 직접 입력(글만) 카드 표시 */
   imageUrl?: string
+  mediaType?: 'photo' | 'video'
   headline: string
   amountLabel: string
   /** 원 단위 (수입도 양수) */
@@ -20,6 +22,8 @@ export type StorySlide = {
   detail?: string
   /** 있으면 키워드 추정보다 우선 (수입 장면 방향·누적) */
   isIncome?: boolean
+  durationMs?: number
+  summaryLines?: string[]
 }
 
 type StoryReelProps = {
@@ -60,6 +64,7 @@ function formatToolbarRunningTotal(netOutflow: number) {
 }
 
 function slideDeltaLabel(slide: StorySlide) {
+  if (slide.amountWon === 0) return ''
   const income = slideIsIncome(slide)
   const amt = formatCurrency(slide.amountWon)
   return income ? `+${amt}` : `‑${amt}`
@@ -118,6 +123,7 @@ export function StoryReel({
   const scheduleAdvance = useCallback(() => {
     clearTimer()
     if (autoAdvanceMs <= 0 || slides.length === 0) return
+    const durationMs = slides[index]?.durationMs ?? autoAdvanceMs
     timerRef.current = setTimeout(() => {
       setIndex((i) => {
         if (i >= slides.length - 1) {
@@ -126,8 +132,8 @@ export function StoryReel({
         }
         return i + 1
       })
-    }, autoAdvanceMs)
-  }, [autoAdvanceMs, onClose, slides.length])
+    }, durationMs)
+  }, [autoAdvanceMs, index, onClose, slides])
 
   useEffect(() => {
     scheduleAdvance()
@@ -196,6 +202,7 @@ export function StoryReel({
   const sliceNow = slides.slice(0, index + 1)
   const cumulative = cumulativeNet(sliceNow)
   const currentDelta = slideDeltaLabel(slide)
+  const slideDurationMs = slide.durationMs ?? autoAdvanceMs
 
   return (
     <div
@@ -203,7 +210,7 @@ export function StoryReel({
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      style={{ '--story-advance-duration': `${autoAdvanceMs}ms` } as CSSProperties}
+      style={{ '--story-advance-duration': `${slideDurationMs}ms` } as CSSProperties}
     >
       <header className="story-reel-chrome">
         <div className="story-progress-row" aria-hidden="true">
@@ -259,7 +266,35 @@ export function StoryReel({
           else if (d < -60) next()
         }}
       >
-        {slide.imageUrl ? (
+        {slide.variant === 'cover' || slide.variant === 'summary' ? (
+          <div className={`story-reel-summary-pane ${slide.variant}`}>
+            <span className="story-reel-text-head">{slide.headline}</span>
+            <strong>{slide.amountLabel}</strong>
+            {slide.detail ? <p>{slide.detail}</p> : null}
+            {slide.summaryLines && slide.summaryLines.length > 0 ? (
+              <ul>
+                {slide.summaryLines.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : slide.imageUrl && slide.mediaType === 'video' ? (
+          <video
+            key={slide.id}
+            src={slide.imageUrl}
+            className="story-reel-photo story-reel-video"
+            autoPlay
+            muted
+            playsInline
+            preload="metadata"
+            onTimeUpdate={(event) => {
+              if (event.currentTarget.currentTime >= 5) {
+                event.currentTarget.pause()
+              }
+            }}
+          />
+        ) : slide.imageUrl ? (
           <img src={slide.imageUrl} alt="" className="story-reel-photo" draggable={false} />
         ) : (
           <div

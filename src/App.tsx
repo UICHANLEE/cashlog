@@ -47,6 +47,7 @@ import { StoryReel, type StorySlide } from './story/StoryReel'
 
 type AddMode = 'closed' | 'choice' | 'photo' | 'manual'
 type StoryMode = null | 'day' | 'month'
+type CaptureMode = 'photo' | 'video'
 
 type ExpenseForm = {
   title: string
@@ -59,6 +60,11 @@ type ExpenseForm = {
 const STORAGE_KEY = 'cashlog.expenses'
 
 const todayIsoDate = () => new Date().toISOString().slice(0, 10)
+
+const formatSignedCurrency = (amount: number) => {
+  if (amount === 0) return '0원'
+  return amount > 0 ? `+${formatCurrency(amount)}` : `-${formatCurrency(Math.abs(amount))}`
+}
 
 const loadExpenses = (): Expense[] => {
   try {
@@ -100,8 +106,13 @@ function App() {
   const now = new Date()
   const [expenses, setExpenses] = useState<Expense[]>(loadExpenses)
   const [selectedDate, setSelectedDate] = useState(todayIsoDate)
-  const [visibleMonth] = useState({ year: now.getFullYear(), month: now.getMonth() })
+  const [visibleMonth, setVisibleMonth] = useState({
+    year: now.getFullYear(),
+    month: now.getMonth(),
+  })
   const [addMode, setAddMode] = useState<AddMode>('closed')
+  const [captureMode, setCaptureMode] = useState<CaptureMode>('photo')
+  const [videoDurationSeconds, setVideoDurationSeconds] = useState(5)
   const [form, setForm] = useState<ExpenseForm>(emptyForm)
   const [photoPreview, setPhotoPreview] = useState('')
   const [analysis, setAnalysis] = useState<PhotoAnalysis | null>(null)
@@ -189,6 +200,9 @@ function App() {
     () => getExpensesForDate(expenses, selectedDate),
     [expenses, selectedDate],
   )
+  const selectedDayExpense = dayExpenseTotal(selectedExpenses)
+  const selectedDayIncome = dayIncomeTotal(selectedExpenses)
+  const selectedDayNet = selectedDayIncome - selectedDayExpense
   const dailyLog = useMemo(
     () => generateDailyLog(selectedDate, expenses),
     [expenses, selectedDate],
@@ -203,6 +217,14 @@ function App() {
   )
   const monthlyExpense = getMonthlyExpenseTotal(expenses, yearMonth)
   const monthlyIncome = getMonthlyIncomeTotal(expenses, yearMonth)
+  const monthlyNet = monthlyIncome - monthlyExpense
+
+  const moveVisibleMonth = (delta: number) => {
+    setVisibleMonth((current) => {
+      const next = new Date(current.year, current.month + delta, 1)
+      return { year: next.getFullYear(), month: next.getMonth() }
+    })
+  }
 
   const expenseToSlide = useCallback((expense: Expense, mode: 'day' | 'month') => {
     const dt = new Date(expense.dateTime)
@@ -213,6 +235,7 @@ function App() {
     return {
       id: expense.id,
       ...(img ? { imageUrl: img } : {}),
+      mediaType: expense.mediaType ?? 'photo',
       headline: expense.title,
       amountLabel: formatCurrency(expense.amount),
       amountWon: expense.amount,
@@ -223,18 +246,79 @@ function App() {
 
   const dayStorySlides: StorySlide[] = useMemo(() => {
     void relativeMinuteTick
-    return getStoryEntriesForDate(expenses, selectedDate).map((e) => expenseToSlide(e, 'day'))
-  }, [expenseToSlide, expenses, relativeMinuteTick, selectedDate])
+    const entries = getStoryEntriesForDate(expenses, selectedDate)
+    if (entries.length === 0) return []
+    const spent = dayExpenseTotal(entries)
+    const earned = dayIncomeTotal(entries)
+    const net = earned - spent
+    return [
+      {
+        id: `day-cover-${selectedDate}`,
+        variant: 'cover',
+        headline: `${selectedDate} 머니 리캡`,
+        amountLabel: formatSignedCurrency(net),
+        amountWon: 0,
+        detail: net >= 0 ? '오늘은 돈이 남았어요' : '오늘의 순지출',
+        durationMs: 2400,
+        summaryLines: [`지출 ${formatCurrency(spent)}`, `수입 ${formatCurrency(earned)}`],
+      },
+      ...entries.map((e) => expenseToSlide(e, 'day')),
+      {
+        id: `day-summary-${selectedDate}`,
+        variant: 'summary',
+        headline: '하루 저장 완료',
+        amountLabel: `${entries.length}개 기록`,
+        amountWon: 0,
+        detail: dailyLog.summary,
+        durationMs: 3600,
+        summaryLines: entries.slice(0, 3).map((entry) => entry.title),
+      },
+    ]
+  }, [dailyLog.summary, expenseToSlide, expenses, relativeMinuteTick, selectedDate])
 
   const monthStorySlides: StorySlide[] = useMemo(() => {
     void relativeMinuteTick
-    return getStoryEntriesForMonth(expenses, yearMonth).map((e) => expenseToSlide(e, 'month'))
-  }, [expenseToSlide, expenses, relativeMinuteTick, yearMonth])
+    const entries = getStoryEntriesForMonth(expenses, yearMonth)
+    if (entries.length === 0) return []
+    const spent = dayExpenseTotal(entries)
+    const earned = dayIncomeTotal(entries)
+    const net = earned - spent
+    return [
+      {
+        id: `month-cover-${yearMonth}`,
+        variant: 'cover',
+        headline: `${visibleMonth.month + 1}월 머니 스토리`,
+        amountLabel: formatSignedCurrency(net),
+        amountWon: 0,
+        detail: `${entries.length}개 기록으로 만든 월간 리캡`,
+        durationMs: 2600,
+        summaryLines: [`지출 ${formatCurrency(spent)}`, `수입 ${formatCurrency(earned)}`],
+      },
+      ...entries.map((e) => expenseToSlide(e, 'month')),
+      {
+        id: `month-summary-${yearMonth}`,
+        variant: 'summary',
+        headline: '월간 로그',
+        amountLabel: `${entries.length}개 기록`,
+        amountWon: 0,
+        detail: net >= 0 ? '이번 달 현금 흐름은 플러스예요' : '이번 달 지출 흐름을 확인했어요',
+        durationMs: 3800,
+        summaryLines: entries.slice(-3).map((entry) => entry.title),
+      },
+    ]
+  }, [
+    expenseToSlide,
+    expenses,
+    relativeMinuteTick,
+    visibleMonth.month,
+    yearMonth,
+  ])
 
   const openChoice = () => {
     stopCamera()
     revokeAndClearPreview()
     setForm(emptyForm())
+    setCaptureMode('photo')
     setAddMode('choice')
   }
 
@@ -362,13 +446,33 @@ function App() {
 
   return (
     <main className="app-shell">
+      <nav className="top-nav" aria-label="앱">
+        <div className="brand-mark">
+          <span aria-hidden>CL</span>
+          <strong>Cashlog</strong>
+        </div>
+        <div className="nav-pills" aria-label="현재 보기">
+          <span>Diary</span>
+          <span>Story</span>
+          <span>Cards</span>
+        </div>
+      </nav>
+
       <section className="hero-panel">
         <div>
-          <p className="eyebrow">Photo first money diary</p>
-          <h1>Cashlog</h1>
+          <p className="eyebrow">Photo-first money OS</p>
+          <h1>
+            돈의 하루를
+            <span>스토리로.</span>
+          </h1>
           <p className="hero-copy">
-            찍은 사진 기록만 모아 오늘이나 한 달을 스토리처럼 되감습니다. 수입·지출을 간단히 입력할 수 있어요.
+            지출, 수입, 사진 기록을 한 화면에서 모아보고 오늘의 흐름을 짧은 리캡처럼 되감아요.
           </p>
+          <div className="hero-signal-row" aria-label="주요 상태">
+            <span>Live local</span>
+            <span>Vision-ready</span>
+            <span>{selectedExpenses.length} logs today</span>
+          </div>
         </div>
         <div className="hero-actions">
           <div className="hero-month-stats">
@@ -382,10 +486,29 @@ function App() {
                 {formatCurrency(monthlyIncome)}
               </strong>
             </div>
+            <div className={monthlyNet >= 0 ? 'net-positive' : 'net-negative'}>
+              <span>월 순흐름</span>
+              <strong>{formatSignedCurrency(monthlyNet)}</strong>
+            </div>
           </div>
           <button type="button" className="primary-button" onClick={openChoice}>
             + 기록 추가
           </button>
+        </div>
+      </section>
+
+      <section className="quick-panel" aria-label="오늘 요약">
+        <div>
+          <span>오늘 지출</span>
+          <strong>{formatCurrency(selectedDayExpense)}</strong>
+        </div>
+        <div>
+          <span>오늘 수입</span>
+          <strong>{formatCurrency(selectedDayIncome)}</strong>
+        </div>
+        <div className={selectedDayNet >= 0 ? 'net-positive' : 'net-negative'}>
+          <span>오늘 순흐름</span>
+          <strong>{formatSignedCurrency(selectedDayNet)}</strong>
         </div>
       </section>
 
@@ -398,15 +521,33 @@ function App() {
                 {visibleMonth.year}년 {visibleMonth.month + 1}월
               </h2>
             </div>
-            <button
-              type="button"
-              className="ghost-button story-launch-btn"
-              disabled={monthStorySlides.length === 0}
-              onClick={() => setStoryMode('month')}
-              title="이번 달 기록 재생"
-            >
-              📽 한 달 스토리
-            </button>
+            <div className="toolbar-actions">
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => moveVisibleMonth(-1)}
+                title="이전 달"
+              >
+                이전 달
+              </button>
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => moveVisibleMonth(1)}
+                title="다음 달"
+              >
+                다음 달
+              </button>
+              <button
+                type="button"
+                className="ghost-button story-launch-btn"
+                disabled={monthStorySlides.length === 0}
+                onClick={() => setStoryMode('month')}
+                title="이번 달 기록 재생"
+              >
+                한 달 스토리
+              </button>
+            </div>
           </div>
           <div className="weekday-row">
             {['일', '월', '화', '수', '목', '금', '토'].map((day) => (
@@ -542,8 +683,8 @@ function App() {
                   onClick={() => setAddMode('photo')}
                 >
                   <span>사진</span>
-                  <strong>바로 카메라 촬영</strong>
-                  <small>찍어서 저장하고, 로그에서는 스토리로 모아 보여요.</small>
+                  <strong>카메라로 기록</strong>
+                  <small>사진 중심으로 오늘의 소비를 저장해요.</small>
                 </button>
                 <button
                   type="button"
@@ -553,16 +694,52 @@ function App() {
                 >
                   <span>직접</span>
                   <strong>직접 입력</strong>
-                  <small>기존 가계부처럼 빠르게 기록해요.</small>
+                  <small>금액과 카테고리만 빠르게 남겨요.</small>
                 </button>
               </div>
             )}
 
             {addMode === 'photo' && (
               <div className="photo-flow">
+                <div className="capture-mode-toggle" role="group" aria-label="촬영 유형">
+                  <button
+                    type="button"
+                    className={captureMode === 'photo' ? 'active' : ''}
+                    aria-pressed={captureMode === 'photo'}
+                    onClick={() => setCaptureMode('photo')}
+                  >
+                    사진
+                  </button>
+                  <button
+                    type="button"
+                    className={captureMode === 'video' ? 'active' : ''}
+                    aria-pressed={captureMode === 'video'}
+                    onClick={() => setCaptureMode('video')}
+                  >
+                    영상
+                  </button>
+                </div>
+                {captureMode === 'video' && (
+                  <div className="video-preset-panel">
+                    <div className="duration-presets" role="group" aria-label="영상 길이">
+                      {[2, 5, 10].map((seconds) => (
+                        <button
+                          key={seconds}
+                          type="button"
+                          aria-pressed={videoDurationSeconds === seconds}
+                          className={videoDurationSeconds === seconds ? 'active' : ''}
+                          onClick={() => setVideoDurationSeconds(seconds)}
+                        >
+                          {seconds}초
+                        </button>
+                      ))}
+                    </div>
+                    <p>무음 촬영 · 스토리에서 짧게 재생</p>
+                  </div>
+                )}
                 <div className="photo-source-row camera-only-row" role="group" aria-label="카메라">
                   <button type="button" className="camera-start-button" onClick={startCamera}>
-                    카메라 열고 촬영
+                    {captureMode === 'photo' ? '카메라 열고 촬영' : '영상 촬영 준비'}
                   </button>
                 </div>
                 <p className="camera-permission-note">
