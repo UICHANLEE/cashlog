@@ -4,10 +4,39 @@ html {
 }
 
 :root {
-  color: #0f172a;
-  background: #f8fafc;
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* 손그림 다이어리 팔레트 (따뜻한 종이 + 크레용 포인트) */
+  --paper: #fbf3e2;
+  --paper-soft: #fff9ee;
+  --paper-card: #fffdf7;
+  --ink: #2f2a24;
+  --ink-soft: #7a6f5d;
+  --line: #2a251f;
+  --line-soft: #cdbfa4;
+
+  --crayon-coral: #ff6f59;
+  --crayon-mint: #3fc79a;
+  --crayon-sky: #6cb8ff;
+  --crayon-sun: #ffd23f;
+  --crayon-grape: #b78bff;
+  --crayon-pink: #ff9ec4;
+
+  --accent: var(--crayon-coral);
+  --accent-ink: #b23a26;
+  --income: #1f9d6b;
+  --income-wash: #d8f5e6;
+
+  /* 손으로 그린 듯한 삐뚤 테두리 반경 */
+  --sketch-radius: 235px 15px 220px 18px / 18px 210px 20px 240px;
+  --sketch-radius-alt: 18px 220px 16px 210px / 210px 18px 230px 16px;
+  --sticker-shadow: 4px 4px 0 var(--line);
+  --sticker-shadow-sm: 3px 3px 0 var(--line);
+
+  --font-hand: 'Gaegu', 'Gamja Flower', ui-rounded, system-ui, sans-serif;
+  --font-body: 'Gowun Dodum', 'Gaegu', ui-sans-serif, system-ui, sans-serif;
+
+  color: var(--ink);
+  background: var(--paper);
+  font-family: var(--font-body);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -22,6 +51,12 @@ body {
   margin: 0;
   min-width: 320px;
   overflow-x: clip;
+  color: var(--ink);
+  /* 노트 도트 그리드 종이 질감 */
+  background-color: var(--paper);
+  background-image: radial-gradient(rgba(42, 37, 31, 0.07) 1.1px, transparent 1.1px);
+  background-size: 22px 22px;
+  background-attachment: fixed;
 }
 
 #root {
@@ -33,4 +68,9 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+::selection {
+  background: var(--crayon-sun);
+  color: var(--ink);
 }
