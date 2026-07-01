@@ -5,6 +5,7 @@ import App from './App'
 import { createExpenseFromAnalysis, createManualExpense } from './domain/cashlog'
 
 const STORAGE_KEY = 'cashlog.expenses'
+const BUDDY_STORAGE_KEY = 'cashlog.buddy'
 
 describe('Cashlog photo MVP', () => {
   beforeEach(() => {
@@ -15,11 +16,17 @@ describe('Cashlog photo MVP', () => {
     })
   })
 
-  it('shows disabled story playback until any entries exist', () => {
+  it('opens guide story playback before any entries exist', async () => {
+    const user = userEvent.setup()
+    const todaySlice = new Date().toISOString().slice(0, 10)
     render(<App />)
 
-    expect(screen.getByRole('button', { name: /한 달 스토리/i })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /하루 스토리/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /한 달 스토리/i })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /하루 스토리/i })).not.toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: /하루 스토리/i }))
+    const dialog = screen.getByRole('dialog', { name: `${todaySlice} 기록` })
+    expect(within(dialog).getAllByText(`${todaySlice} 리캡 준비 중`).length).toBeGreaterThan(0)
   })
 
   it('opens the day photo story reel when 스토리 is enabled', async () => {
@@ -89,6 +96,67 @@ describe('Cashlog photo MVP', () => {
     expect(screen.getByText(/무음 촬영/)).toBeInTheDocument()
   })
 
+  it('lets the user choose a dog agent and persists the choice', async () => {
+    const user = userEvent.setup()
+    const { unmount } = render(<App />)
+
+    expect(screen.getByText(/캐시냥이 함께 보는 오늘/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /강아지/ }))
+
+    expect(screen.getByText(/캐시멍이 함께 보는 오늘/)).toBeInTheDocument()
+    expect(localStorage.getItem(BUDDY_STORAGE_KEY)).toBe('dog')
+
+    unmount()
+    render(<App />)
+
+    expect(screen.getByText(/캐시멍이 함께 보는 오늘/)).toBeInTheDocument()
+  })
+
+  it('renders a monthly wrapped card with category and streak insights', () => {
+    const today = new Date()
+    const isoDays = [0, -1, -2].map((delta) => {
+      const date = new Date(today)
+      date.setDate(date.getDate() + delta)
+      return date.toISOString().slice(0, 10)
+    })
+    const records = [
+      createManualExpense({
+        title: '카페 집중',
+        amount: 8000,
+        category: 'meal_cafe',
+        memo: '',
+        dateTime: `${isoDays[0]}T12:00:00.000Z`,
+        kind: 'expense',
+      }),
+      createManualExpense({
+        title: '디저트',
+        amount: 6000,
+        category: 'meal_cafe',
+        memo: '',
+        dateTime: `${isoDays[1]}T12:00:00.000Z`,
+        kind: 'expense',
+      }),
+      createManualExpense({
+        title: '알바비',
+        amount: 50000,
+        category: 'inc_pay_parttime',
+        memo: '',
+        dateTime: `${isoDays[2]}T12:00:00.000Z`,
+        kind: 'income',
+      }),
+    ]
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(records))
+
+    render(<App />)
+
+    expect(screen.getByRole('heading', { name: /소비 요약/ })).toBeInTheDocument()
+    expect(screen.getByText('최다 카테고리')).toBeInTheDocument()
+    expect(screen.getAllByText('식사 · 카페·디저트').length).toBeGreaterThan(0)
+    expect(screen.getByRole('heading', { name: /일 스트릭/ })).toBeInTheDocument()
+    expect(screen.getByText('밸런스 플로우')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '저장/공유 카드' })).toBeInTheDocument()
+  })
+
   it('lets a user add a manual expense without a photo', async () => {
     const user = userEvent.setup()
     render(<App />)
@@ -103,7 +171,7 @@ describe('Cashlog photo MVP', () => {
 
     expect(screen.getByText('지하철 충전')).toBeInTheDocument()
     expect(screen.getAllByText('10,000원').length).toBeGreaterThan(0)
-    expect(screen.getByText(/교통 · 대중교통/)).toBeInTheDocument()
+    expect(screen.getAllByText(/교통 · 대중교통/).length).toBeGreaterThan(0)
   })
 
   it('enables 하루 스토리 after a manual expense (no photo)', async () => {

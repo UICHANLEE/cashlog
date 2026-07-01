@@ -23,7 +23,6 @@ import {
   formatLedgerCategory,
   generateDailyLog,
   getCalendarDays,
-  getStoryEntriesForDate,
   getStoryEntriesForMonth,
   getExpensesForDate,
   getCategoryMeta,
@@ -48,6 +47,7 @@ import { StoryReel, type StorySlide } from './story/StoryReel'
 type AddMode = 'closed' | 'choice' | 'photo' | 'manual'
 type StoryMode = null | 'day' | 'month'
 type CaptureMode = 'photo' | 'video'
+type BuddyType = 'cat' | 'dog'
 
 type ExpenseForm = {
   title: string
@@ -57,13 +57,180 @@ type ExpenseForm = {
   kind: LedgerKind
 }
 
+type MonthlyInsight = {
+  topCategoryLabel: string
+  topCategoryShare: number
+  topCategoryAmount: number
+  topCategoryColor: string
+  priciestDayLabel: string
+  priciestDayAmount: number
+  photoCount: number
+  logCount: number
+}
+
+type BadgeState = {
+  id: string
+  label: string
+  detail: string
+  unlocked: boolean
+}
+
 const STORAGE_KEY = 'cashlog.expenses'
+const BUDDY_STORAGE_KEY = 'cashlog.buddy'
 
 const todayIsoDate = () => new Date().toISOString().slice(0, 10)
+
+const moveIsoDate = (isoDate: string, delta: number) => {
+  const date = new Date(`${isoDate}T00:00:00`)
+  date.setDate(date.getDate() + delta)
+  return date.toISOString().slice(0, 10)
+}
 
 const formatSignedCurrency = (amount: number) => {
   if (amount === 0) return '0원'
   return amount > 0 ? `+${formatCurrency(amount)}` : `-${formatCurrency(Math.abs(amount))}`
+}
+
+const calculateRecordStreak = (records: Expense[], anchorIsoDate = todayIsoDate()) => {
+  const recordedDays = new Set(records.map((expense) => expense.dateTime.slice(0, 10)))
+  let cursor = anchorIsoDate
+  let streak = 0
+
+  while (recordedDays.has(cursor)) {
+    streak += 1
+    cursor = moveIsoDate(cursor, -1)
+  }
+
+  return streak
+}
+
+const buildMonthlyInsight = (
+  entries: Expense[],
+  monthlyExpense: number,
+  yearMonth: string,
+): MonthlyInsight => {
+  const expenseEntries = entries.filter((entry) => entry.kind !== 'income')
+  const categoryTotals = new Map<CategoryId, number>()
+  const dayTotals = new Map<string, number>()
+
+  expenseEntries.forEach((entry) => {
+    const category = migrateCategoryId(String(entry.category))
+    categoryTotals.set(category, (categoryTotals.get(category) ?? 0) + entry.amount)
+
+    const isoDate = entry.dateTime.slice(0, 10)
+    dayTotals.set(isoDate, (dayTotals.get(isoDate) ?? 0) + entry.amount)
+  })
+
+  const [topCategoryId, topCategoryAmount = 0] =
+    [...categoryTotals.entries()].sort((a, b) => b[1] - a[1])[0] ?? []
+  const topCategoryMeta = getCategoryMeta(topCategoryId ?? 'misc_uncat')
+  const [priciestDate, priciestDayAmount = 0] =
+    [...dayTotals.entries()].sort((a, b) => b[1] - a[1])[0] ?? []
+
+  return {
+    topCategoryLabel:
+      topCategoryAmount > 0
+        ? `${topCategoryMeta.group.name} · ${topCategoryMeta.leaf.name}`
+        : '기록 대기',
+    topCategoryShare:
+      monthlyExpense > 0 ? Math.round((topCategoryAmount / monthlyExpense) * 100) : 0,
+    topCategoryAmount,
+    topCategoryColor: topCategoryMeta.group.color,
+    priciestDayLabel: priciestDate ? priciestDate.slice(5).replace('-', '.') : `${yearMonth} 준비 중`,
+    priciestDayAmount,
+    photoCount: entries.filter((entry) => entry.source === 'photo').length,
+    logCount: entries.length,
+  }
+}
+
+const buildBadgeStates = (
+  entries: Expense[],
+  recordStreak: number,
+  monthlyExpense: number,
+  monthlyIncome: number,
+): BadgeState[] => [
+  {
+    id: 'first-log',
+    label: '첫 로그',
+    detail: '소비나 수입을 한 번이라도 남기기',
+    unlocked: entries.length > 0,
+  },
+  {
+    id: 'story-maker',
+    label: '스토리 메이커',
+    detail: '사진이나 영상 기록 1개 이상',
+    unlocked: entries.some((entry) => entry.source === 'photo'),
+  },
+  {
+    id: 'streak-three',
+    label: '3일 스트릭',
+    detail: '3일 연속 기록하기',
+    unlocked: recordStreak >= 3,
+  },
+  {
+    id: 'flow-balance',
+    label: '밸런스 플로우',
+    detail: '월 지출을 수입의 80% 이하로 유지',
+    unlocked: monthlyIncome > 0 && monthlyExpense <= monthlyIncome * 0.8,
+  },
+]
+
+const triggerSoftFeedback = () => {
+  if (typeof navigator === 'undefined') return
+  navigator.vibrate?.(14)
+}
+
+const buddyProfiles: Record<
+  BuddyType,
+  {
+    type: BuddyType
+    name: string
+    shortName: string
+    label: string
+    imageUrl: string
+    alt: string
+    tone: string
+    emptyNudge: string
+    positiveNudge: string
+    spendingNudge: string
+    missionPrefix: string
+  }
+> = {
+  cat: {
+    type: 'cat',
+    name: '캐시냥',
+    shortName: '냥이',
+    label: '고양이',
+    imageUrl: '/cashlog-cat-buddy.png',
+    alt: '영수증과 동전을 들고 있는 Cashlog 고양이 캐릭터',
+    tone: '차분하게 소비 패턴을 같이 정리해요.',
+    emptyNudge: '오늘은 아직 조용해요. 사진 한 장으로 시작해볼까요?',
+    positiveNudge: '오늘 흐름이 좋아요. 남은 돈을 스토리로 저장해둘게요.',
+    spendingNudge: '오늘 쓴 순간들이 쌓였어요. 어떤 소비가 제일 기억나나요?',
+    missionPrefix: '차분한 리캡',
+  },
+  dog: {
+    type: 'dog',
+    name: '캐시멍',
+    shortName: '멍이',
+    label: '강아지',
+    imageUrl: '/cashlog-dog-buddy.png',
+    alt: '영수증과 동전을 들고 있는 Cashlog 강아지 캐릭터',
+    tone: '활기차게 기록을 밀어주고 다음 행동을 제안해요.',
+    emptyNudge: '오늘 첫 기록 산책을 나가볼까요? 10초면 충분해요.',
+    positiveNudge: '좋아요. 오늘 현금 흐름이 가볍게 뛰고 있어요.',
+    spendingNudge: '오늘 소비가 조금 달렸어요. 같이 숨 고르고 리캡해봐요.',
+    missionPrefix: '빠른 액션',
+  },
+}
+
+const loadBuddyType = (): BuddyType => {
+  try {
+    const stored = localStorage.getItem(BUDDY_STORAGE_KEY)
+    return stored === 'dog' || stored === 'cat' ? stored : 'cat'
+  } catch {
+    return 'cat'
+  }
 }
 
 const loadExpenses = (): Expense[] => {
@@ -105,6 +272,7 @@ const emptyForm = (): ExpenseForm => ({
 function App() {
   const now = new Date()
   const [expenses, setExpenses] = useState<Expense[]>(loadExpenses)
+  const [buddyType, setBuddyType] = useState<BuddyType>(loadBuddyType)
   const [selectedDate, setSelectedDate] = useState(todayIsoDate)
   const [visibleMonth, setVisibleMonth] = useState({
     year: now.getFullYear(),
@@ -191,6 +359,10 @@ function App() {
   }, [expenses])
 
   useEffect(() => {
+    localStorage.setItem(BUDDY_STORAGE_KEY, buddyType)
+  }, [buddyType])
+
+  useEffect(() => {
     return () => {
       stopCamera()
     }
@@ -203,6 +375,26 @@ function App() {
   const selectedDayExpense = dayExpenseTotal(selectedExpenses)
   const selectedDayIncome = dayIncomeTotal(selectedExpenses)
   const selectedDayNet = selectedDayIncome - selectedDayExpense
+  const recordedDateCount = useMemo(
+    () => new Set(expenses.map((expense) => expense.dateTime.slice(0, 10))).size,
+    [expenses],
+  )
+  const recordStreak = useMemo(() => calculateRecordStreak(expenses), [expenses])
+  const level = Math.max(1, Math.floor(expenses.length / 4) + 1)
+  const buddy = buddyProfiles[buddyType]
+  const streakLabel = recordStreak > 0 ? `${recordStreak}일 스트릭` : '첫 기록 대기'
+  const buddyMood =
+    selectedExpenses.length === 0
+      ? buddy.emptyNudge
+      : selectedDayNet >= 0
+        ? buddy.positiveNudge
+        : buddy.spendingNudge
+  const nextMission =
+    selectedExpenses.length === 0
+      ? `${buddy.missionPrefix}: 첫 소비나 수입을 10초 안에 남기기`
+      : selectedExpenses.some((expense) => expense.source === 'photo')
+        ? `${buddy.missionPrefix}: 하루 스토리로 오늘 소비 리캡 보기`
+        : `${buddy.missionPrefix}: 사진 기록 하나 추가해서 피드를 더 생생하게 만들기`
   const dailyLog = useMemo(
     () => generateDailyLog(selectedDate, expenses),
     [expenses, selectedDate],
@@ -218,8 +410,22 @@ function App() {
   const monthlyExpense = getMonthlyExpenseTotal(expenses, yearMonth)
   const monthlyIncome = getMonthlyIncomeTotal(expenses, yearMonth)
   const monthlyNet = monthlyIncome - monthlyExpense
+  const monthStoryEntries = useMemo(
+    () => getStoryEntriesForMonth(expenses, yearMonth),
+    [expenses, yearMonth],
+  )
+  const monthlyInsight = useMemo(
+    () => buildMonthlyInsight(monthStoryEntries, monthlyExpense, yearMonth),
+    [monthStoryEntries, monthlyExpense, yearMonth],
+  )
+  const badgeStates = useMemo(
+    () => buildBadgeStates(monthStoryEntries, recordStreak, monthlyExpense, monthlyIncome),
+    [monthStoryEntries, monthlyExpense, monthlyIncome, recordStreak],
+  )
+  const unlockedBadgeCount = badgeStates.filter((badge) => badge.unlocked).length
 
   const moveVisibleMonth = (delta: number) => {
+    triggerSoftFeedback()
     setVisibleMonth((current) => {
       const next = new Date(current.year, current.month + delta, 1)
       return { year: next.getFullYear(), month: next.getMonth() }
@@ -246,8 +452,35 @@ function App() {
 
   const dayStorySlides: StorySlide[] = useMemo(() => {
     void relativeMinuteTick
-    const entries = getStoryEntriesForDate(expenses, selectedDate)
-    if (entries.length === 0) return []
+    const entries = selectedExpenses
+    if (entries.length === 0) {
+      return [
+        {
+          id: `day-empty-cover-${selectedDate}`,
+          variant: 'cover',
+          headline: `${selectedDate} 리캡 준비 중`,
+          amountLabel: '첫 장면 대기',
+          amountWon: 0,
+          detail: '오늘의 첫 기록을 남기면 하루 스토리가 자동으로 만들어져요.',
+          durationMs: 2800,
+          summaryLines: [
+            `${buddy.name}와 사진 기록하기`,
+            '수입·지출 직접 입력',
+            '하루 끝에 리캡 보기',
+          ],
+        },
+        {
+          id: `day-empty-guide-${selectedDate}`,
+          variant: 'summary',
+          headline: `${buddy.name}의 하루 스토리 사용법`,
+          amountLabel: '3초 리캡',
+          amountWon: 0,
+          detail: '금액은 위아래 모션으로, 사진은 풀스크린으로, 메모는 카드처럼 보여줘요.',
+          durationMs: 4200,
+          summaryLines: ['오른쪽 탭: 다음 장', '왼쪽 탭: 이전 장', 'ESC: 닫기'],
+        },
+      ]
+    }
     const spent = dayExpenseTotal(entries)
     const earned = dayIncomeTotal(entries)
     const net = earned - spent
@@ -274,12 +507,42 @@ function App() {
         summaryLines: entries.slice(0, 3).map((entry) => entry.title),
       },
     ]
-  }, [dailyLog.summary, expenseToSlide, expenses, relativeMinuteTick, selectedDate])
+  }, [
+    buddy.name,
+    dailyLog.summary,
+    expenseToSlide,
+    relativeMinuteTick,
+    selectedDate,
+    selectedExpenses,
+  ])
 
   const monthStorySlides: StorySlide[] = useMemo(() => {
     void relativeMinuteTick
-    const entries = getStoryEntriesForMonth(expenses, yearMonth)
-    if (entries.length === 0) return []
+    const entries = monthStoryEntries
+    if (entries.length === 0) {
+      return [
+        {
+          id: `month-empty-cover-${yearMonth}`,
+          variant: 'cover',
+          headline: `${visibleMonth.month + 1}월 스토리 보드`,
+          amountLabel: '기록 대기',
+          amountWon: 0,
+          detail: `이번 달 기록이 쌓이면 ${buddy.name}이 소비 흐름을 숏폼처럼 묶어줘요.`,
+          durationMs: 3000,
+          summaryLines: ['월간 지출 흐름', '수입·지출 순흐름', '기억나는 소비 장면'],
+        },
+        {
+          id: `month-empty-guide-${yearMonth}`,
+          variant: 'summary',
+          headline: `${buddy.name}의 월간 스토리 사용법`,
+          amountLabel: '자동 편집',
+          amountWon: 0,
+          detail: '한 달 동안 남긴 기록을 시간순으로 재생하고 마지막에 요약해요.',
+          durationMs: 4200,
+          summaryLines: ['캘린더에서 날짜 선택', '사진/직접 기록 추가', '월말에 리캡 재생'],
+        },
+      ]
+    }
     const spent = dayExpenseTotal(entries)
     const earned = dayIncomeTotal(entries)
     const net = earned - spent
@@ -308,13 +571,15 @@ function App() {
     ]
   }, [
     expenseToSlide,
-    expenses,
+    buddy.name,
+    monthStoryEntries,
     relativeMinuteTick,
     visibleMonth.month,
     yearMonth,
   ])
 
   const openChoice = () => {
+    triggerSoftFeedback()
     stopCamera()
     revokeAndClearPreview()
     setForm(emptyForm())
@@ -322,7 +587,13 @@ function App() {
     setAddMode('choice')
   }
 
+  const handleBuddyChange = (next: BuddyType) => {
+    triggerSoftFeedback()
+    setBuddyType(next)
+  }
+
   const openManual = () => {
+    triggerSoftFeedback()
     stopCamera()
     revokeAndClearPreview()
     setForm(emptyForm())
@@ -426,6 +697,7 @@ function App() {
           })
 
     setExpenses((current) => [expense, ...current])
+    triggerSoftFeedback()
     stopCamera()
     setAddMode('closed')
   }
@@ -435,6 +707,88 @@ function App() {
   }
 
   const closeStory = useCallback(() => setStoryMode(null), [])
+
+  const openStory = useCallback((mode: Exclude<StoryMode, null>) => {
+    triggerSoftFeedback()
+    setStoryMode(mode)
+  }, [])
+
+  const handleSaveMonthlyShareCard = useCallback(() => {
+    triggerSoftFeedback()
+
+    const canvas = document.createElement('canvas')
+    canvas.width = 1080
+    canvas.height = 1920
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const gradient = ctx.createLinearGradient(0, 0, 1080, 1920)
+    gradient.addColorStop(0, '#fff3a6')
+    gradient.addColorStop(0.45, '#f9fbff')
+    gradient.addColorStop(1, '#d7f7ec')
+    ctx.fillStyle = gradient
+    ctx.fillRect(0, 0, 1080, 1920)
+
+    ctx.fillStyle = 'rgba(255,255,255,0.74)'
+    ctx.fillRect(64, 76, 952, 1768)
+    ctx.fillStyle = '#111111'
+    ctx.font = '900 62px system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
+    ctx.fillText('Cashlog Monthly Story', 108, 190)
+    ctx.font = '800 42px system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
+    ctx.fillStyle = '#5f626b'
+    ctx.fillText(`${visibleMonth.year}년 ${visibleMonth.month + 1}월 · ${buddy.name} 리캡`, 108, 260)
+
+    ctx.fillStyle = '#111111'
+    ctx.font = '950 112px system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
+    ctx.fillText(formatCurrency(monthlyExpense), 108, 470)
+    ctx.font = '800 36px system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
+    ctx.fillStyle = '#5f626b'
+    ctx.fillText('이번 달 지출', 112, 540)
+
+    const rows = [
+      ['최다 카테고리', `${monthlyInsight.topCategoryLabel} ${monthlyInsight.topCategoryShare}%`],
+      ['가장 비싼 하루', `${monthlyInsight.priciestDayLabel} · ${formatCurrency(monthlyInsight.priciestDayAmount)}`],
+      ['기록 스트릭', `${recordStreak}일 연속 · 배지 ${unlockedBadgeCount}/${badgeStates.length}`],
+      ['스토리 장면', `${monthlyInsight.logCount}개 기록 · 사진/영상 ${monthlyInsight.photoCount}개`],
+    ]
+
+    rows.forEach(([label, value], index) => {
+      const y = 720 + index * 210
+      ctx.fillStyle = index % 2 === 0 ? '#111111' : '#2f6f86'
+      ctx.fillRect(108, y - 96, 864, 148)
+      ctx.fillStyle = '#ffffff'
+      ctx.font = '800 30px system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
+      ctx.fillText(label, 148, y - 42)
+      ctx.font = '950 48px system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
+      ctx.fillText(value, 148, y + 20, 760)
+    })
+
+    ctx.fillStyle = '#ff5f4f'
+    ctx.fillRect(108, 1618, 864, 90)
+    ctx.fillStyle = '#ffffff'
+    ctx.font = '900 34px system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
+    ctx.fillText('SNS처럼 가볍게, 소비 습관은 선명하게.', 148, 1676)
+
+    canvas.toBlob((blob) => {
+      if (!blob) return
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `cashlog-${yearMonth}-monthly-story.png`
+      link.click()
+      URL.revokeObjectURL(url)
+    }, 'image/png')
+  }, [
+    badgeStates.length,
+    buddy.name,
+    monthlyExpense,
+    monthlyInsight,
+    recordStreak,
+    unlockedBadgeCount,
+    visibleMonth.month,
+    visibleMonth.year,
+    yearMonth,
+  ])
 
   const handleLedgerKindChange = useCallback((kind: LedgerKind) => {
     setForm((f) => ({
@@ -475,6 +829,39 @@ function App() {
           </div>
         </div>
         <div className="hero-actions">
+          <section className="buddy-card" aria-label="캐릭터 에이전트">
+            <img
+              src={buddy.imageUrl}
+              alt={buddy.alt}
+            />
+            <div className="buddy-copy">
+              <p className="eyebrow">Cash agent</p>
+              <h2>{buddy.name}이 함께 보는 오늘</h2>
+              <p>{buddyMood}</p>
+            </div>
+            <div className="buddy-stats" aria-label="기록 레벨">
+              <span>{streakLabel}</span>
+              <span>Lv.{level}</span>
+            </div>
+            <div className="buddy-picker" role="group" aria-label="캐릭터 선택">
+              {(['cat', 'dog'] as const).map((type) => {
+                const profile = buddyProfiles[type]
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    className={buddyType === type ? 'active' : ''}
+                    aria-pressed={buddyType === type}
+                    onClick={() => handleBuddyChange(type)}
+                  >
+                    <img src={profile.imageUrl} alt="" />
+                    <span>{profile.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+            <p className="buddy-agent-note">{buddy.tone}</p>
+          </section>
           <div className="hero-month-stats">
             <div>
               <span>이번 달 지출</span>
@@ -512,6 +899,132 @@ function App() {
         </div>
       </section>
 
+      <section className="personal-feed" aria-label="개인화 피드">
+        <article className="feed-card feed-card-primary">
+          <span>오늘의 미션</span>
+          <strong>{nextMission}</strong>
+          <small>{selectedExpenses.length > 0 ? '기록을 이어가면 스토리 카드가 더 풍성해져요.' : `첫 기록을 남기면 ${buddy.name}이 오늘 리캡을 만들어줘요.`}</small>
+        </article>
+        <article className="feed-card">
+          <span>취향 신호</span>
+          <strong>{selectedExpenses.length > 0 ? `${selectedExpenses[0]?.title} 중심의 하루` : '아직 데이터 수집 중'}</strong>
+          <small>소비 습관이 쌓이면 메시지와 추천이 더 개인화돼요.</small>
+        </article>
+        <article className="feed-card">
+          <span>배지</span>
+          <strong>{selectedExpenses.length >= 3 ? '리캡러 배지 활성화' : '첫 로그 배지 준비 중'}</strong>
+          <small>사진, 수입, 메모 기록을 섞으면 새 배지가 열려요.</small>
+        </article>
+      </section>
+
+      <section className="story-dock" aria-label="스토리 바로가기">
+        <article className="story-dock-card story-dock-day">
+          <div>
+            <span>Today Story</span>
+            <strong>{selectedDate} 하루 리캡</strong>
+            <small>
+              {selectedExpenses.length > 0
+                ? `${selectedExpenses.length}개 기록을 숏폼처럼 재생해요.`
+                : '아직 기록이 없어도 사용법 스토리를 볼 수 있어요.'}
+            </small>
+          </div>
+          <button type="button" onClick={() => openStory('day')} aria-label="오늘 리캡 열기">
+            오늘 리캡 보기
+          </button>
+        </article>
+        <article className="story-dock-card story-dock-month">
+          <div>
+            <span>Month Story</span>
+            <strong>{visibleMonth.month + 1}월 소비 스토리</strong>
+            <small>
+              {monthStoryEntries.length > 0
+                ? `${monthStoryEntries.length}개 장면으로 월간 흐름을 정리해요.`
+                : '이번 달 기록이 쌓이면 월간 리캡이 자동으로 풍성해져요.'}
+            </small>
+          </div>
+          <button type="button" onClick={() => openStory('month')} aria-label="월간 리캡 열기">
+            월간 리캡 보기
+          </button>
+        </article>
+      </section>
+
+      <section className="wrapped-panel" aria-label="이번 달 소비 요약">
+        <article className="wrapped-card">
+          <div className="wrapped-card-header">
+            <div>
+              <p className="eyebrow">Monthly Wrapped</p>
+              <h2>{visibleMonth.month + 1}월 소비 요약</h2>
+            </div>
+            <button type="button" onClick={handleSaveMonthlyShareCard}>
+              저장/공유 카드
+            </button>
+          </div>
+          <div className="wrapped-hero-metric">
+            <span>이번 달 지출</span>
+            <strong>{formatCurrency(monthlyExpense)}</strong>
+            <small>
+              {monthlyNet >= 0
+                ? `수입 대비 ${formatSignedCurrency(monthlyNet)} 남았어요.`
+                : `수입 대비 ${formatCurrency(Math.abs(monthlyNet))} 더 썼어요.`}
+            </small>
+          </div>
+          <div className="wrapped-metrics">
+            <div>
+              <span>최다 카테고리</span>
+              <strong style={{ color: monthlyInsight.topCategoryColor }}>
+                {monthlyInsight.topCategoryLabel}
+              </strong>
+              <small>
+                {monthlyInsight.topCategoryShare > 0
+                  ? `${monthlyInsight.topCategoryShare}% · ${formatCurrency(monthlyInsight.topCategoryAmount)}`
+                  : '첫 지출을 남기면 자동 집계돼요.'}
+              </small>
+            </div>
+            <div>
+              <span>가장 비싼 하루</span>
+              <strong>{monthlyInsight.priciestDayLabel}</strong>
+              <small>
+                {monthlyInsight.priciestDayAmount > 0
+                  ? formatCurrency(monthlyInsight.priciestDayAmount)
+                  : '아직 월간 피크가 없어요.'}
+              </small>
+            </div>
+            <div>
+              <span>스토리 장면</span>
+              <strong>{monthlyInsight.logCount}개</strong>
+              <small>사진/영상 {monthlyInsight.photoCount}개 포함</small>
+            </div>
+          </div>
+        </article>
+
+        <aside className="badge-board" aria-label="스트릭과 배지">
+          <div className="badge-board-top">
+            <div>
+              <p className="eyebrow">Level & Streak</p>
+              <h2>{recordStreak}일 스트릭</h2>
+            </div>
+            <span>Lv.{level}</span>
+          </div>
+          <p className="badge-board-copy">
+            누적 {recordedDateCount}일 기록했어요. {buddy.shortName}가 다음 리캡까지 이어서 챙겨볼게요.
+          </p>
+          <div className="streak-meter" aria-label={`배지 ${unlockedBadgeCount}개 획득`}>
+            <span style={{ width: `${(unlockedBadgeCount / badgeStates.length) * 100}%` }} />
+          </div>
+          <div className="badge-grid">
+            {badgeStates.map((badge) => (
+              <article
+                className={`badge-chip ${badge.unlocked ? 'unlocked' : 'locked'}`}
+                key={badge.id}
+              >
+                <strong>{badge.label}</strong>
+                <small>{badge.detail}</small>
+              </article>
+            ))}
+          </div>
+        </aside>
+      </section>
+
       <section className="dashboard-grid">
         <div className="calendar-card">
           <div className="section-heading section-heading-toolbar">
@@ -541,8 +1054,7 @@ function App() {
               <button
                 type="button"
                 className="ghost-button story-launch-btn"
-                disabled={monthStorySlides.length === 0}
-                onClick={() => setStoryMode('month')}
+                onClick={() => openStory('month')}
                 title="이번 달 기록 재생"
               >
                 한 달 스토리
@@ -595,8 +1107,7 @@ function App() {
             <button
               type="button"
               className="ghost-button story-launch-btn"
-              disabled={dayStorySlides.length === 0}
-              onClick={() => setStoryMode('day')}
+              onClick={() => openStory('day')}
               title="선택한 날의 기록 재생"
             >
               📷 하루 스토리
