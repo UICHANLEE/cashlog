@@ -3,34 +3,36 @@
   min-height: 100dvh;
   padding-top: max(32px, env(safe-area-inset-top));
   padding-bottom: max(32px, env(safe-area-inset-bottom));
-  padding-left: max(32px, env(safe-area-inset-left));
-  padding-right: max(32px, env(safe-area-inset-right));
+  padding-left: max(28px, env(safe-area-inset-left));
+  padding-right: max(28px, env(safe-area-inset-right));
   overflow-x: clip;
   background:
-    radial-gradient(circle at top left, rgba(34, 197, 94, 0.16), transparent 32rem),
-    linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+    radial-gradient(circle at 12% -4%, rgba(255, 210, 63, 0.28), transparent 30rem),
+    radial-gradient(circle at 96% 6%, rgba(108, 184, 255, 0.22), transparent 26rem);
 }
 
+/* 종이 카드 공통 — 손으로 그린 삐뚤 테두리 + 스티커 그림자 */
 .hero-panel,
 .calendar-card,
 .daily-card,
 .add-sheet {
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 28px;
-  background: rgba(255, 255, 255, 0.86);
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
-  backdrop-filter: blur(18px);
+  border: 2.5px solid var(--line);
+  border-radius: var(--sketch-radius);
+  background: var(--paper-card);
+  box-shadow: var(--sticker-shadow);
 }
 
 .hero-panel {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  margin: 0 auto 24px;
+  margin: 0 auto 26px;
   max-width: 1180px;
-  padding: 32px;
+  padding: 30px 34px;
   min-width: 0;
+  transform: rotate(-0.6deg);
 }
 
 .hero-panel > div:first-child {
@@ -38,33 +40,45 @@
 }
 
 .eyebrow {
-  margin: 0 0 8px;
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
+  margin: 0 0 6px;
+  color: var(--accent-ink);
+  font-family: var(--font-hand);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .hero-panel h1 {
   margin: 0;
-  color: #0f172a;
-  font-size: clamp(44px, 8vw, 80px);
-  letter-spacing: -0.08em;
-  line-height: 0.95;
+  color: var(--ink);
+  font-family: var(--font-hand);
+  font-weight: 700;
+  font-size: clamp(52px, 9vw, 92px);
+  letter-spacing: -0.02em;
+  line-height: 0.92;
+}
+
+.hero-panel h1::after {
+  content: '✎';
+  margin-left: 10px;
+  font-size: 0.4em;
+  color: var(--accent);
+  vertical-align: super;
 }
 
 .hero-copy {
   max-width: 520px;
-  margin: 18px 0 0;
-  color: #475569;
+  margin: 14px 0 0;
+  color: var(--ink-soft);
   font-size: 18px;
+  line-height: 1.5;
 }
 
 .hero-actions {
   display: grid;
   gap: 16px;
-  min-width: 220px;
+  min-width: 230px;
 }
 
 .hero-month-stats {
@@ -75,20 +89,38 @@
 
 .hero-month-stats > div {
   display: grid;
-  gap: 6px;
-  padding: 18px;
-  border-radius: 22px;
-  background: #0f172a;
-  color: #cbd5e1;
+  gap: 4px;
+  padding: 16px 18px;
+  border: 2.5px solid var(--line);
+  border-radius: var(--sketch-radius-alt);
+  background: var(--paper-soft);
+  color: var(--ink-soft);
+  box-shadow: var(--sticker-shadow-sm);
+}
+
+.hero-month-stats > div:first-child {
+  transform: rotate(-1.2deg);
+}
+
+.hero-month-stats > div:last-child {
+  transform: rotate(1deg);
+}
+
+.hero-month-stats > div span {
+  font-family: var(--font-hand);
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .hero-month-stats strong {
-  color: #fff;
-  font-size: 28px;
+  color: var(--ink);
+  font-family: var(--font-hand);
+  font-size: 30px;
+  font-weight: 700;
 }
 
 .hero-stat-income {
-  color: #86efac !important;
+  color: var(--income) !important;
 }
 
 .calendar-day-money {
@@ -105,27 +137,29 @@
 }
 
 .calendar-day-income {
-  color: #047857 !important;
+  color: var(--income) !important;
   font-weight: 700;
 }
 
 .ledger-kind-badge {
   display: inline-block;
   margin-right: 8px;
-  padding: 2px 8px;
-  border-radius: 8px;
-  font-size: 11px;
-  font-weight: 800;
+  padding: 1px 9px;
+  border: 2px solid var(--line);
+  border-radius: 12px 5px 12px 5px;
+  font-family: var(--font-hand);
+  font-size: 13px;
+  font-weight: 700;
   vertical-align: baseline;
 }
 
 .ledger-kind-badge-income {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--income-wash);
+  color: var(--income);
 }
 
 .expense-card.is-income .expense-title-row strong.amount-income {
-  color: #15803d;
+  color: var(--income);
 }
 
 .ledger-kind-toggle {
@@ -136,32 +170,37 @@
 }
 
 .ledger-kind-toggle button {
-  border-radius: 14px;
-  padding: 10px 16px;
-  border: 2px solid #e2e8f0;
-  background: #fff;
-  color: #334155;
-  font-weight: 800;
+  border: 2.5px solid var(--line);
+  border-radius: 16px 6px 16px 6px;
+  padding: 10px 18px;
+  background: var(--paper-card);
+  color: var(--ink);
+  font-family: var(--font-hand);
+  font-size: 17px;
+  font-weight: 700;
   cursor: pointer;
-  font: inherit;
+  box-shadow: var(--sticker-shadow-sm);
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .ledger-kind-toggle button.active {
-  border-color: #16a34a;
-  background: #f0fdf4;
-  color: #166534;
+  background: var(--crayon-sun);
+  color: var(--ink);
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--line);
 }
 
 .ledger-kind-toggle button.kind-income.active {
-  border-color: #15803d;
-  background: #ecfdf5;
-  color: #14532d;
+  background: var(--income-wash);
+  color: var(--income);
 }
+
 .primary-button,
 .ghost-button,
 .choice-card,
 .calendar-day {
-  border: 0;
   cursor: pointer;
   font: inherit;
   touch-action: manipulation;
@@ -173,20 +212,50 @@
   touch-action: manipulation;
 }
 
+/* 크레용 스티커 버튼 — 누르면 쏙 들어가는 느낌 */
 .primary-button {
-  border-radius: 18px;
-  padding: 14px 18px;
-  background: #16a34a;
-  color: #fff;
-  font-weight: 800;
+  border: 2.5px solid var(--line);
+  border-radius: 18px 8px 20px 7px;
+  padding: 14px 22px;
+  background: var(--accent);
+  color: #fff8f2;
+  font-family: var(--font-hand);
+  font-size: 20px;
+  font-weight: 700;
+  box-shadow: var(--sticker-shadow);
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.primary-button:not(:disabled):active {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 var(--line);
 }
 
 .ghost-button {
-  border-radius: 14px;
-  padding: 10px 14px;
-  background: #f1f5f9;
-  color: #334155;
+  border: 2.5px solid var(--line);
+  border-radius: 14px 6px 14px 6px;
+  padding: 9px 16px;
+  background: var(--paper-card);
+  color: var(--ink);
+  font-family: var(--font-hand);
+  font-size: 17px;
   font-weight: 700;
+  box-shadow: var(--sticker-shadow-sm);
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.ghost-button:not(:disabled):active {
+  transform: translate(3px, 3px);
+  box-shadow: 0 0 0 var(--line);
+}
+
+.ghost-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .dashboard-grid {
@@ -203,10 +272,20 @@
   min-width: 0;
 }
 
+.calendar-card {
+  transform: rotate(0.5deg);
+}
+
+.daily-card {
+  transform: rotate(-0.5deg);
+}
+
 .section-heading h2 {
   margin: 0;
-  color: #0f172a;
-  font-size: 24px;
+  color: var(--ink);
+  font-family: var(--font-hand);
+  font-weight: 700;
+  font-size: 28px;
 }
 
 .section-heading-toolbar {
@@ -218,7 +297,7 @@
 }
 
 .section-heading-toolbar > div .eyebrow {
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .section-heading-toolbar h2 {
@@ -227,8 +306,9 @@
 
 .story-launch-btn {
   flex-shrink: 0;
-  font-size: 13px !important;
-  padding: 8px 12px !important;
+  background: var(--crayon-sky) !important;
+  font-size: 15px !important;
+  padding: 8px 14px !important;
 }
 
 .photo-source-row.camera-only-row {
@@ -247,45 +327,60 @@
 }
 
 .weekday-row {
-  margin: 22px 0 8px;
-  color: #64748b;
-  font-size: 13px;
-  font-weight: 800;
+  margin: 22px 0 10px;
+  color: var(--ink-soft);
+  font-family: var(--font-hand);
+  font-size: 16px;
+  font-weight: 700;
   text-align: center;
 }
 
 .calendar-day {
   min-height: 108px;
   padding: 12px;
-  border-radius: 18px;
-  background: #f8fafc;
-  color: #0f172a;
+  border: 2px solid var(--line-soft);
+  border-radius: 16px 7px 16px 7px;
+  background: var(--paper-soft);
+  color: var(--ink);
+  font-family: var(--font-hand);
   text-align: left;
   transition:
-    transform 0.2s ease,
-    background 0.2s ease;
+    transform 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.calendar-day span:first-of-type {
+  font-size: 18px;
+  font-weight: 700;
 }
 
 .calendar-day:hover,
 .calendar-day.selected {
-  background: #dcfce7;
-  transform: translateY(-2px);
+  border-color: var(--line);
+  background: var(--crayon-sun);
+  transform: translateY(-2px) rotate(-1deg);
+  box-shadow: var(--sticker-shadow-sm);
 }
 
 @media (hover: none) {
   .calendar-day:hover:not(.selected) {
     transform: none;
-    background: #f8fafc;
+    background: var(--paper-soft);
+    border-color: var(--line-soft);
+    box-shadow: none;
   }
 
   .calendar-day.muted:hover:not(.selected) {
     background: transparent;
-    color: #94a3b8;
+    color: #b6a98e;
   }
 }
 
 .calendar-day.muted {
-  color: #94a3b8;
+  color: #b6a98e;
+  border-color: transparent;
+  background: transparent;
 }
 
 .calendar-day span:first-of-type {
@@ -303,32 +398,40 @@
 
 .calendar-day .calendar-day-money strong {
   margin-top: 0;
-  color: #166534;
-  font-size: 14px;
+  color: var(--accent-ink);
+  font-size: 15px;
+  font-weight: 700;
   line-height: 1.25;
   overflow-wrap: anywhere;
 }
 
 .calendar-day .calendar-day-money .calendar-day-income {
   margin-top: 0;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .calendar-day-photo {
   margin-top: 8px;
-  display: block;
-  color: #16a34a;
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 8px 3px 8px 3px;
+  background: var(--crayon-pink);
+  color: var(--ink);
   font-size: 12px;
-  font-weight: 800;
-  line-height: 1.25;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 .daily-summary {
   margin: 18px 0 20px;
-  padding: 16px;
-  border-radius: 18px;
-  background: #f8fafc;
-  color: #334155;
+  padding: 16px 18px;
+  border: 2px dashed var(--line-soft);
+  border-radius: 18px 8px 18px 8px;
+  background: var(--paper-soft);
+  color: var(--ink-soft);
+  font-family: var(--font-hand);
+  font-size: 18px;
+  line-height: 1.45;
 }
 
 .timeline {
@@ -339,16 +442,19 @@
 .timeline-relative {
   display: block;
   margin: 0 0 6px;
-  font-size: 12px;
-  font-weight: 800;
-  color: #64748b;
+  font-family: var(--font-hand);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink-soft);
 }
 
 .empty-state {
   padding: 28px;
-  border: 1px dashed #cbd5e1;
-  border-radius: 20px;
-  color: #64748b;
+  border: 2.5px dashed var(--line-soft);
+  border-radius: 20px 9px 20px 9px;
+  color: var(--ink-soft);
+  font-family: var(--font-hand);
+  font-size: 18px;
   text-align: center;
 }
 
@@ -357,17 +463,24 @@
   grid-template-columns: 86px 1fr;
   gap: 14px;
   padding: 14px;
-  border-radius: 20px;
-  background: #fff;
+  border: 2.5px solid var(--line);
+  border-radius: 18px 8px 18px 8px;
+  background: var(--paper-card);
+  box-shadow: var(--sticker-shadow-sm);
+}
+
+.expense-card.is-income {
+  background: var(--income-wash);
 }
 
 .expense-image,
 .preview-image {
   width: 100%;
   height: 86px;
-  border-radius: 16px;
+  border: 2px solid var(--line);
+  border-radius: 12px 5px 12px 5px;
   object-fit: cover;
-  background: #e2e8f0;
+  background: #efe6d2;
 }
 
 .expense-title-row {
@@ -379,31 +492,38 @@
 
 .expense-title-row h3 {
   margin: 0;
-  color: #0f172a;
-  font-size: 17px;
+  color: var(--ink);
+  font-family: var(--font-hand);
+  font-weight: 700;
+  font-size: 20px;
 }
 
 .expense-title-row strong {
-  color: #16a34a;
+  color: var(--accent-ink);
+  font-family: var(--font-hand);
+  font-size: 19px;
 }
 
 .expense-card p {
   margin: 8px 0 0;
-  color: #64748b;
-  font-size: 14px;
+  color: var(--ink-soft);
+  font-size: 15px;
+}
+
+.category-label {
+  font-weight: 700;
 }
 
 .sheet-backdrop {
   position: fixed;
   inset: 0;
-  /* grid + justify center 는 시트 폭을 콘텐츠(max-content)에 맞춰 뷰보다 넓게 만들 수 있음 */
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
   align-items: stretch;
   padding: env(safe-area-inset-top) max(24px, env(safe-area-inset-right))
     max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
-  background: rgba(15, 23, 42, 0.42);
+  background: rgba(47, 42, 36, 0.42);
   box-sizing: border-box;
   overflow-x: clip;
 }
@@ -422,7 +542,8 @@
   );
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 24px;
+  padding: 26px;
+  border-radius: 26px 10px 26px 10px;
 }
 
 .sheet-header {
@@ -441,7 +562,6 @@
 
 .sheet-header > div:first-child {
   flex: 1 1 auto;
-  /* flex 기본 min-width:auto 가 자식 폭 때문에 시트를 가로로 밀어냄 → 0 허용 */
   min-width: 0;
   max-width: 100%;
 }
@@ -455,12 +575,15 @@
 
 .sheet-header h2 {
   margin: 0;
+  font-family: var(--font-hand);
+  font-weight: 700;
+  font-size: 26px;
 }
 
 .choice-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 16px;
   min-width: 0;
   max-width: 100%;
 }
@@ -469,26 +592,53 @@
   display: grid;
   gap: 10px;
   padding: 22px;
-  border-radius: 22px;
-  background: #f8fafc;
-  color: #0f172a;
+  border: 2.5px solid var(--line);
+  border-radius: 20px 9px 20px 9px;
+  background: var(--paper-soft);
+  color: var(--ink);
   text-align: left;
   min-width: 0;
+  box-shadow: var(--sticker-shadow-sm);
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.choice-card:first-child {
+  transform: rotate(-1.2deg);
+}
+
+.choice-card:last-child {
+  transform: rotate(1.2deg);
+}
+
+.choice-card:active {
+  transform: translate(3px, 3px) rotate(0deg);
+  box-shadow: 0 0 0 var(--line);
 }
 
 .choice-card span {
   width: max-content;
-  padding: 6px 10px;
+  padding: 4px 12px;
+  border: 2px solid var(--line);
   border-radius: 999px;
-  background: #dcfce7;
-  color: #166534;
-  font-size: 13px;
-  font-weight: 900;
+  background: var(--crayon-sun);
+  color: var(--ink);
+  font-family: var(--font-hand);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.choice-card strong {
+  font-family: var(--font-hand);
+  font-size: 21px;
+  font-weight: 700;
 }
 
 .choice-card small,
 .analysis-note {
-  color: #64748b;
+  color: var(--ink-soft);
+  font-size: 15px;
   overflow-wrap: anywhere;
   word-break: keep-all;
 }
@@ -511,17 +661,23 @@
 .camera-start-button {
   flex: 1 1 140px;
   padding: 14px 16px;
-  border-radius: 16px;
-  border: 2px solid #16a34a;
-  background: #fff;
-  color: #166534;
-  font-weight: 800;
+  border: 2.5px solid var(--line);
+  border-radius: 16px 7px 16px 7px;
+  background: var(--crayon-mint);
+  color: var(--ink);
+  font-family: var(--font-hand);
+  font-size: 18px;
+  font-weight: 700;
   cursor: pointer;
-  font: inherit;
+  box-shadow: var(--sticker-shadow-sm);
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
-.camera-start-button:hover {
-  background: #f0fdf4;
+.camera-start-button:active {
+  transform: translate(3px, 3px);
+  box-shadow: 0 0 0 var(--line);
 }
 
 .file-picker-inline {
@@ -531,19 +687,20 @@
 
 .camera-permission-note {
   margin: 0;
-  font-size: 13px;
-  color: #64748b;
+  font-size: 14px;
+  color: var(--ink-soft);
   line-height: 1.45;
 }
 
 .camera-error {
   margin: 0;
   padding: 12px 14px;
-  border-radius: 14px;
-  background: #fef2f2;
-  color: #b91c1c;
-  font-size: 14px;
-  font-weight: 600;
+  border: 2.5px solid var(--accent-ink);
+  border-radius: 14px 6px 14px 6px;
+  background: #ffe7e1;
+  color: var(--accent-ink);
+  font-size: 15px;
+  font-weight: 700;
 }
 
 .camera-live-wrap {
@@ -554,8 +711,9 @@
 .camera-live {
   width: 100%;
   max-height: 260px;
-  border-radius: 18px;
-  background: #0f172a;
+  border: 2.5px solid var(--line);
+  border-radius: 18px 8px 18px 8px;
+  background: #2f2a24;
   object-fit: cover;
 }
 
@@ -574,10 +732,11 @@
   display: grid;
   gap: 10px;
   padding: 18px;
-  border: 1px dashed #94a3b8;
-  border-radius: 18px;
-  color: #334155;
-  font-weight: 800;
+  border: 2.5px dashed var(--line-soft);
+  border-radius: 18px 8px 18px 8px;
+  color: var(--ink);
+  font-family: var(--font-hand);
+  font-weight: 700;
   position: relative;
   box-sizing: border-box;
 }
@@ -602,6 +761,16 @@
   line-height: 1.35;
 }
 
+.analysis-note {
+  margin: 0;
+  padding: 12px 14px;
+  border: 2px dashed var(--line-soft);
+  border-radius: 14px 6px 14px 6px;
+  background: var(--paper-soft);
+  font-family: var(--font-hand);
+  font-size: 16px;
+}
+
 .preview-image {
   height: 180px;
 }
@@ -609,8 +778,10 @@
 .expense-form label {
   display: grid;
   gap: 8px;
-  color: #334155;
-  font-weight: 800;
+  color: var(--ink);
+  font-family: var(--font-hand);
+  font-size: 18px;
+  font-weight: 700;
 }
 
 .expense-form input,
@@ -618,12 +789,20 @@
 .expense-form textarea {
   box-sizing: border-box;
   width: 100%;
-  border: 1px solid #cbd5e1;
-  border-radius: 16px;
-  padding: 13px 14px;
-  background: #fff;
-  color: #0f172a;
-  font: inherit;
+  border: 2.5px solid var(--line);
+  border-radius: 14px 6px 14px 6px;
+  padding: 12px 14px;
+  background: var(--paper-card);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+}
+
+.expense-form input:focus,
+.expense-form textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--sticker-shadow-sm);
 }
 
 .expense-form textarea {
@@ -640,8 +819,10 @@
 }
 
 .category-fieldset legend {
-  font-weight: 800;
-  color: #334155;
+  font-family: var(--font-hand);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
   padding: 0;
   margin-bottom: 6px;
 }
@@ -655,17 +836,18 @@
 }
 
 .ledger-kind-fieldset legend {
-  font-weight: 800;
-  color: #334155;
+  font-family: var(--font-hand);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
   padding: 0;
   margin-bottom: 8px;
 }
 
 .category-hint {
   margin: 0 0 12px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #64748b;
+  font-size: 14px;
+  color: var(--ink-soft);
 }
 
 .category-groups {
@@ -690,57 +872,70 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
+  padding: 7px 13px;
   border-radius: 999px;
-  border: 1px solid #e2e8f0;
-  background: #fff;
-  color: #334155;
-  font-size: 13px;
+  border: 2px solid var(--line);
+  background: var(--paper-card);
+  color: var(--ink);
+  font-family: var(--font-hand);
+  font-size: 16px;
   font-weight: 700;
+  cursor: pointer;
 }
 
 .category-pill.active {
-  border-color: #16a34a;
-  background: #dcfce7;
-  color: #166534;
+  background: var(--crayon-sun);
+  color: var(--ink);
 }
 
 .category-leaf {
-  padding: 10px 14px;
-  border-radius: 14px;
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
-  color: #0f172a;
-  font-size: 14px;
+  padding: 9px 14px;
+  border-radius: 13px 5px 13px 5px;
+  border: 2px solid var(--line);
+  background: var(--paper-card);
+  color: var(--ink);
+  font-family: var(--font-hand);
+  font-size: 16px;
   font-weight: 700;
+  cursor: pointer;
 }
 
 .category-leaf.active {
-  border-color: #16a34a;
-  background: #16a34a;
-  color: #fff;
+  background: var(--accent);
+  color: #fff8f2;
 }
 
 .category-selected {
   margin: 0;
-  font-size: 14px;
-  color: #475569;
+  font-family: var(--font-hand);
+  font-size: 16px;
+  color: var(--ink-soft);
 }
 
 .category-selected strong {
-  color: #0f172a;
+  color: var(--ink);
 }
 
 @media (hover: hover) {
-  .primary-button:not(:disabled):hover {
-    filter: brightness(1.06);
+  .primary-button:not(:disabled):hover,
+  .ghost-button:not(:disabled):hover,
+  .camera-start-button:hover,
+  .choice-card:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 5px 5px 0 var(--line);
+  }
+
+  .category-pill:hover,
+  .category-leaf:hover,
+  .ledger-kind-toggle button:hover {
+    background: var(--crayon-sun);
   }
 }
 
 @media (max-width: 540px) {
   .choice-grid {
     grid-template-columns: 1fr;
-    gap: 12px;
+    gap: 14px;
   }
 }
 
@@ -760,6 +955,7 @@
   .hero-panel {
     display: grid;
     padding: 24px;
+    transform: none;
   }
 
   .hero-actions {
@@ -772,6 +968,11 @@
     gap: 16px;
   }
 
+  .calendar-card,
+  .daily-card {
+    transform: none;
+  }
+
   .calendar-day {
     min-height: 82px;
     padding: 8px;
@@ -779,7 +980,7 @@
 
   .calendar-day strong,
   .calendar-day small {
-    font-size: 11px;
+    font-size: 12px;
   }
 }
 
@@ -788,7 +989,7 @@
   .calendar-card,
   .daily-card {
     padding: 18px;
-    border-radius: 22px;
+    border-radius: 22px 9px 22px 9px;
   }
 
   .hero-copy {
@@ -796,11 +997,12 @@
   }
 
   .hero-month-stats > div {
-    padding: 16px;
+    padding: 14px 16px;
+    transform: none;
   }
 
   .hero-month-stats strong {
-    font-size: 24px;
+    font-size: 26px;
   }
 
   .hero-actions .primary-button {
@@ -810,7 +1012,7 @@
   }
 
   .section-heading h2 {
-    font-size: 20px;
+    font-size: 22px;
     overflow-wrap: anywhere;
     word-break: keep-all;
   }
@@ -821,13 +1023,13 @@
   }
 
   .weekday-row {
-    font-size: 11px;
+    font-size: 13px;
   }
 
   .calendar-day {
     min-height: max(48px, clamp(52px, 12vw + 40px, 90px));
     padding: 8px 4px;
-    border-radius: 14px;
+    border-radius: 12px 5px 12px 5px;
     font-variant-numeric: tabular-nums;
     box-sizing: border-box;
     display: flex;
@@ -838,13 +1040,22 @@
     gap: 2px;
   }
 
+  .calendar-day:hover,
+  .calendar-day.selected {
+    transform: none;
+  }
+
   .calendar-day span {
     flex: 0 0 auto;
   }
 
+  .calendar-day span:first-of-type {
+    font-size: 14px;
+  }
+
   .calendar-day strong {
     margin-top: 0;
-    font-size: 10px;
+    font-size: 11px;
     line-height: 1.25;
     display: -webkit-box;
     -webkit-box-orient: vertical;
@@ -856,7 +1067,7 @@
 
   .calendar-day small {
     margin-top: 0;
-    font-size: 8px;
+    font-size: 9px;
     line-height: 1.25;
     max-width: 100%;
     display: block;
@@ -878,7 +1089,7 @@
     padding: 18px max(18px, env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom))
       max(18px, env(safe-area-inset-left));
     max-height: min(94dvh, calc(100dvh - env(safe-area-inset-top) - 8px));
-    border-radius: 22px 22px 0 0;
+    border-radius: 22px 9px 0 0;
     box-sizing: border-box;
   }
 
@@ -918,6 +1129,7 @@
     justify-items: start;
     box-sizing: border-box;
     gap: 8px;
+    transform: none;
   }
 
   .expense-title-row {
@@ -978,7 +1190,7 @@
   .category-leaves .category-leaf {
     flex: 0 1 auto;
     padding: 10px 12px;
-    font-size: 13px;
+    font-size: 15px;
     min-height: 44px;
     max-width: 100%;
   }
@@ -1007,5 +1219,15 @@
 
   label.file-picker.file-picker-inline {
     min-height: 48px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-panel,
+  .calendar-card,
+  .daily-card,
+  .hero-month-stats > div,
+  .choice-card {
+    transform: none;
   }
 }
