@@ -13,6 +13,8 @@ export type StorySlide = {
   id: string
   /** 없으면 직접 입력(글만) 카드 표시 */
   imageUrl?: string
+  /** 있으면 영상으로 재생 (imageUrl은 포스터로 사용) */
+  videoUrl?: string
   headline: string
   amountLabel: string
   /** 원 단위 (수입도 양수) */
@@ -259,7 +261,17 @@ export function StoryReel({
           else if (d < -60) next()
         }}
       >
-        {slide.imageUrl ? (
+        {slide.videoUrl ? (
+          <video
+            className="story-reel-photo"
+            src={slide.videoUrl}
+            poster={slide.imageUrl}
+            autoPlay
+            muted
+            loop
+            playsInline
+          />
+        ) : slide.imageUrl ? (
           <img src={slide.imageUrl} alt="" className="story-reel-photo" draggable={false} />
         ) : (
           <div

@@ -782,6 +782,79 @@
   object-fit: cover;
 }
 
+.camera-live.is-recording {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 111, 89, 0.28);
+}
+
+.capture-kind-toggle {
+  display: flex;
+  gap: 10px;
+}
+
+.capture-kind-toggle button {
+  flex: 1 1 0;
+  border: 2.5px solid var(--line);
+  border-radius: 14px 6px 14px 6px;
+  padding: 10px 14px;
+  background: var(--paper-card);
+  color: var(--ink);
+  font-family: var(--font-hand);
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: var(--sticker-shadow-sm);
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.capture-kind-toggle button.active {
+  background: var(--crayon-sun);
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--line);
+}
+
+.record-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-family: var(--font-hand);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--accent-ink);
+}
+
+.record-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: record-blink 1s steps(2, start) infinite;
+}
+
+.record-stop {
+  background: #b23a26 !important;
+}
+
+@keyframes record-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+video.preview-image {
+  object-fit: cover;
+  background: #2f2a24;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .record-dot {
+    animation: none;
+  }
+}
+
 .camera-actions {
   display: flex;
   flex-wrap: wrap;
