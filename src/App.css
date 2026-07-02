@@ -757,8 +757,31 @@
   flex-direction: column;
   justify-content: center;
   align-items: center;
+  padding: 14px 16px;
+  border: 2.5px solid var(--line);
+  border-radius: 16px 7px 16px 7px;
+  background: var(--crayon-sky);
+  color: var(--ink);
+  font-family: var(--font-hand);
+  font-size: 18px;
   text-align: center;
   line-height: 1.35;
+  box-shadow: var(--sticker-shadow-sm);
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.file-picker.file-picker-inline:active {
+  transform: translate(3px, 3px);
+  box-shadow: 0 0 0 var(--line);
+}
+
+@media (hover: hover) {
+  .file-picker.file-picker-inline:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 5px 5px 0 var(--line);
+  }
 }
 
 .analysis-note {

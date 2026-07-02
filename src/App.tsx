@@ -1,4 +1,5 @@
 import {
+  type ChangeEvent,
   type FormEvent,
   useCallback,
   useEffect,
@@ -294,6 +295,18 @@ function App() {
     await applyPhotoFile(file)
   }
 
+  const handleGalleryPick = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setCameraError('이미지 파일만 올릴 수 있어요.')
+      return
+    }
+    stopCamera()
+    await applyPhotoFile(file)
+  }
+
   const handleSave = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
@@ -560,14 +573,23 @@ function App() {
 
             {addMode === 'photo' && (
               <div className="photo-flow">
-                <div className="photo-source-row camera-only-row" role="group" aria-label="카메라">
+                <div className="photo-source-row" role="group" aria-label="사진 가져오기">
                   <button type="button" className="camera-start-button" onClick={startCamera}>
-                    카메라 열고 촬영
+                    📷 카메라 촬영
                   </button>
+                  <label className="file-picker file-picker-inline">
+                    🖼 갤러리에서 선택
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleGalleryPick}
+                      aria-label="갤러리에서 사진 선택"
+                    />
+                  </label>
                 </div>
                 <p className="camera-permission-note">
-                  <strong>촬영만</strong> 지원합니다. 브라우저에서 카메라 권한을 요청해요 (HTTPS 또는
-                  localhost).
+                  <strong>카메라 촬영</strong>은 브라우저 카메라 권한이 필요해요 (HTTPS 또는
+                  localhost). <strong>갤러리 선택</strong>은 기기에 저장된 사진을 바로 올릴 수 있어요.
                 </p>
                 {cameraError && <p className="camera-error">{cameraError}</p>}
                 {cameraStream && (
