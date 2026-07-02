@@ -44,6 +44,7 @@ import {
   formatMonthLogRelativeKo,
 } from './domain/relativeLabelsKo'
 import { StoryReel, type StorySlide } from './story/StoryReel'
+import { CatDoodle, DogDoodle } from './components/Doodles'
 
 type AddMode = 'closed' | 'choice' | 'photo' | 'manual'
 type StoryMode = null | 'day' | 'month'
@@ -369,6 +370,11 @@ function App() {
           <p className="hero-copy">
             찍은 사진 기록만 모아 오늘이나 한 달을 스토리처럼 되감습니다. 수입·지출을 간단히 입력할 수 있어요.
           </p>
+          <div className="hero-mascots" aria-hidden="true">
+            <CatDoodle className="mascot mascot-cat" />
+            <DogDoodle className="mascot mascot-dog" />
+            <span className="mascot-caption">오늘도 같이 기록해요!</span>
+          </div>
         </div>
         <div className="hero-actions">
           <div className="hero-month-stats">
@@ -465,7 +471,10 @@ function App() {
 
           <div className="timeline">
             {selectedExpenses.length === 0 ? (
-              <div className="empty-state">아직 기록이 없어요. + 버튼으로 첫 로그를 남겨보세요.</div>
+              <div className="empty-state">
+                <CatDoodle className="empty-mascot" aria-hidden="true" />
+                <p>아직 기록이 없어요. + 버튼으로 첫 로그를 남겨보세요.</p>
+              </div>
             ) : (
               selectedExpenses.map((expense) => {
                 const accent = ledgerAccentColor(expense)
