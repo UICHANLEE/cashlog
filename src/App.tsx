@@ -46,6 +46,14 @@ import {
 } from './domain/relativeLabelsKo'
 import { StoryReel, type StorySlide } from './story/StoryReel'
 import { CatDoodle, DogDoodle } from './components/Doodles'
+import { PetCorner } from './components/PetCorner'
+import {
+  defaultPetState,
+  normalizePetState,
+  type OutfitId,
+  type PetKind,
+  type PetState,
+} from './domain/pet'
 
 type AddMode = 'closed' | 'choice' | 'photo' | 'manual'
 type StoryMode = null | 'day' | 'month'
@@ -59,8 +67,19 @@ type ExpenseForm = {
 }
 
 const STORAGE_KEY = 'cashlog.expenses'
+const PET_STORAGE_KEY = 'cashlog.pet'
 
 const todayIsoDate = () => new Date().toISOString().slice(0, 10)
+
+const loadPetState = (): PetState => {
+  try {
+    const stored = localStorage.getItem(PET_STORAGE_KEY)
+    if (!stored) return defaultPetState
+    return normalizePetState(JSON.parse(stored) as Partial<PetState>)
+  } catch {
+    return defaultPetState
+  }
+}
 
 const loadExpenses = (): Expense[] => {
   try {
@@ -110,8 +129,17 @@ function App() {
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const [captureKind, setCaptureKind] = useState<'photo' | 'video'>('photo')
+  const [isRecording, setIsRecording] = useState(false)
+  const [recordSeconds, setRecordSeconds] = useState(0)
+  const [videoPreview, setVideoPreview] = useState('')
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const recordedChunksRef = useRef<Blob[]>([])
+  const posterFileRef = useRef<File | null>(null)
+  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [storyMode, setStoryMode] = useState<StoryMode>(null)
   const [relativeMinuteTick, setRelativeMinuteTick] = useState(0)
+  const [petState, setPetState] = useState<PetState>(loadPetState)
 
   useEffect(() => {
     const id = window.setInterval(() => setRelativeMinuteTick((x) => x + 1), 60_000)
@@ -130,13 +158,30 @@ function App() {
     }
   }, [])
 
+  const clearRecordTimer = useCallback(() => {
+    if (recordTimerRef.current) {
+      clearInterval(recordTimerRef.current)
+      recordTimerRef.current = null
+    }
+  }, [])
+
   const revokeAndClearPreview = useCallback(() => {
     setPhotoPreview((prev) => {
       if (prev.startsWith('blob:')) URL.revokeObjectURL(prev)
       return ''
     })
+    setVideoPreview((prev) => {
+      if (prev.startsWith('blob:')) URL.revokeObjectURL(prev)
+      return ''
+    })
     setAnalysis(null)
-  }, [])
+    clearRecordTimer()
+    setIsRecording(false)
+    setRecordSeconds(0)
+    recordedChunksRef.current = []
+    posterFileRef.current = null
+    mediaRecorderRef.current = null
+  }, [clearRecordTimer])
 
   const applyPhotoFile = useCallback(async (file: File) => {
     setCameraError(null)
@@ -182,10 +227,21 @@ function App() {
   }, [expenses])
 
   useEffect(() => {
+    localStorage.setItem(PET_STORAGE_KEY, JSON.stringify(petState))
+  }, [petState])
+
+  const handleOutfitChange = useCallback((kind: PetKind, outfit: OutfitId) => {
+    setPetState((prev) =>
+      kind === 'cat' ? { ...prev, catOutfit: outfit } : { ...prev, dogOutfit: outfit },
+    )
+  }, [])
+
+  useEffect(() => {
     return () => {
       stopCamera()
+      clearRecordTimer()
     }
-  }, [stopCamera])
+  }, [stopCamera, clearRecordTimer])
 
   const selectedExpenses = useMemo(
     () => getExpensesForDate(expenses, selectedDate),
@@ -211,10 +267,12 @@ function App() {
     const relLabel =
       mode === 'day' ? formatDayLogRelativeKo(dt) : formatMonthLogRelativeKo(dt)
     const img = expense.imageUrl?.trim()
+    const vid = expense.videoUrl?.trim()
     const baseDetail = `${formatLedgerCategory(expense)}${expense.memo ? ` · ${expense.memo}` : ''}`
     return {
       id: expense.id,
       ...(img ? { imageUrl: img } : {}),
+      ...(vid ? { videoUrl: vid } : {}),
       headline: expense.title,
       amountLabel: formatCurrency(expense.amount),
       amountWon: expense.amount,
@@ -236,6 +294,7 @@ function App() {
   const openChoice = () => {
     stopCamera()
     revokeAndClearPreview()
+    setCaptureKind('photo')
     setForm(emptyForm())
     setAddMode('choice')
   }
@@ -254,17 +313,18 @@ function App() {
     }
     setCameraError(null)
     stopCamera()
+    const wantAudio = captureKind === 'video'
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: 'environment' } },
-        audio: false,
+        audio: wantAudio,
       })
       setCameraStream(stream)
     } catch {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: true,
-          audio: false,
+          audio: wantAudio,
         })
         setCameraStream(stream)
       } catch (err) {
@@ -296,15 +356,136 @@ function App() {
     await applyPhotoFile(file)
   }
 
+  const pickVideoMimeType = (): string | undefined => {
+    if (typeof MediaRecorder === 'undefined') return undefined
+    const candidates = [
+      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus',
+      'video/webm',
+      'video/mp4',
+    ]
+    for (const type of candidates) {
+      if (MediaRecorder.isTypeSupported?.(type)) return type
+    }
+    return undefined
+  }
+
+  const handleStartRecording = () => {
+    if (!cameraStream) return
+    if (typeof MediaRecorder === 'undefined') {
+      setCameraError('이 브라우저에서는 영상 녹화를 지원하지 않아요.')
+      return
+    }
+    setCameraError(null)
+    recordedChunksRef.current = []
+    posterFileRef.current = null
+
+    let recorder: MediaRecorder
+    try {
+      const mimeType = pickVideoMimeType()
+      recorder = new MediaRecorder(cameraStream, mimeType ? { mimeType } : undefined)
+    } catch {
+      setCameraError('영상 녹화를 시작할 수 없어요.')
+      return
+    }
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) recordedChunksRef.current.push(event.data)
+    }
+    recorder.onstop = async () => {
+      const blob = new Blob(recordedChunksRef.current, {
+        type: recorder.mimeType || 'video/webm',
+      })
+      setVideoPreview((prev) => {
+        if (prev.startsWith('blob:')) URL.revokeObjectURL(prev)
+        return URL.createObjectURL(blob)
+      })
+      stopCamera()
+      const poster = posterFileRef.current
+      if (poster) {
+        await applyPhotoFile(poster)
+      }
+    }
+
+    mediaRecorderRef.current = recorder
+    recorder.start()
+    setIsRecording(true)
+    setRecordSeconds(0)
+    clearRecordTimer()
+    recordTimerRef.current = setInterval(() => setRecordSeconds((s) => s + 1), 1000)
+  }
+
+  const handleStopRecording = async () => {
+    const recorder = mediaRecorderRef.current
+    if (!recorder || recorder.state === 'inactive') return
+    clearRecordTimer()
+    setIsRecording(false)
+
+    const video = videoRef.current
+    if (video) {
+      const posterBlob = await captureFrameFromVideo(video)
+      if (posterBlob) {
+        posterFileRef.current = new File([posterBlob], `cashlog-poster-${Date.now()}.jpg`, {
+          type: 'image/jpeg',
+        })
+      }
+    }
+    recorder.stop()
+  }
+
+  const posterFromVideoFile = (file: File): Promise<File | null> =>
+    new Promise((resolve) => {
+      const url = URL.createObjectURL(file)
+      const el = document.createElement('video')
+      el.muted = true
+      el.playsInline = true
+      el.preload = 'metadata'
+      const done = (result: File | null) => {
+        URL.revokeObjectURL(url)
+        resolve(result)
+      }
+      el.onloadeddata = () => {
+        try {
+          el.currentTime = Math.min(0.1, (el.duration || 0.2) / 2)
+        } catch {
+          void 0
+        }
+      }
+      el.onseeked = async () => {
+        const blob = await captureFrameFromVideo(el)
+        done(blob ? new File([blob], `cashlog-poster-${Date.now()}.jpg`, { type: 'image/jpeg' }) : null)
+      }
+      el.onerror = () => done(null)
+      el.src = url
+    })
+
   const handleGalleryPick = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
-    if (!file.type.startsWith('image/')) {
-      setCameraError('이미지 파일만 올릴 수 있어요.')
+    const isImage = file.type.startsWith('image/')
+    const isVideo = file.type.startsWith('video/')
+    if (!isImage && !isVideo) {
+      setCameraError('사진 또는 영상 파일만 올릴 수 있어요.')
       return
     }
     stopCamera()
+
+    if (isVideo) {
+      setCameraError(null)
+      setVideoPreview((prev) => {
+        if (prev.startsWith('blob:')) URL.revokeObjectURL(prev)
+        return URL.createObjectURL(file)
+      })
+      const poster = await posterFromVideoFile(file)
+      if (poster) {
+        await applyPhotoFile(poster)
+      } else {
+        setForm(emptyForm())
+      }
+      return
+    }
+
     await applyPhotoFile(file)
   }
 
@@ -319,15 +500,14 @@ function App() {
       form.kind === 'income'
         ? migrateIncomeCategoryId(String(form.category))
         : migrateCategoryId(String(form.category))
-    const expense =
-      addMode === 'photo' && photoPreview
-        ? analysis
+
+    const hasMedia = addMode === 'photo' && Boolean(photoPreview || videoPreview)
+    let expense: Expense
+    if (hasMedia) {
+      const base =
+        analysis && photoPreview
           ? {
-              ...createExpenseFromAnalysis({
-                analysis,
-                imageUrl: photoPreview,
-                dateTime,
-              }),
+              ...createExpenseFromAnalysis({ analysis, imageUrl: photoPreview, dateTime }),
               title: form.title.trim(),
               amount,
               category: categoryNormalized,
@@ -344,19 +524,29 @@ function App() {
                 kind: form.kind,
               }),
               source: 'photo' as const,
-              imageUrl: photoPreview,
             }
-        : createManualExpense({
-            title: form.title.trim(),
-            amount,
-            category: categoryNormalized,
-            memo: form.memo.trim(),
-            dateTime,
-            kind: form.kind,
-          })
+      expense = {
+        ...base,
+        ...(photoPreview ? { imageUrl: photoPreview } : {}),
+        ...(videoPreview ? { videoUrl: videoPreview } : {}),
+      }
+    } else {
+      expense = createManualExpense({
+        title: form.title.trim(),
+        amount,
+        category: categoryNormalized,
+        memo: form.memo.trim(),
+        dateTime,
+        kind: form.kind,
+      })
+    }
 
     setExpenses((current) => [expense, ...current])
     stopCamera()
+    // 미리보기 URL의 소유권을 저장된 기록으로 넘김 (여기서 revoke 하지 않음)
+    setPhotoPreview('')
+    setVideoPreview('')
+    setAnalysis(null)
     setAddMode('closed')
   }
 
@@ -365,6 +555,20 @@ function App() {
   }
 
   const closeStory = useCallback(() => setStoryMode(null), [])
+
+  const handleCaptureKindChange = (kind: 'photo' | 'video') => {
+    if (kind === captureKind) return
+    if (isRecording) return
+    stopCamera()
+    revokeAndClearPreview()
+    setCaptureKind(kind)
+  }
+
+  const formatRecordClock = (secs: number) => {
+    const m = Math.floor(secs / 60)
+    const s = secs % 60
+    return `${m}:${String(s).padStart(2, '0')}`
+  }
 
   const handleLedgerKindChange = useCallback((kind: LedgerKind) => {
     setForm((f) => ({
@@ -407,6 +611,12 @@ function App() {
           </button>
         </div>
       </section>
+
+      <PetCorner
+        totalRecords={expenses.length}
+        petState={petState}
+        onOutfitChange={handleOutfitChange}
+      />
 
       <section className="dashboard-grid">
         <div className="calendar-card">
@@ -496,9 +706,19 @@ function App() {
                     className={`expense-card ${expense.kind === 'income' ? 'is-income' : ''}`}
                     key={expense.id}
                   >
-                    {expense.imageUrl && (
+                    {expense.videoUrl ? (
+                      <video
+                        className="expense-image"
+                        src={expense.videoUrl}
+                        poster={expense.imageUrl}
+                        muted
+                        loop
+                        playsInline
+                        autoPlay
+                      />
+                    ) : expense.imageUrl ? (
                       <img src={expense.imageUrl} alt="" className="expense-image" />
-                    )}
+                    ) : null}
                     <div>
                       <time
                         dateTime={expense.dateTime}
@@ -547,7 +767,17 @@ function App() {
                 type="button"
                 className="ghost-button"
                 onClick={() => {
+                  const recorder = mediaRecorderRef.current
+                  if (recorder && recorder.state !== 'inactive') {
+                    recorder.onstop = null
+                    try {
+                      recorder.stop()
+                    } catch {
+                      void 0
+                    }
+                  }
                   stopCamera()
+                  revokeAndClearPreview()
                   setAddMode('closed')
                 }}
               >
@@ -582,45 +812,115 @@ function App() {
 
             {addMode === 'photo' && (
               <div className="photo-flow">
-                <div className="photo-source-row" role="group" aria-label="사진 가져오기">
+                <div className="capture-kind-toggle" role="group" aria-label="사진 또는 영상">
+                  <button
+                    type="button"
+                    className={captureKind === 'photo' ? 'active' : ''}
+                    aria-pressed={captureKind === 'photo'}
+                    onClick={() => handleCaptureKindChange('photo')}
+                  >
+                    📷 사진
+                  </button>
+                  <button
+                    type="button"
+                    className={captureKind === 'video' ? 'active' : ''}
+                    aria-pressed={captureKind === 'video'}
+                    onClick={() => handleCaptureKindChange('video')}
+                  >
+                    🎬 영상
+                  </button>
+                </div>
+                <div className="photo-source-row" role="group" aria-label="미디어 가져오기">
                   <button type="button" className="camera-start-button" onClick={startCamera}>
-                    📷 카메라 촬영
+                    {captureKind === 'video' ? '🎥 카메라로 녹화' : '📷 카메라 촬영'}
                   </button>
                   <label className="file-picker file-picker-inline">
                     🖼 갤러리에서 선택
                     <input
                       type="file"
-                      accept="image/*"
+                      accept={captureKind === 'video' ? 'video/*' : 'image/*'}
                       onChange={handleGalleryPick}
-                      aria-label="갤러리에서 사진 선택"
+                      aria-label="갤러리에서 미디어 선택"
                     />
                   </label>
                 </div>
                 <p className="camera-permission-note">
-                  <strong>카메라 촬영</strong>은 브라우저 카메라 권한이 필요해요 (HTTPS 또는
-                  localhost). <strong>갤러리 선택</strong>은 기기에 저장된 사진을 바로 올릴 수 있어요.
+                  {captureKind === 'video' ? (
+                    <>
+                      <strong>영상 녹화</strong>는 카메라·마이크 권한이 필요해요 (HTTPS 또는
+                      localhost). 녹화가 끝나면 첫 장면을 표지로 잡아 자동 분석해요.
+                    </>
+                  ) : (
+                    <>
+                      <strong>카메라 촬영</strong>은 카메라 권한이 필요해요 (HTTPS 또는 localhost).{' '}
+                      <strong>갤러리 선택</strong>은 기기에 저장된 사진을 바로 올릴 수 있어요.
+                    </>
+                  )}
                 </p>
                 {cameraError && <p className="camera-error">{cameraError}</p>}
                 {cameraStream && (
                   <div className="camera-live-wrap">
                     <video
                       ref={videoRef}
-                      className="camera-live"
+                      className={`camera-live${isRecording ? ' is-recording' : ''}`}
                       playsInline
                       muted
                       autoPlay
                     />
+                    {isRecording && (
+                      <p className="record-indicator" aria-live="polite">
+                        <span className="record-dot" aria-hidden /> 녹화 중 {formatRecordClock(recordSeconds)}
+                      </p>
+                    )}
                     <div className="camera-actions">
-                      <button type="button" className="primary-button" onClick={handleCapturePhoto}>
-                        촬영하기
-                      </button>
-                      <button type="button" className="ghost-button" onClick={stopCamera}>
-                        카메라 끄기
-                      </button>
+                      {captureKind === 'video' ? (
+                        isRecording ? (
+                          <button
+                            type="button"
+                            className="primary-button record-stop"
+                            onClick={handleStopRecording}
+                          >
+                            ■ 녹화 정지
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="primary-button"
+                            onClick={handleStartRecording}
+                          >
+                            ● 녹화 시작
+                          </button>
+                        )
+                      ) : (
+                        <button
+                          type="button"
+                          className="primary-button"
+                          onClick={handleCapturePhoto}
+                        >
+                          촬영하기
+                        </button>
+                      )}
+                      {!isRecording && (
+                        <button type="button" className="ghost-button" onClick={stopCamera}>
+                          카메라 끄기
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
-                {photoPreview && !cameraStream && (
+                {videoPreview && !cameraStream && (
+                  <video
+                    className="preview-image"
+                    src={videoPreview}
+                    poster={photoPreview || undefined}
+                    controls
+                    playsInline
+                    muted
+                    loop
+                    autoPlay
+                  />
+                )}
+                {photoPreview && !videoPreview && !cameraStream && (
                   <img src={photoPreview} alt="" className="preview-image" />
                 )}
                 {analysis && (

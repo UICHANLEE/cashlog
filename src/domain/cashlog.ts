@@ -400,6 +400,8 @@ export type Expense = {
   memo: string
   source: ExpenseSource
   imageUrl?: string
+  /** 영상 기록의 재생 URL (imageUrl은 포스터 프레임으로 함께 저장) */
+  videoUrl?: string
   createdAt: string
   updatedAt: string
 }
