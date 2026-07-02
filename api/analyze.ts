@@ -48,6 +48,66 @@ type LeafId = (typeof ALLOWED_LEAF_IDS)[number]
 
 const ALLOWED = new Set<string>(ALLOWED_LEAF_IDS)
 
+type VisionModelPresetId = 'openai-mini' | 'qwen25vl3b-hf' | 'qwen25vl3b-local'
+
+type VisionModelConfig = {
+  apiBase: string
+  envKey: 'OPENAI_API_KEY' | 'HF_TOKEN' | 'VISION_API_KEY'
+  model: string
+  engine: string
+  description: string
+}
+
+const MODEL_PRESETS: Record<VisionModelPresetId, VisionModelConfig> = {
+  'openai-mini': {
+    apiBase: 'https://api.openai.com/v1',
+    envKey: 'OPENAI_API_KEY',
+    model: 'gpt-4o-mini',
+    engine: 'openai',
+    description: 'Hosted OpenAI compact vision model',
+  },
+  'qwen25vl3b-hf': {
+    apiBase: 'https://router.huggingface.co/v1',
+    envKey: 'HF_TOKEN',
+    model: 'Qwen/Qwen2.5-VL-3B-Instruct',
+    engine: 'qwen',
+    description: 'Qwen2.5-VL 3B through Hugging Face Inference Providers',
+  },
+  'qwen25vl3b-local': {
+    apiBase: 'http://127.0.0.1:8000/v1',
+    envKey: 'VISION_API_KEY',
+    model: 'Qwen/Qwen2.5-VL-3B-Instruct',
+    engine: 'qwen',
+    description: 'Qwen2.5-VL 3B served by local vLLM/SGLang',
+  },
+}
+
+function isVisionModelPresetId(raw: string): raw is VisionModelPresetId {
+  return raw in MODEL_PRESETS
+}
+
+function getVisionModelConfig(): VisionModelConfig {
+  const presetRaw = process.env.VISION_MODEL_PRESET?.trim() || 'openai-mini'
+  const preset = isVisionModelPresetId(presetRaw) ? MODEL_PRESETS[presetRaw] : MODEL_PRESETS['openai-mini']
+  const model =
+    process.env.VISION_MODEL?.trim() ||
+    process.env.OPENAI_VISION_MODEL?.trim() ||
+    preset.model
+  const apiBase = (process.env.VISION_API_BASE_URL?.trim() || preset.apiBase).replace(/\/$/, '')
+  const engine =
+    process.env.VISION_ENGINE?.trim() ||
+    (model.toLowerCase().includes('qwen') ? 'qwen' : preset.engine)
+  const envKey = process.env.VISION_API_KEY ? 'VISION_API_KEY' : preset.envKey
+
+  return {
+    ...preset,
+    apiBase,
+    envKey,
+    model,
+    engine,
+  }
+}
+
 function normalizeLeafId(raw: unknown): LeafId {
   if (typeof raw !== 'string' || !ALLOWED.has(raw)) return 'misc_uncat'
   return raw as LeafId
@@ -73,22 +133,15 @@ async function visionToAnalysis(
   imageBase64: string,
   mimeType: string,
 ): Promise<{ json: Record<string, unknown>; model: string; engine: string }> {
-  const key = process.env.VISION_API_KEY || process.env.OPENAI_API_KEY
+  const modelConfig = getVisionModelConfig()
+  const key = process.env.VISION_API_KEY || process.env[modelConfig.envKey] || process.env.OPENAI_API_KEY
   if (!key) {
-    throw new Error('VISION_API_KEY or OPENAI_API_KEY is not configured')
+    throw new Error(
+      `${modelConfig.envKey} is not configured for ${modelConfig.description}. Set VISION_API_KEY to override.`,
+    )
   }
 
-  const model =
-    process.env.VISION_MODEL?.trim() ||
-    process.env.OPENAI_VISION_MODEL?.trim() ||
-    'gpt-4o-mini'
-  const apiBase = (process.env.VISION_API_BASE_URL?.trim() || 'https://api.openai.com/v1').replace(
-    /\/$/,
-    '',
-  )
-  const engine =
-    process.env.VISION_ENGINE?.trim() ||
-    (model.toLowerCase().includes('qwen') ? 'qwen' : 'openai')
+  const { apiBase, model, engine } = modelConfig
 
   const leafList = ALLOWED_LEAF_IDS.join(', ')
   const system = `당신은 한국 가계부 앱 Cashlog 의 영수증 분석기입니다.

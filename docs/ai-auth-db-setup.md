@@ -10,9 +10,11 @@ Cashlog should treat OCR and object/category analysis as two layers:
 2. **Compact VLM fallback** for normal photos and video poster frames.
    - Recommended open-weight model for a custom inference server: `Qwen2.5-VL-3B-Instruct`.
    - It is small enough to be practical, and the technical report emphasizes document parsing, object localization, and video understanding.
-3. **Hosted prototype default**: `/api/analyze` currently uses OpenAI Chat Completions with `OPENAI_VISION_MODEL`, defaulting to `gpt-4o-mini`.
-   - This keeps Vercel deployment simple while the app interface is being built.
-   - Swap the server implementation later without changing the client contract.
+3. **Implemented model presets** in `/api/analyze`.
+   - `VISION_MODEL_PRESET=openai-mini`: OpenAI `gpt-4o-mini`.
+   - `VISION_MODEL_PRESET=qwen25vl3b-hf`: Hugging Face Router + `Qwen/Qwen2.5-VL-3B-Instruct`.
+   - `VISION_MODEL_PRESET=qwen25vl3b-local`: local vLLM/SGLang OpenAI-compatible server + `Qwen/Qwen2.5-VL-3B-Instruct`.
+   - You can still override every preset with `VISION_API_BASE_URL`, `VISION_MODEL`, `VISION_ENGINE`, and `VISION_API_KEY`.
 
 The client expects this JSON contract:
 
@@ -42,7 +44,16 @@ VITE_ANALYZE_API_URL=/api/analyze
 OPENAI_API_KEY=...
 OPENAI_VISION_MODEL=gpt-4o-mini
 
-# OpenAI-compatible custom VLM endpoint, e.g. vLLM/TGI/OpenRouter/HF Router
+# Qwen2.5-VL-3B through Hugging Face Inference Providers
+VISION_MODEL_PRESET=qwen25vl3b-hf
+HF_TOKEN=...
+
+# Local Qwen2.5-VL-3B through vLLM/SGLang
+VISION_MODEL_PRESET=qwen25vl3b-local
+VISION_API_KEY=local-dev-key
+VISION_API_BASE_URL=http://127.0.0.1:8000/v1
+
+# OpenAI-compatible custom VLM endpoint, e.g. vLLM/TGI/OpenRouter/HF Router.
 VISION_API_BASE_URL=https://your-vlm-host.example.com/v1
 VISION_API_KEY=...
 VISION_MODEL=Qwen/Qwen2.5-VL-3B-Instruct
