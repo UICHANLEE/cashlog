@@ -1,5 +1,6 @@
 /**
- * Vercel Serverless — OpenAI Vision (영수증·결제 화면 이미지 → 지출 추천 JSON)
+ * Vercel Serverless — compact Vision/OCR analyzer
+ * 영수증·결제 화면·사진/영상 포스터 프레임 → 지출 추천 JSON
  *
  * 클라이언트는 여기로 base64만 보냄. API 키는 Vercel 환경변수 OPENAI_API_KEY.
  *
@@ -71,14 +72,23 @@ function clamp01(n: number): number {
 async function visionToAnalysis(
   imageBase64: string,
   mimeType: string,
-): Promise<Record<string, unknown>> {
-  const key = process.env.OPENAI_API_KEY
+): Promise<{ json: Record<string, unknown>; model: string; engine: string }> {
+  const key = process.env.VISION_API_KEY || process.env.OPENAI_API_KEY
   if (!key) {
-    throw new Error('OPENAI_API_KEY is not configured')
+    throw new Error('VISION_API_KEY or OPENAI_API_KEY is not configured')
   }
 
   const model =
-    process.env.OPENAI_VISION_MODEL?.trim() || 'gpt-4o-mini'
+    process.env.VISION_MODEL?.trim() ||
+    process.env.OPENAI_VISION_MODEL?.trim() ||
+    'gpt-4o-mini'
+  const apiBase = (process.env.VISION_API_BASE_URL?.trim() || 'https://api.openai.com/v1').replace(
+    /\/$/,
+    '',
+  )
+  const engine =
+    process.env.VISION_ENGINE?.trim() ||
+    (model.toLowerCase().includes('qwen') ? 'qwen' : 'openai')
 
   const leafList = ALLOWED_LEAF_IDS.join(', ')
   const system = `당신은 한국 가계부 앱 Cashlog 의 영수증 분석기입니다.
@@ -91,12 +101,20 @@ async function visionToAnalysis(
 - suggestedTitle: 짧은 한글 제목 (20자 이내)
 - suggestedMemo: 사용자에게 보여 줄 한 줄 설명 (부가세·할인 등 있으면 언급)
 - confidence: 0~1 사이 실수
-- rawText: 이미지에서 읽은 핵심 텍스트를 한 줄로 (없으면 추정 근거 한 줄)`
+- rawText: 이미지에서 읽은 핵심 텍스트를 한 줄로 (없으면 추정 근거 한 줄)
+- ocrText: OCR로 읽은 원문에 가까운 텍스트. 없으면 빈 문자열
+- detectedObjects: 피사체·장소·브랜드·상품 단서를 문자열 배열로 최대 8개
+- categoryReason: 이 카테고리를 고른 이유 한 문장
+
+분류 기준:
+- 영수증/결제 화면이면 OCR 금액과 상호명을 우선한다.
+- 일반 사진이면 피사체·장소·브랜드 단서로 지출 카테고리를 추론한다.
+- 확신이 낮으면 misc_uncat 대신 가장 가까운 생활 카테고리를 고르고 confidence를 낮춘다.`
 
   const safeMime = mimeType?.includes('/') ? mimeType : 'image/jpeg'
   const dataUrl = `data:${safeMime};base64,${imageBase64}`
 
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+  const res = await fetch(`${apiBase}/chat/completions`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${key}`,
@@ -128,19 +146,19 @@ async function visionToAnalysis(
 
   const raw = await res.text()
   if (!res.ok) {
-    throw new Error(raw.slice(0, 500) || `OpenAI HTTP ${res.status}`)
+    throw new Error(raw.slice(0, 500) || `Vision HTTP ${res.status}`)
   }
 
   let parsed: { choices?: { message?: { content?: string } }[] }
   try {
     parsed = JSON.parse(raw) as typeof parsed
   } catch {
-    throw new Error('OpenAI 응답 파싱 실패')
+    throw new Error('Vision 응답 파싱 실패')
   }
 
   const content = parsed.choices?.[0]?.message?.content
   if (!content || typeof content !== 'string') {
-    throw new Error('OpenAI 응답에 내용이 없습니다')
+    throw new Error('Vision 응답에 내용이 없습니다')
   }
 
   let json: Record<string, unknown>
@@ -150,7 +168,7 @@ async function visionToAnalysis(
     throw new Error('모델이 JSON 형식으로 답하지 않았습니다')
   }
 
-  return json
+  return { json, model, engine }
 }
 
 export const config = {
@@ -177,7 +195,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return
     }
 
-    const json = await visionToAnalysis(imageBase64.trim(), mimeType)
+    const analyzed = await visionToAnalysis(imageBase64.trim(), mimeType)
+    const { json, model, engine } = analyzed
 
     const amount = coerceAmount(json.suggestedAmount)
     if (amount <= 0) {
@@ -201,7 +220,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         typeof json.rawText === 'string' && json.rawText.trim()
           ? json.rawText.trim().slice(0, 300)
           : '이미지 분석',
-      engine: 'openai' as const,
+      ocrText:
+        typeof json.ocrText === 'string' && json.ocrText.trim()
+          ? json.ocrText.trim().slice(0, 2000)
+          : typeof json.rawText === 'string'
+            ? json.rawText.trim().slice(0, 2000)
+            : '',
+      detectedObjects: Array.isArray(json.detectedObjects)
+        ? json.detectedObjects
+            .filter((item): item is string => typeof item === 'string')
+            .map((item) => item.trim())
+            .filter(Boolean)
+            .slice(0, 8)
+        : [],
+      categoryReason:
+        typeof json.categoryReason === 'string' && json.categoryReason.trim()
+          ? json.categoryReason.trim().slice(0, 200)
+          : '이미지 속 텍스트와 피사체 단서를 함께 봤어요.',
+      engine,
+      model,
     }
 
     res.status(200).json(out)

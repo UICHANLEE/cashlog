@@ -51,9 +51,12 @@ import {
   defaultPetState,
   normalizePetState,
   type OutfitId,
+  type PetPaletteId,
   type PetKind,
   type PetState,
 } from './domain/pet'
+import { createCashlogAuthClient, type CashlogSession } from './services/auth'
+import { createCashlogRepository, mergeExpenses } from './services/cashlogRepository'
 
 type AddMode = 'closed' | 'choice' | 'photo' | 'manual'
 type StoryMode = null | 'day' | 'month'
@@ -140,6 +143,16 @@ function App() {
   const [storyMode, setStoryMode] = useState<StoryMode>(null)
   const [relativeMinuteTick, setRelativeMinuteTick] = useState(0)
   const [petState, setPetState] = useState<PetState>(loadPetState)
+  const [session, setSession] = useState<CashlogSession | null>(null)
+  const [authEmail, setAuthEmail] = useState('')
+  const [authMessage, setAuthMessage] = useState('')
+  const [syncStatus, setSyncStatus] = useState('Supabase 미연결 · 로컬 저장 중')
+  const authClient = useMemo(() => createCashlogAuthClient(), [])
+  const repository = useMemo(
+    () => createCashlogRepository(authClient.config, session),
+    [authClient.config, session],
+  )
+  const initialSyncedSessionRef = useRef<string | null>(null)
 
   useEffect(() => {
     const id = window.setInterval(() => setRelativeMinuteTick((x) => x + 1), 60_000)
@@ -230,9 +243,42 @@ function App() {
     localStorage.setItem(PET_STORAGE_KEY, JSON.stringify(petState))
   }, [petState])
 
+  useEffect(() => {
+    if (!authClient.isConfigured) {
+      return
+    }
+
+    let alive = true
+    const loadSession = async () => {
+      await Promise.resolve()
+      const fromUrl = authClient.consumeSessionFromUrl()
+      const stored = fromUrl ?? authClient.loadStoredSession()
+      if (!stored) {
+        setSyncStatus('로그인 대기 · 로컬 저장 중')
+        return
+      }
+      const hydrated = await authClient.hydrateSession(stored)
+      if (!alive) return
+      authClient.saveSession(hydrated)
+      setSession(hydrated)
+      setSyncStatus(hydrated.user ? `${hydrated.user.email} 동기화 준비` : '동기화 준비')
+    }
+
+    void loadSession()
+    return () => {
+      alive = false
+    }
+  }, [authClient])
+
   const handleOutfitChange = useCallback((kind: PetKind, outfit: OutfitId) => {
     setPetState((prev) =>
       kind === 'cat' ? { ...prev, catOutfit: outfit } : { ...prev, dogOutfit: outfit },
+    )
+  }, [])
+
+  const handlePaletteChange = useCallback((kind: PetKind, palette: PetPaletteId) => {
+    setPetState((prev) =>
+      kind === 'cat' ? { ...prev, catPalette: palette } : { ...prev, dogPalette: palette },
     )
   }, [])
 
@@ -261,6 +307,73 @@ function App() {
   )
   const monthlyExpense = getMonthlyExpenseTotal(expenses, yearMonth)
   const monthlyIncome = getMonthlyIncomeTotal(expenses, yearMonth)
+
+  const syncWithCloud = async () => {
+    if (!repository) {
+      setSyncStatus(authClient.isConfigured ? '로그인이 필요해요' : 'Supabase 미연결 · 로컬 저장 중')
+      return
+    }
+
+    setSyncStatus('클라우드와 맞추는 중...')
+    try {
+      const remote = await repository.listExpenses()
+      const merged = mergeExpenses(expenses, remote)
+      setExpenses(merged)
+      await repository.upsertExpenses(merged)
+      setSyncStatus(`${merged.length}개 기록 동기화 완료`)
+    } catch (e) {
+      setSyncStatus(e instanceof Error ? `동기화 실패: ${e.message.slice(0, 80)}` : '동기화 실패')
+    }
+  }
+
+  useEffect(() => {
+    if (!session?.accessToken || !repository) return
+    if (initialSyncedSessionRef.current === session.accessToken) return
+    initialSyncedSessionRef.current = session.accessToken
+    const runInitialSync = async () => {
+      setSyncStatus('클라우드와 맞추는 중...')
+      try {
+        const remote = await repository.listExpenses()
+        setExpenses((current) => {
+          const merged = mergeExpenses(current, remote)
+          void repository
+            .upsertExpenses(merged)
+            .then(() => setSyncStatus(`${merged.length}개 기록 동기화 완료`))
+            .catch((e: unknown) => {
+              setSyncStatus(
+                e instanceof Error ? `동기화 실패: ${e.message.slice(0, 80)}` : '동기화 실패',
+              )
+            })
+          return merged
+        })
+      } catch (e) {
+        setSyncStatus(e instanceof Error ? `동기화 실패: ${e.message.slice(0, 80)}` : '동기화 실패')
+      }
+    }
+    void runInitialSync()
+  }, [repository, session?.accessToken])
+
+  const handleSignIn = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const email = authEmail.trim()
+    if (!email) return
+
+    setAuthMessage('로그인 메일을 보내는 중...')
+    try {
+      await authClient.signInWithEmail(email)
+      setAuthMessage('메일함에서 로그인 링크를 눌러 주세요.')
+    } catch (e) {
+      setAuthMessage(e instanceof Error ? e.message : '로그인 요청에 실패했어요.')
+    }
+  }
+
+  const handleSignOut = () => {
+    authClient.signOut()
+    setSession(null)
+    initialSyncedSessionRef.current = null
+    setAuthMessage('로그아웃했어요.')
+    setSyncStatus(authClient.isConfigured ? '로그인 대기 · 로컬 저장 중' : 'Supabase 미연결 · 로컬 저장 중')
+  }
 
   const expenseToSlide = useCallback((expense: Expense, mode: 'day' | 'month') => {
     const dt = new Date(expense.dateTime)
@@ -542,6 +655,14 @@ function App() {
     }
 
     setExpenses((current) => [expense, ...current])
+    if (repository) {
+      repository
+        .upsertExpense(expense)
+        .then(() => setSyncStatus('새 기록 클라우드 저장 완료'))
+        .catch((e: unknown) => {
+          setSyncStatus(e instanceof Error ? `클라우드 저장 실패: ${e.message.slice(0, 80)}` : '클라우드 저장 실패')
+        })
+    }
     stopCamera()
     // 미리보기 URL의 소유권을 저장된 기록으로 넘김 (여기서 revoke 하지 않음)
     setPhotoPreview('')
@@ -594,6 +715,39 @@ function App() {
           </div>
         </div>
         <div className="hero-actions">
+          <section className="account-card" aria-label="로그인과 동기화">
+            <div>
+              <p className="eyebrow">Account sync</p>
+              <h2>{session?.user?.email ?? '로컬 모드'}</h2>
+              <p>{syncStatus}</p>
+            </div>
+            {authClient.isConfigured ? (
+              session ? (
+                <div className="account-actions">
+                  <button type="button" className="ghost-button" onClick={syncWithCloud}>
+                    지금 동기화
+                  </button>
+                  <button type="button" className="ghost-button" onClick={handleSignOut}>
+                    로그아웃
+                  </button>
+                </div>
+              ) : (
+                <form className="account-form" onSubmit={handleSignIn}>
+                  <input
+                    type="email"
+                    value={authEmail}
+                    onChange={(event) => setAuthEmail(event.target.value)}
+                    placeholder="email@example.com"
+                    aria-label="로그인 이메일"
+                  />
+                  <button type="submit">메일 로그인</button>
+                </form>
+              )
+            ) : (
+              <small>VITE_SUPABASE_URL과 VITE_SUPABASE_ANON_KEY를 넣으면 로그인·DB 동기화가 켜져요.</small>
+            )}
+            {authMessage && <small className="account-message">{authMessage}</small>}
+          </section>
           <div className="hero-month-stats">
             <div>
               <span>이번 달 지출</span>
@@ -616,6 +770,7 @@ function App() {
         totalRecords={expenses.length}
         petState={petState}
         onOutfitChange={handleOutfitChange}
+        onPaletteChange={handlePaletteChange}
       />
 
       <section className="dashboard-grid">
@@ -925,8 +1080,12 @@ function App() {
                 )}
                 {analysis && (
                   <p className="analysis-note">
-                    {analysis.engine === 'openai' ? 'Vision' : '목(mock)'} 분석 신뢰도{' '}
-                    {Math.round(analysis.confidence * 100)}% · {analysis.rawText}
+                    {(analysis.model ?? (analysis.engine === 'openai' ? 'Vision' : '목(mock)'))}
+                    {' '}분석 신뢰도 {Math.round(analysis.confidence * 100)}% ·{' '}
+                    {analysis.categoryReason ?? analysis.rawText}
+                    {analysis.detectedObjects?.length
+                      ? ` · 단서: ${analysis.detectedObjects.slice(0, 3).join(', ')}`
+                      : ''}
                   </p>
                 )}
                 <ExpenseEditor

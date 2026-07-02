@@ -51,10 +51,21 @@ describe('pet growth domain', () => {
       dogName: '초코',
       catOutfit: 'none',
       dogOutfit: 'none',
+      catPalette: 'cream',
+      dogPalette: 'cream',
     })
-    expect(normalizePetState({ catOutfit: 'crown', dogOutfit: 'bogus' as never })).toMatchObject({
+    expect(
+      normalizePetState({
+        catOutfit: 'crown',
+        dogOutfit: 'bogus' as never,
+        catPalette: 'mint',
+        dogPalette: 'unknown' as never,
+      }),
+    ).toMatchObject({
       catOutfit: 'crown',
       dogOutfit: 'none',
+      catPalette: 'mint',
+      dogPalette: 'cream',
     })
   })
 })

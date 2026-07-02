@@ -18,6 +18,61 @@ export type Outfit = {
   minLevel: number
 }
 
+export type PetPaletteId = 'cream' | 'strawberry' | 'mint' | 'space'
+
+export type PetPalette = {
+  id: PetPaletteId
+  name: string
+  body: string
+  bodyAlt: string
+  blush: string
+  accent: string
+  shadow: string
+}
+
+export const petPalettes: PetPalette[] = [
+  {
+    id: 'cream',
+    name: '크림',
+    body: '#ffd8a8',
+    bodyAlt: '#fff0d8',
+    blush: '#ff9ec4',
+    accent: '#ff7a59',
+    shadow: '#d29a61',
+  },
+  {
+    id: 'strawberry',
+    name: '딸기우유',
+    body: '#ffc4d9',
+    bodyAlt: '#fff1f6',
+    blush: '#ff6f9f',
+    accent: '#ef476f',
+    shadow: '#d87a9e',
+  },
+  {
+    id: 'mint',
+    name: '민트',
+    body: '#b9f3df',
+    bodyAlt: '#ecfff8',
+    blush: '#ff9ec4',
+    accent: '#2fbf9b',
+    shadow: '#63bda1',
+  },
+  {
+    id: 'space',
+    name: '밤하늘',
+    body: '#8ea7ff',
+    bodyAlt: '#eef2ff',
+    blush: '#ffc2e0',
+    accent: '#ffd23f',
+    shadow: '#5569bf',
+  },
+]
+
+export function getPetPalette(id: PetPaletteId): PetPalette {
+  return petPalettes.find((p) => p.id === id) ?? petPalettes[0]
+}
+
 /** 코디 목록 — 레벨이 오를수록 해금 */
 export const outfits: Outfit[] = [
   { id: 'none', name: '기본', icon: '🐾', minLevel: 1 },
@@ -41,6 +96,8 @@ export type PetState = {
   dogName: string
   catOutfit: OutfitId
   dogOutfit: OutfitId
+  catPalette: PetPaletteId
+  dogPalette: PetPaletteId
 }
 
 export const defaultPetState: PetState = {
@@ -48,17 +105,23 @@ export const defaultPetState: PetState = {
   dogName: '초코',
   catOutfit: 'none',
   dogOutfit: 'none',
+  catPalette: 'cream',
+  dogPalette: 'cream',
 }
 
 /** 저장된 값 보정 (알 수 없는 outfit → none) */
 export function normalizePetState(raw: Partial<PetState> | null | undefined): PetState {
   const validOutfit = (v: unknown): OutfitId =>
     outfits.some((o) => o.id === v) ? (v as OutfitId) : 'none'
+  const validPalette = (v: unknown): PetPaletteId =>
+    petPalettes.some((p) => p.id === v) ? (v as PetPaletteId) : 'cream'
   return {
     catName: (raw?.catName ?? '').toString().trim() || defaultPetState.catName,
     dogName: (raw?.dogName ?? '').toString().trim() || defaultPetState.dogName,
     catOutfit: validOutfit(raw?.catOutfit),
     dogOutfit: validOutfit(raw?.dogOutfit),
+    catPalette: validPalette(raw?.catPalette),
+    dogPalette: validPalette(raw?.dogPalette),
   }
 }
 

@@ -402,6 +402,7 @@ export type Expense = {
   imageUrl?: string
   /** 영상 기록의 재생 URL (imageUrl은 포스터 프레임으로 함께 저장) */
   videoUrl?: string
+  analysis?: MediaAnalysisSnapshot
   createdAt: string
   updatedAt: string
 }
@@ -414,6 +415,17 @@ export type DailyLog = {
   generatedFrom: ExpenseSource[]
 }
 
+export type AnalysisEngine = 'mock' | 'openai' | 'qwen' | 'paddleocr' | 'custom'
+
+export type MediaAnalysisSnapshot = {
+  engine?: AnalysisEngine
+  model?: string
+  ocrText?: string
+  detectedObjects?: string[]
+  categoryReason?: string
+  confidence?: number
+}
+
 export type PhotoAnalysis = {
   suggestedAmount: number
   suggestedCategory: CategoryId
@@ -422,7 +434,15 @@ export type PhotoAnalysis = {
   confidence: number
   rawText: string
   /** 어떤 엔진이 채웠는지(UI 표시용, 선택) */
-  engine?: 'mock' | 'openai'
+  engine?: AnalysisEngine
+  /** 실제 사용 모델명. 예: gpt-4o-mini, Qwen2.5-VL-3B-Instruct */
+  model?: string
+  /** OCR 전용 원문. rawText는 UI용 요약으로 유지 */
+  ocrText?: string
+  /** 피사체/장소/브랜드 등 카테고리 추론에 쓴 단서 */
+  detectedObjects?: string[]
+  /** 왜 이 카테고리를 골랐는지 사용자에게 보여 줄 짧은 근거 */
+  categoryReason?: string
 }
 
 export type CalendarDay = {
@@ -471,6 +491,14 @@ export const createExpenseFromAnalysis = ({
     memo: analysis.suggestedMemo,
     source: 'photo',
     imageUrl,
+    analysis: {
+      engine: analysis.engine,
+      model: analysis.model,
+      ocrText: analysis.ocrText ?? analysis.rawText,
+      detectedObjects: analysis.detectedObjects ?? [],
+      categoryReason: analysis.categoryReason,
+      confidence: analysis.confidence,
+    },
     createdAt: now,
     updatedAt: now,
   }
