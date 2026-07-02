@@ -39,7 +39,16 @@ export async function remoteAnalyzePhoto(
     suggestedMemo: String(o.suggestedMemo ?? ''),
     confidence: Number(o.confidence),
     rawText: String(o.rawText ?? ''),
-    engine: 'openai',
+    engine:
+      o.engine === 'qwen' || o.engine === 'paddleocr' || o.engine === 'custom'
+        ? o.engine
+        : 'openai',
+    model: typeof o.model === 'string' ? o.model : undefined,
+    ocrText: typeof o.ocrText === 'string' ? o.ocrText : undefined,
+    detectedObjects: Array.isArray(o.detectedObjects)
+      ? o.detectedObjects.filter((item): item is string => typeof item === 'string').slice(0, 8)
+      : [],
+    categoryReason: typeof o.categoryReason === 'string' ? o.categoryReason : undefined,
   }
 
   if (

@@ -23,9 +23,25 @@
   padding: 16px 12px 12px;
   border: 2px dashed var(--line-soft);
   border-radius: 22px 10px 22px 10px;
-  background: var(--paper-soft);
+  background:
+    radial-gradient(circle at 28% 18%, rgba(255, 255, 255, 0.92), transparent 9rem),
+    linear-gradient(180deg, rgba(198, 232, 255, 0.42), rgba(255, 238, 196, 0.58)),
+    var(--paper-soft);
   min-height: 150px;
   overflow: hidden;
+}
+
+.pet-stage::after {
+  content: '';
+  position: absolute;
+  left: 16%;
+  right: 16%;
+  bottom: 14px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(42, 37, 31, 0.08);
+  filter: blur(8px);
+  pointer-events: none;
 }
 
 .pet-figure {
@@ -40,8 +56,12 @@
   width: clamp(96px, 22vw, 132px);
   height: auto;
   display: block;
-  filter: drop-shadow(2px 3px 0 rgba(42, 37, 31, 0.14));
+  filter:
+    drop-shadow(0 10px 12px rgba(42, 37, 31, 0.15))
+    drop-shadow(2px 3px 0 rgba(42, 37, 31, 0.1));
   transition: transform 0.18s ease;
+  position: relative;
+  z-index: 1;
 }
 
 .pet-doodle-cat {
@@ -184,13 +204,15 @@
   color: var(--ink);
 }
 
-.outfit-chips {
+.outfit-chips,
+.palette-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.outfit-chip {
+.outfit-chip,
+.palette-chip {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -209,7 +231,20 @@
     box-shadow 0.12s ease;
 }
 
-.outfit-chip.active {
+.palette-chip {
+  background: #fffdf7;
+}
+
+.palette-chip span {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+}
+
+.outfit-chip.active,
+.palette-chip.active {
   background: var(--crayon-sun);
   transform: translate(2px, 2px);
   box-shadow: 1px 1px 0 var(--line);
@@ -224,7 +259,8 @@
   cursor: not-allowed;
 }
 
-.outfit-chip:not(:disabled):active {
+.outfit-chip:not(:disabled):active,
+.palette-chip:active {
   transform: translate(2px, 2px);
   box-shadow: 1px 1px 0 var(--line);
 }
@@ -241,7 +277,8 @@
 }
 
 @media (hover: hover) {
-  .outfit-chip:not(:disabled):hover {
+  .outfit-chip:not(:disabled):hover,
+  .palette-chip:hover {
     background: var(--crayon-sun);
   }
 

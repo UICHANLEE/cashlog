@@ -2,10 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   computeLevel,
   getOutfit,
+  getPetPalette,
   isOutfitUnlocked,
   outfits,
+  petPalettes,
   type OutfitId,
   type PetKind,
+  type PetPaletteId,
   type PetState,
 } from '../domain/pet'
 import { CatDoodle, DogDoodle } from './Doodles'
@@ -15,9 +18,15 @@ type PetCornerProps = {
   totalRecords: number
   petState: PetState
   onOutfitChange: (kind: PetKind, outfit: OutfitId) => void
+  onPaletteChange: (kind: PetKind, palette: PetPaletteId) => void
 }
 
-export function PetCorner({ totalRecords, petState, onOutfitChange }: PetCornerProps) {
+export function PetCorner({
+  totalRecords,
+  petState,
+  onOutfitChange,
+  onPaletteChange,
+}: PetCornerProps) {
   const level = computeLevel(totalRecords)
   const [cheer, setCheer] = useState(false)
   const cheerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -42,13 +51,38 @@ export function PetCorner({ totalRecords, petState, onOutfitChange }: PetCornerP
 
   const renderWardrobe = (kind: PetKind) => {
     const current = kind === 'cat' ? petState.catOutfit : petState.dogOutfit
+    const currentPalette = kind === 'cat' ? petState.catPalette : petState.dogPalette
     const label = kind === 'cat' ? petState.catName : petState.dogName
-    const emoji = kind === 'cat' ? '🐱' : '🐶'
     return (
       <div className="pet-wardrobe-row">
-        <span className="pet-wardrobe-label">
-          {emoji} {label} 코디
-        </span>
+        <span className="pet-wardrobe-label">{label} 꾸미기</span>
+        <div className="palette-chips" role="group" aria-label={`${label} 털색 고르기`}>
+          {petPalettes.map((palette) => {
+            const active = palette.id === currentPalette
+            return (
+              <button
+                key={palette.id}
+                type="button"
+                className={`palette-chip${active ? ' active' : ''}`}
+                aria-pressed={active}
+                aria-label={`${label} ${palette.name} 색칠`}
+                onClick={() => {
+                  onPaletteChange(kind, palette.id)
+                  play()
+                }}
+              >
+                <span
+                  aria-hidden
+                  style={{
+                    background: `linear-gradient(135deg, ${palette.body}, ${palette.bodyAlt})`,
+                    boxShadow: `inset 0 -6px 10px ${palette.shadow}55`,
+                  }}
+                />
+                {palette.name}
+              </button>
+            )
+          })}
+        </div>
         <div className="outfit-chips" role="group" aria-label={`${label} 옷 고르기`}>
           {outfits.map((o) => {
             const unlocked = isOutfitUnlocked(o.id, level.level)
@@ -82,7 +116,7 @@ export function PetCorner({ totalRecords, petState, onOutfitChange }: PetCornerP
         <div>
           <p className="eyebrow">Pet playground</p>
           <h2>
-            {petState.catName} · {petState.dogName}와 함께 커가요
+            {petState.catName} · {petState.dogName} 색칠 놀이터
           </h2>
         </div>
         <button type="button" className="ghost-button pet-play-btn" onClick={play}>
@@ -97,7 +131,11 @@ export function PetCorner({ totalRecords, petState, onOutfitChange }: PetCornerP
           onClick={play}
           aria-label={`${petState.catName} 쓰다듬기`}
         >
-          <CatDoodle className="pet-doodle pet-doodle-cat" outfit={petState.catOutfit} />
+          <CatDoodle
+            className="pet-doodle pet-doodle-cat"
+            outfit={petState.catOutfit}
+            palette={petState.catPalette}
+          />
         </button>
         <span className="pet-bond" aria-hidden>
           {cheer ? '💕' : '🐾'}
@@ -108,7 +146,11 @@ export function PetCorner({ totalRecords, petState, onOutfitChange }: PetCornerP
           onClick={play}
           aria-label={`${petState.dogName} 쓰다듬기`}
         >
-          <DogDoodle className="pet-doodle pet-doodle-dog" outfit={petState.dogOutfit} />
+          <DogDoodle
+            className="pet-doodle pet-doodle-dog"
+            outfit={petState.dogOutfit}
+            palette={petState.dogPalette}
+          />
         </button>
         {cheer && (
           <div className="pet-hearts" aria-hidden>
@@ -151,7 +193,7 @@ export function PetCorner({ totalRecords, petState, onOutfitChange }: PetCornerP
         {(() => {
           const nextLocked = outfits.find((o) => !isOutfitUnlocked(o.id, level.level))
           if (!nextLocked) return '모든 코디를 해금했어요! 마음껏 갈아입혀 주세요. ✨'
-          return `🔒 다음 코디 「${getOutfit(nextLocked.id).name}」는 Lv.${nextLocked.minLevel}에 열려요.`
+          return `다음 코디 「${getOutfit(nextLocked.id).name}」는 Lv.${nextLocked.minLevel}에 열려요. 지금 색칠은 ${getPetPalette(petState.catPalette).name}·${getPetPalette(petState.dogPalette).name} 무드예요.`
         })()}
       </p>
     </section>
