@@ -449,13 +449,78 @@
 }
 
 .empty-state {
-  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 26px 24px 30px;
   border: 2.5px dashed var(--line-soft);
   border-radius: 20px 9px 20px 9px;
   color: var(--ink-soft);
   font-family: var(--font-hand);
   font-size: 18px;
   text-align: center;
+}
+
+.empty-state p {
+  margin: 0;
+}
+
+.empty-mascot {
+  width: 92px;
+  height: auto;
+  animation: mascot-bob 3.4s ease-in-out infinite;
+}
+
+/* 손그림 마스코트 (고양이·강아지) */
+.hero-mascots {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  margin-top: 18px;
+  min-height: 0;
+}
+
+.mascot {
+  width: 74px;
+  height: auto;
+  flex: 0 0 auto;
+  filter: drop-shadow(2px 3px 0 rgba(42, 37, 31, 0.14));
+}
+
+.mascot-cat {
+  transform: rotate(-4deg);
+  animation: mascot-bob 3.2s ease-in-out infinite;
+}
+
+.mascot-dog {
+  transform: rotate(4deg);
+  animation: mascot-bob 3.2s ease-in-out infinite 0.5s;
+}
+
+.mascot-caption {
+  align-self: center;
+  margin-left: 4px;
+  padding: 7px 13px;
+  border: 2.5px solid var(--line);
+  border-radius: 16px 16px 16px 4px;
+  background: var(--crayon-sun);
+  color: var(--ink);
+  font-family: var(--font-hand);
+  font-size: 16px;
+  font-weight: 700;
+  box-shadow: var(--sticker-shadow-sm);
+  transform: rotate(-1.5deg);
+}
+
+@keyframes mascot-bob {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -6px;
+  }
 }
 
 .expense-card {
@@ -1229,5 +1294,11 @@
   .hero-month-stats > div,
   .choice-card {
     transform: none;
+  }
+
+  .mascot-cat,
+  .mascot-dog,
+  .empty-mascot {
+    animation: none;
   }
 }
