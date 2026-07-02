@@ -46,6 +46,14 @@ import {
 } from './domain/relativeLabelsKo'
 import { StoryReel, type StorySlide } from './story/StoryReel'
 import { CatDoodle, DogDoodle } from './components/Doodles'
+import { PetCorner } from './components/PetCorner'
+import {
+  defaultPetState,
+  normalizePetState,
+  type OutfitId,
+  type PetKind,
+  type PetState,
+} from './domain/pet'
 
 type AddMode = 'closed' | 'choice' | 'photo' | 'manual'
 type StoryMode = null | 'day' | 'month'
@@ -59,8 +67,19 @@ type ExpenseForm = {
 }
 
 const STORAGE_KEY = 'cashlog.expenses'
+const PET_STORAGE_KEY = 'cashlog.pet'
 
 const todayIsoDate = () => new Date().toISOString().slice(0, 10)
+
+const loadPetState = (): PetState => {
+  try {
+    const stored = localStorage.getItem(PET_STORAGE_KEY)
+    if (!stored) return defaultPetState
+    return normalizePetState(JSON.parse(stored) as Partial<PetState>)
+  } catch {
+    return defaultPetState
+  }
+}
 
 const loadExpenses = (): Expense[] => {
   try {
@@ -112,6 +131,7 @@ function App() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [storyMode, setStoryMode] = useState<StoryMode>(null)
   const [relativeMinuteTick, setRelativeMinuteTick] = useState(0)
+  const [petState, setPetState] = useState<PetState>(loadPetState)
 
   useEffect(() => {
     const id = window.setInterval(() => setRelativeMinuteTick((x) => x + 1), 60_000)
@@ -180,6 +200,16 @@ function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(expenses))
   }, [expenses])
+
+  useEffect(() => {
+    localStorage.setItem(PET_STORAGE_KEY, JSON.stringify(petState))
+  }, [petState])
+
+  const handleOutfitChange = useCallback((kind: PetKind, outfit: OutfitId) => {
+    setPetState((prev) =>
+      kind === 'cat' ? { ...prev, catOutfit: outfit } : { ...prev, dogOutfit: outfit },
+    )
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -407,6 +437,12 @@ function App() {
           </button>
         </div>
       </section>
+
+      <PetCorner
+        totalRecords={expenses.length}
+        petState={petState}
+        onOutfitChange={handleOutfitChange}
+      />
 
       <section className="dashboard-grid">
         <div className="calendar-card">
