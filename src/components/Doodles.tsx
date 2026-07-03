@@ -1,5 +1,11 @@
 import { useId, type SVGProps } from 'react'
-import { getPetPalette, type OutfitId, type PetPaletteId } from '../domain/pet'
+import {
+  getPetPalette,
+  type CatBreedId,
+  type DogBreedId,
+  type OutfitId,
+  type PetPaletteId,
+} from '../domain/pet'
 
 const INK = '#2a251f'
 const WHITE = '#fffdf8'
@@ -7,6 +13,7 @@ const WHITE = '#fffdf8'
 type DoodleProps = SVGProps<SVGSVGElement> & {
   outfit?: OutfitId
   palette?: PetPaletteId
+  breed?: CatBreedId | DogBreedId
 }
 
 const idSafe = (id: string) => id.replace(/:/g, '')
@@ -89,8 +96,146 @@ function Sparkles() {
   )
 }
 
-export function CatDoodle({ className, outfit = 'none', palette = 'cream', ...rest }: DoodleProps) {
+function CatBreedLayer({ breed, shadow, accent }: { breed: CatBreedId; shadow: string; accent: string }) {
+  if (breed === 'cheese_tabby') {
+    return (
+      <g stroke={shadow} strokeWidth={3} strokeLinecap="round" opacity={0.72}>
+        <path d="M50 31 C54 36 57 39 60 42" />
+        <path d="M70 32 C66 37 63 40 60 43" />
+        <path d="M37 54 C43 51 48 50 53 51" />
+        <path d="M67 51 C73 50 79 51 84 54" />
+        <path d="M39 93 C43 97 46 100 48 104" />
+        <path d="M81 93 C77 97 74 100 72 104" />
+      </g>
+    )
+  }
+
+  if (breed === 'tuxedo') {
+    return (
+      <g opacity={0.88}>
+        <path d="M32 52 C36 32 48 23 60 23 C72 23 84 32 88 52 C75 45 46 45 32 52 Z" fill="#2a2730" />
+        <path d="M48 86 C54 97 66 97 72 86 L78 112 C66 122 53 122 42 112 Z" fill="#2a2730" />
+        <path d="M51 82 L60 93 L69 82 L65 105 L55 105 Z" fill="#fffdf8" />
+      </g>
+    )
+  }
+
+  if (breed === 'calico') {
+    return (
+      <g opacity={0.8}>
+        <path d="M34 45 C39 29 53 24 61 28 C56 40 50 49 34 45 Z" fill="#f4a261" />
+        <path d="M66 29 C79 28 88 40 85 54 C73 51 67 43 66 29 Z" fill="#2a2730" />
+        <path d="M43 88 C51 84 59 87 63 96 C55 104 45 101 43 88 Z" fill="#f4a261" />
+      </g>
+    )
+  }
+
+  if (breed === 'siamese') {
+    return (
+      <g opacity={0.82}>
+        <path d="M33 53 C42 40 78 40 87 53 C82 78 38 78 33 53 Z" fill="#6b4a3a" />
+        <path d="M31 9 C43 15 51 25 54 37 C44 35 37 25 31 9 Z" fill="#6b4a3a" />
+        <path d="M89 9 C77 15 69 25 66 37 C76 35 83 25 89 9 Z" fill="#6b4a3a" />
+      </g>
+    )
+  }
+
+  if (breed === 'russian_blue') {
+    return <ellipse cx="60" cy="38" rx="23" ry="10" fill="#dce7ff" opacity="0.36" />
+  }
+
+  if (breed === 'persian') {
+    return (
+      <g fill="#fffdf8" opacity={0.46}>
+        <circle cx="33" cy="54" r="11" />
+        <circle cx="87" cy="54" r="11" />
+        <circle cx="45" cy="86" r="10" />
+        <circle cx="75" cy="86" r="10" />
+      </g>
+    )
+  }
+
+  if (breed === 'black_cat') {
+    return (
+      <g opacity={0.9}>
+        <ellipse cx="60" cy="57" rx="34" ry="31" fill="#27242c" />
+        <ellipse cx="60" cy="94" rx="26" ry="30" fill="#27242c" />
+        <ellipse cx="43" cy="68" rx="6" ry="4" fill={accent} opacity="0.85" />
+        <ellipse cx="78" cy="68" rx="6" ry="4" fill={accent} opacity="0.85" />
+      </g>
+    )
+  }
+
+  return null
+}
+
+function DogBreedLayer({ breed, shadow, bodyAlt }: { breed: DogBreedId; shadow: string; bodyAlt: string }) {
+  if (breed === 'toy_poodle' || breed === 'pomeranian') {
+    return (
+      <g fill={bodyAlt} opacity={0.58}>
+        <circle cx="35" cy="48" r="9" />
+        <circle cx="85" cy="48" r="9" />
+        <circle cx="47" cy="32" r="8" />
+        <circle cx="60" cy="28" r="9" />
+        <circle cx="73" cy="32" r="8" />
+      </g>
+    )
+  }
+
+  if (breed === 'shiba') {
+    return (
+      <g opacity={0.72}>
+        <path d="M38 44 C45 28 75 28 82 44 C72 39 48 39 38 44 Z" fill={shadow} />
+        <ellipse cx="60" cy="77" rx="18" ry="12" fill={bodyAlt} />
+      </g>
+    )
+  }
+
+  if (breed === 'retriever') {
+    return <ellipse cx="48" cy="42" rx="18" ry="10" fill="#ffe6a8" opacity="0.42" />
+  }
+
+  if (breed === 'dachshund') {
+    return (
+      <g opacity={0.78}>
+        <path d="M31 44 C15 40 13 75 30 82 C42 71 42 54 31 44 Z" fill="#5f3b25" />
+        <path d="M89 44 C105 40 107 75 90 82 C78 71 78 54 89 44 Z" fill="#5f3b25" />
+      </g>
+    )
+  }
+
+  if (breed === 'border_collie') {
+    return (
+      <g opacity={0.86}>
+        <path d="M33 50 C38 29 52 24 61 30 C55 44 47 54 33 50 Z" fill="#24232a" />
+        <path d="M65 31 C78 28 89 40 86 56 C74 55 67 45 65 31 Z" fill="#24232a" />
+        <path d="M45 86 C53 82 63 86 68 98 C58 105 47 101 45 86 Z" fill="#24232a" />
+      </g>
+    )
+  }
+
+  if (breed === 'corgi') {
+    return (
+      <g opacity={0.74}>
+        <path d="M39 33 L30 13 L52 34 Z" fill={shadow} />
+        <path d="M81 33 L90 13 L68 34 Z" fill={shadow} />
+        <ellipse cx="60" cy="79" rx="20" ry="12" fill={bodyAlt} />
+      </g>
+    )
+  }
+
+  return null
+}
+
+export function CatDoodle({
+  className,
+  outfit = 'none',
+  palette = 'cream',
+  breed = 'korean_short',
+  ...rest
+}: DoodleProps) {
   const colors = getPetPalette(palette)
+  const catBreed = breed as CatBreedId
   const uid = idSafe(useId())
   const bodyGradient = `cat-body-${uid}`
   const bellyGradient = `cat-belly-${uid}`
@@ -136,6 +281,7 @@ export function CatDoodle({ className, outfit = 'none', palette = 'cream', ...re
 
         <ellipse cx="60" cy="57" rx="37" ry="34" fill={`url(#${bodyGradient})`} />
         <ellipse cx="47" cy="49" rx="14" ry="10" fill={WHITE} stroke="none" opacity="0.34" />
+        <CatBreedLayer breed={catBreed} shadow={colors.shadow} accent={colors.accent} />
         <ellipse cx="43" cy="68" rx="7" ry="4.6" fill={colors.blush} stroke="none" opacity="0.78" />
         <ellipse cx="78" cy="68" rx="7" ry="4.6" fill={colors.blush} stroke="none" opacity="0.78" />
 
@@ -160,8 +306,15 @@ export function CatDoodle({ className, outfit = 'none', palette = 'cream', ...re
   )
 }
 
-export function DogDoodle({ className, outfit = 'none', palette = 'cream', ...rest }: DoodleProps) {
+export function DogDoodle({
+  className,
+  outfit = 'none',
+  palette = 'cream',
+  breed = 'maltese',
+  ...rest
+}: DoodleProps) {
   const colors = getPetPalette(palette)
+  const dogBreed = breed as DogBreedId
   const uid = idSafe(useId())
   const bodyGradient = `dog-body-${uid}`
   const earGradient = `dog-ear-${uid}`
@@ -210,6 +363,7 @@ export function DogDoodle({ className, outfit = 'none', palette = 'cream', ...re
 
         <ellipse cx="60" cy="58" rx="36" ry="33" fill={`url(#${bodyGradient})`} />
         <ellipse cx="47" cy="50" rx="14" ry="10" fill={WHITE} stroke="none" opacity="0.34" />
+        <DogBreedLayer breed={dogBreed} shadow={colors.shadow} bodyAlt={colors.bodyAlt} />
         <ellipse cx="42" cy="69" rx="7" ry="4.6" fill={colors.blush} stroke="none" opacity="0.74" />
         <ellipse cx="79" cy="69" rx="7" ry="4.6" fill={colors.blush} stroke="none" opacity="0.74" />
 

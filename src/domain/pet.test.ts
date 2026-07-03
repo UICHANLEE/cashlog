@@ -47,8 +47,11 @@ describe('pet growth domain', () => {
 
   it('normalizes stored pet state and drops unknown outfits', () => {
     expect(normalizePetState(null)).toEqual({
+      selectedKind: 'cat',
       catName: '나비',
       dogName: '초코',
+      catBreed: 'korean_short',
+      dogBreed: 'maltese',
       catOutfit: 'none',
       dogOutfit: 'none',
       catPalette: 'cream',
@@ -56,16 +59,36 @@ describe('pet growth domain', () => {
     })
     expect(
       normalizePetState({
+        selectedKind: 'dog',
+        catBreed: 'calico',
+        dogBreed: 'corgi',
         catOutfit: 'crown',
         dogOutfit: 'bogus' as never,
         catPalette: 'mint',
         dogPalette: 'unknown' as never,
       }),
     ).toMatchObject({
+      selectedKind: 'dog',
+      catBreed: 'calico',
+      dogBreed: 'corgi',
       catOutfit: 'crown',
       dogOutfit: 'none',
       catPalette: 'mint',
       dogPalette: 'cream',
+    })
+  })
+
+  it('falls back to the default pet and breed for unknown stored values', () => {
+    expect(
+      normalizePetState({
+        selectedKind: 'rabbit' as never,
+        catBreed: 'lynx' as never,
+        dogBreed: 'wolf' as never,
+      }),
+    ).toMatchObject({
+      selectedKind: 'cat',
+      catBreed: 'korean_short',
+      dogBreed: 'maltese',
     })
   })
 })

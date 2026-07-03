@@ -26,13 +26,13 @@ describe('Cashlog photo MVP', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    expect(screen.queryByText(/색칠 놀이터/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/함께 쓰는 가계부/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '가계부' })).toHaveAttribute('aria-pressed', 'true')
 
-    await user.click(screen.getByRole('button', { name: '나비·초코' }))
+    await user.click(screen.getByRole('button', { name: '나비' }))
 
-    expect(screen.getByText(/나비 · 초코 색칠 놀이터/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '나비·초코' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText(/나비와 함께 쓰는 가계부/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '나비' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('opens the day photo story reel when 스토리 is enabled', async () => {

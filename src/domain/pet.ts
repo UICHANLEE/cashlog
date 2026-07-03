@@ -2,6 +2,64 @@
 
 export type PetKind = 'cat' | 'dog'
 
+export type CatBreedId =
+  | 'korean_short'
+  | 'cheese_tabby'
+  | 'tuxedo'
+  | 'calico'
+  | 'siamese'
+  | 'russian_blue'
+  | 'persian'
+  | 'black_cat'
+
+export type DogBreedId =
+  | 'maltese'
+  | 'toy_poodle'
+  | 'shiba'
+  | 'retriever'
+  | 'dachshund'
+  | 'pomeranian'
+  | 'border_collie'
+  | 'corgi'
+
+export type PetBreed = {
+  id: CatBreedId | DogBreedId
+  kind: PetKind
+  name: string
+  vibe: string
+}
+
+export const catBreeds: PetBreed[] = [
+  { id: 'korean_short', kind: 'cat', name: '코숏', vibe: '깔끔한 기본 친구' },
+  { id: 'cheese_tabby', kind: 'cat', name: '치즈태비', vibe: '밝고 장난스러운 무드' },
+  { id: 'tuxedo', kind: 'cat', name: '턱시도', vibe: '블랙&화이트 시크함' },
+  { id: 'calico', kind: 'cat', name: '삼색이', vibe: '알록달록 행운 느낌' },
+  { id: 'siamese', kind: 'cat', name: '샴', vibe: '포인트 컬러가 또렷함' },
+  { id: 'russian_blue', kind: 'cat', name: '러시안블루', vibe: '차분한 쿨톤' },
+  { id: 'persian', kind: 'cat', name: '페르시안', vibe: '복슬복슬 고급짐' },
+  { id: 'black_cat', kind: 'cat', name: '까망이', vibe: '밤하늘 같은 존재감' },
+]
+
+export const dogBreeds: PetBreed[] = [
+  { id: 'maltese', kind: 'dog', name: '말티즈', vibe: '작고 뽀얀 기본템' },
+  { id: 'toy_poodle', kind: 'dog', name: '토이푸들', vibe: '동글동글 곱슬 매력' },
+  { id: 'shiba', kind: 'dog', name: '시바견', vibe: '당당하고 귀여운 표정' },
+  { id: 'retriever', kind: 'dog', name: '리트리버', vibe: '든든한 햇살 친구' },
+  { id: 'dachshund', kind: 'dog', name: '닥스훈트', vibe: '짧은 다리 긴 매력' },
+  { id: 'pomeranian', kind: 'dog', name: '포메라니안', vibe: '복슬복슬 아이돌상' },
+  { id: 'border_collie', kind: 'dog', name: '보더콜리', vibe: '똑똑한 흑백 포인트' },
+  { id: 'corgi', kind: 'dog', name: '웰시코기', vibe: '발랄한 짧은 다리' },
+]
+
+export const petBreeds = [...catBreeds, ...dogBreeds]
+
+export function getPetBreed(kind: 'cat', id: CatBreedId): PetBreed
+export function getPetBreed(kind: 'dog', id: DogBreedId): PetBreed
+export function getPetBreed(kind: PetKind, id: CatBreedId | DogBreedId): PetBreed {
+  const list = kind === 'cat' ? catBreeds : dogBreeds
+  return list.find((breed) => breed.id === id) ?? list[0]
+}
+
 export type OutfitId =
   | 'none'
   | 'bow'
@@ -92,8 +150,11 @@ export function isOutfitUnlocked(id: OutfitId, level: number): boolean {
 }
 
 export type PetState = {
+  selectedKind: PetKind
   catName: string
   dogName: string
+  catBreed: CatBreedId
+  dogBreed: DogBreedId
   catOutfit: OutfitId
   dogOutfit: OutfitId
   catPalette: PetPaletteId
@@ -101,8 +162,11 @@ export type PetState = {
 }
 
 export const defaultPetState: PetState = {
+  selectedKind: 'cat',
   catName: '나비',
   dogName: '초코',
+  catBreed: 'korean_short',
+  dogBreed: 'maltese',
   catOutfit: 'none',
   dogOutfit: 'none',
   catPalette: 'cream',
@@ -115,9 +179,17 @@ export function normalizePetState(raw: Partial<PetState> | null | undefined): Pe
     outfits.some((o) => o.id === v) ? (v as OutfitId) : 'none'
   const validPalette = (v: unknown): PetPaletteId =>
     petPalettes.some((p) => p.id === v) ? (v as PetPaletteId) : 'cream'
+  const validKind = (v: unknown): PetKind => (v === 'dog' || v === 'cat' ? v : 'cat')
+  const validCatBreed = (v: unknown): CatBreedId =>
+    catBreeds.some((breed) => breed.id === v) ? (v as CatBreedId) : 'korean_short'
+  const validDogBreed = (v: unknown): DogBreedId =>
+    dogBreeds.some((breed) => breed.id === v) ? (v as DogBreedId) : 'maltese'
   return {
+    selectedKind: validKind(raw?.selectedKind),
     catName: (raw?.catName ?? '').toString().trim() || defaultPetState.catName,
     dogName: (raw?.dogName ?? '').toString().trim() || defaultPetState.dogName,
+    catBreed: validCatBreed(raw?.catBreed),
+    dogBreed: validDogBreed(raw?.dogBreed),
     catOutfit: validOutfit(raw?.catOutfit),
     dogOutfit: validOutfit(raw?.dogOutfit),
     catPalette: validPalette(raw?.catPalette),

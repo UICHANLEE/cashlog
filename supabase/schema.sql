@@ -49,3 +49,18 @@ create policy "cashlog media are private"
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
+-- User-level pet profile so the selected cat/dog, breed, color, and outfit follow the account.
+create table if not exists public.cashlog_pet_profiles (
+  user_id uuid primary key default auth.uid() references auth.users(id) on delete cascade,
+  pet_state jsonb not null,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.cashlog_pet_profiles enable row level security;
+
+drop policy if exists "cashlog pet profiles are private" on public.cashlog_pet_profiles;
+create policy "cashlog pet profiles are private"
+  on public.cashlog_pet_profiles
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);

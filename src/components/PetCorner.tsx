@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   computeLevel,
+  catBreeds,
+  dogBreeds,
   getOutfit,
   getPetPalette,
+  getPetBreed,
   isOutfitUnlocked,
   outfits,
   petPalettes,
+  type CatBreedId,
+  type DogBreedId,
   type OutfitId,
   type PetKind,
   type PetPaletteId,
@@ -17,6 +22,12 @@ import './PetCorner.css'
 type PetCornerProps = {
   totalRecords: number
   petState: PetState
+  cloudStatus?: string
+  onKindChange: (kind: PetKind) => void
+  onBreedChange: {
+    (kind: 'cat', breed: CatBreedId): void
+    (kind: 'dog', breed: DogBreedId): void
+  }
   onOutfitChange: (kind: PetKind, outfit: OutfitId) => void
   onPaletteChange: (kind: PetKind, palette: PetPaletteId) => void
 }
@@ -24,6 +35,9 @@ type PetCornerProps = {
 export function PetCorner({
   totalRecords,
   petState,
+  cloudStatus,
+  onKindChange,
+  onBreedChange,
   onOutfitChange,
   onPaletteChange,
 }: PetCornerProps) {
@@ -48,6 +62,14 @@ export function PetCorner({
 
   const atMax = level.remaining === 0
   const pct = Math.round(level.progress * 100)
+  const activeKind = petState.selectedKind
+  const activeName = activeKind === 'cat' ? petState.catName : petState.dogName
+  const activeBreed =
+    activeKind === 'cat'
+      ? getPetBreed('cat', petState.catBreed)
+      : getPetBreed('dog', petState.dogBreed)
+  const activeOutfit = activeKind === 'cat' ? petState.catOutfit : petState.dogOutfit
+  const activePalette = activeKind === 'cat' ? petState.catPalette : petState.dogPalette
 
   const renderWardrobe = (kind: PetKind) => {
     const current = kind === 'cat' ? petState.catOutfit : petState.dogOutfit
@@ -114,44 +136,86 @@ export function PetCorner({
     <section className="pet-card">
       <div className="section-heading section-heading-toolbar">
         <div>
-          <p className="eyebrow">Pet playground</p>
+          <p className="eyebrow">Pet profile</p>
           <h2>
-            {petState.catName} · {petState.dogName} 색칠 놀이터
+            {activeName}와 함께 쓰는 가계부
           </h2>
+          <small className="pet-sync-caption">
+            {cloudStatus ?? '로그인하면 선택한 캐릭터가 다른 기기에도 동기화돼요.'}
+          </small>
         </div>
         <button type="button" className="ghost-button pet-play-btn" onClick={play}>
           🐾 쓰다듬기
         </button>
       </div>
 
+      <div className="pet-kind-grid" role="group" aria-label="대표 캐릭터 선택">
+        <button
+          type="button"
+          className={`pet-kind-card${activeKind === 'cat' ? ' active' : ''}`}
+          aria-pressed={activeKind === 'cat'}
+          onClick={() => {
+            onKindChange('cat')
+            play()
+          }}
+        >
+          <CatDoodle
+            className="pet-kind-preview"
+            outfit={petState.catOutfit}
+            palette={petState.catPalette}
+            breed={petState.catBreed}
+          />
+          <span>고양이</span>
+          <strong>{getPetBreed('cat', petState.catBreed).name}</strong>
+        </button>
+        <button
+          type="button"
+          className={`pet-kind-card${activeKind === 'dog' ? ' active' : ''}`}
+          aria-pressed={activeKind === 'dog'}
+          onClick={() => {
+            onKindChange('dog')
+            play()
+          }}
+        >
+          <DogDoodle
+            className="pet-kind-preview"
+            outfit={petState.dogOutfit}
+            palette={petState.dogPalette}
+            breed={petState.dogBreed}
+          />
+          <span>강아지</span>
+          <strong>{getPetBreed('dog', petState.dogBreed).name}</strong>
+        </button>
+      </div>
+
       <div className={`pet-stage${cheer ? ' is-cheering' : ''}`}>
         <button
           type="button"
-          className="pet-figure"
+          className="pet-figure pet-figure-main"
           onClick={play}
-          aria-label={`${petState.catName} 쓰다듬기`}
+          aria-label={`${activeName} 쓰다듬기`}
         >
-          <CatDoodle
-            className="pet-doodle pet-doodle-cat"
-            outfit={petState.catOutfit}
-            palette={petState.catPalette}
-          />
+          {activeKind === 'cat' ? (
+            <CatDoodle
+              className="pet-doodle pet-doodle-cat"
+              outfit={petState.catOutfit}
+              palette={petState.catPalette}
+              breed={petState.catBreed}
+            />
+          ) : (
+            <DogDoodle
+              className="pet-doodle pet-doodle-dog"
+              outfit={petState.dogOutfit}
+              palette={petState.dogPalette}
+              breed={petState.dogBreed}
+            />
+          )}
         </button>
-        <span className="pet-bond" aria-hidden>
-          {cheer ? '💕' : '🐾'}
-        </span>
-        <button
-          type="button"
-          className="pet-figure"
-          onClick={play}
-          aria-label={`${petState.dogName} 쓰다듬기`}
-        >
-          <DogDoodle
-            className="pet-doodle pet-doodle-dog"
-            outfit={petState.dogOutfit}
-            palette={petState.dogPalette}
-          />
-        </button>
+        <div className="pet-stage-copy">
+          <span className="pet-bond" aria-hidden>{cheer ? '💕' : '🐾'}</span>
+          <strong>{activeBreed.name}</strong>
+          <small>{activeBreed.vibe}</small>
+        </div>
         {cheer && (
           <div className="pet-hearts" aria-hidden>
             <span>❤</span>
@@ -179,21 +243,46 @@ export function PetCorner({
           <div className="pet-level-fill" style={{ width: `${atMax ? 100 : pct}%` }} />
         </div>
         <small>
-          지금까지 기록 {level.totalRecords}개 · 기록을 남길수록 {petState.catName}·
-          {petState.dogName}가 함께 성장하고 새 옷이 열려요.
+          지금까지 기록 {level.totalRecords}개 · 기록을 남길수록 {activeName}가 성장하고 새 옷이 열려요.
         </small>
       </div>
 
       <div className="pet-wardrobe">
-        {renderWardrobe('cat')}
-        {renderWardrobe('dog')}
+        <div className="pet-breed-section">
+          <span className="pet-wardrobe-label">
+            {activeKind === 'cat' ? '고양이 종류 선택' : '강아지 종류 선택'}
+          </span>
+          <div className="breed-grid" role="group" aria-label={`${activeName} 종류 선택`}>
+            {(activeKind === 'cat' ? catBreeds : dogBreeds).map((breed) => {
+              const active =
+                activeKind === 'cat' ? petState.catBreed === breed.id : petState.dogBreed === breed.id
+              return (
+                <button
+                  key={breed.id}
+                  type="button"
+                  className={`breed-card${active ? ' active' : ''}`}
+                  aria-pressed={active}
+                  onClick={() => {
+                    if (activeKind === 'cat') onBreedChange('cat', breed.id as CatBreedId)
+                    else onBreedChange('dog', breed.id as DogBreedId)
+                    play()
+                  }}
+                >
+                  <strong>{breed.name}</strong>
+                  <small>{breed.vibe}</small>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+        {renderWardrobe(activeKind)}
       </div>
 
       <p className="pet-next-unlock">
         {(() => {
           const nextLocked = outfits.find((o) => !isOutfitUnlocked(o.id, level.level))
           if (!nextLocked) return '모든 코디를 해금했어요! 마음껏 갈아입혀 주세요. ✨'
-          return `다음 코디 「${getOutfit(nextLocked.id).name}」는 Lv.${nextLocked.minLevel}에 열려요. 지금 색칠은 ${getPetPalette(petState.catPalette).name}·${getPetPalette(petState.dogPalette).name} 무드예요.`
+          return `다음 코디 「${getOutfit(nextLocked.id).name}」는 Lv.${nextLocked.minLevel}에 열려요. 지금 ${activeName}는 ${getPetPalette(activePalette).name} 색칠, ${getOutfit(activeOutfit).name} 코디예요.`
         })()}
       </p>
     </section>

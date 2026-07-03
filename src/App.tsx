@@ -50,6 +50,8 @@ import { PetCorner } from './components/PetCorner'
 import {
   defaultPetState,
   normalizePetState,
+  type CatBreedId,
+  type DogBreedId,
   type OutfitId,
   type PetPaletteId,
   type PetKind,
@@ -155,6 +157,7 @@ function App() {
     [authClient.config, session],
   )
   const initialSyncedSessionRef = useRef<string | null>(null)
+  const petCloudReadyRef = useRef(false)
 
   useEffect(() => {
     const id = window.setInterval(() => setRelativeMinuteTick((x) => x + 1), 60_000)
@@ -246,6 +249,10 @@ function App() {
   }, [petState])
 
   useEffect(() => {
+    petCloudReadyRef.current = false
+  }, [repository])
+
+  useEffect(() => {
     if (!authClient.isConfigured) {
       return
     }
@@ -284,6 +291,21 @@ function App() {
     )
   }, [])
 
+  const handlePetKindChange = useCallback((kind: PetKind) => {
+    setPetState((prev) => ({ ...prev, selectedKind: kind }))
+  }, [])
+
+  const handleBreedChange = useCallback(
+    (kind: 'cat' | 'dog', breed: CatBreedId | DogBreedId) => {
+      setPetState((prev) =>
+        kind === 'cat'
+          ? { ...prev, catBreed: breed as CatBreedId, selectedKind: 'cat' }
+          : { ...prev, dogBreed: breed as DogBreedId, selectedKind: 'dog' },
+      )
+    },
+    [],
+  )
+
   useEffect(() => {
     return () => {
       stopCamera()
@@ -309,6 +331,11 @@ function App() {
   )
   const monthlyExpense = getMonthlyExpenseTotal(expenses, yearMonth)
   const monthlyIncome = getMonthlyIncomeTotal(expenses, yearMonth)
+  const selectedPetName = petState.selectedKind === 'cat' ? petState.catName : petState.dogName
+  const selectedPetOutfit = petState.selectedKind === 'cat' ? petState.catOutfit : petState.dogOutfit
+  const selectedPetPalette = petState.selectedKind === 'cat' ? petState.catPalette : petState.dogPalette
+  const selectedPetBreed = petState.selectedKind === 'cat' ? petState.catBreed : petState.dogBreed
+  const SelectedPetDoodle = petState.selectedKind === 'cat' ? CatDoodle : DogDoodle
 
   const syncWithCloud = async () => {
     if (!repository) {
@@ -336,6 +363,13 @@ function App() {
       setSyncStatus('클라우드와 맞추는 중...')
       try {
         const remote = await repository.listExpenses()
+        const remotePet = await repository.getPetState()
+        if (remotePet) {
+          setPetState(remotePet)
+        } else {
+          await repository.upsertPetState(petState)
+        }
+        petCloudReadyRef.current = true
         setExpenses((current) => {
           const merged = mergeExpenses(current, remote)
           void repository
@@ -353,7 +387,17 @@ function App() {
       }
     }
     void runInitialSync()
-  }, [repository, session?.accessToken])
+  }, [petState, repository, session?.accessToken])
+
+  useEffect(() => {
+    if (!repository || !petCloudReadyRef.current) return
+    repository
+      .upsertPetState(petState)
+      .then(() => setSyncStatus(`${selectedPetName} 프로필 동기화 완료`))
+      .catch((e: unknown) => {
+        setSyncStatus(e instanceof Error ? `펫 동기화 실패: ${e.message.slice(0, 80)}` : '펫 동기화 실패')
+      })
+  }, [petState, repository, selectedPetName])
 
   const handleSignIn = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -783,7 +827,7 @@ function App() {
           aria-pressed={activeView === 'pets'}
           onClick={() => setActiveView('pets')}
         >
-          나비·초코
+          {selectedPetName}
         </button>
       </nav>
 
@@ -791,6 +835,13 @@ function App() {
         <PetCorner
           totalRecords={expenses.length}
           petState={petState}
+          cloudStatus={
+            repository
+              ? `${selectedPetName} 프로필이 계정에 동기화돼요.`
+              : '로그인하면 선택한 캐릭터가 다른 기기에도 동기화돼요.'
+          }
+          onKindChange={handlePetKindChange}
+          onBreedChange={handleBreedChange}
           onOutfitChange={handleOutfitChange}
           onPaletteChange={handlePaletteChange}
         />
@@ -805,15 +856,11 @@ function App() {
                 </h2>
               </div>
               <div className="calendar-companion" aria-label="캘린더 친구">
-                <CatDoodle
-                  className="mini-companion mini-companion-cat"
-                  outfit={petState.catOutfit}
-                  palette={petState.catPalette}
-                />
-                <DogDoodle
-                  className="mini-companion mini-companion-dog"
-                  outfit={petState.dogOutfit}
-                  palette={petState.dogPalette}
+                <SelectedPetDoodle
+                  className="mini-companion"
+                  outfit={selectedPetOutfit}
+                  palette={selectedPetPalette}
+                  breed={selectedPetBreed}
                 />
               </div>
               <button
@@ -880,22 +927,24 @@ function App() {
               </button>
             </div>
             <div className="daily-companion-note">
-              <DogDoodle
+              <SelectedPetDoodle
                 className="tiny-companion"
-                outfit={petState.dogOutfit}
-                palette={petState.dogPalette}
+                outfit={selectedPetOutfit}
+                palette={selectedPetPalette}
+                breed={selectedPetBreed}
               />
-              <span>초코가 오늘 로그를 살짝 지켜보는 중</span>
+              <span>{selectedPetName}가 오늘 로그를 살짝 지켜보는 중</span>
             </div>
             <p className="daily-summary">{dailyLog.summary}</p>
 
             <div className="timeline">
               {selectedExpenses.length === 0 ? (
                 <div className="empty-state">
-                  <CatDoodle
+                  <SelectedPetDoodle
                     className="empty-mascot"
-                    outfit={petState.catOutfit}
-                    palette={petState.catPalette}
+                    outfit={selectedPetOutfit}
+                    palette={selectedPetPalette}
+                    breed={selectedPetBreed}
                     aria-hidden="true"
                   />
                   <p>아직 기록이 없어요. + 버튼으로 첫 로그를 남겨보세요.</p>

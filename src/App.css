@@ -234,15 +234,7 @@
   height: auto;
   display: block;
   filter: drop-shadow(0 6px 8px rgba(42, 37, 31, 0.12));
-}
-
-.mini-companion-cat {
-  transform: rotate(-5deg);
-}
-
-.mini-companion-dog {
-  margin-left: -10px;
-  transform: rotate(5deg);
+  transform: rotate(-4deg);
 }
 
 .daily-companion-note {
