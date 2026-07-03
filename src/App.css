@@ -546,10 +546,12 @@
 }
 
 .mascot {
-  width: 74px;
+  width: 92px;
   height: auto;
   flex: 0 0 auto;
-  filter: drop-shadow(2px 3px 0 rgba(42, 37, 31, 0.14));
+  filter:
+    drop-shadow(0 10px 14px rgba(42, 37, 31, 0.16))
+    drop-shadow(2px 3px 0 rgba(42, 37, 31, 0.08));
 }
 
 .mascot-cat {

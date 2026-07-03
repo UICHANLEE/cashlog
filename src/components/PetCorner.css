@@ -18,16 +18,16 @@
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  gap: 8px;
+  gap: clamp(10px, 2vw, 18px);
   margin: 16px 0 20px;
-  padding: 16px 12px 12px;
+  padding: 22px 12px 14px;
   border: 2px dashed var(--line-soft);
   border-radius: 22px 10px 22px 10px;
   background:
     radial-gradient(circle at 28% 18%, rgba(255, 255, 255, 0.92), transparent 9rem),
     linear-gradient(180deg, rgba(198, 232, 255, 0.42), rgba(255, 238, 196, 0.58)),
     var(--paper-soft);
-  min-height: 150px;
+  min-height: 210px;
   overflow: hidden;
 }
 
@@ -53,12 +53,12 @@
 }
 
 .pet-doodle {
-  width: clamp(96px, 22vw, 132px);
+  width: clamp(132px, 24vw, 178px);
   height: auto;
   display: block;
   filter:
-    drop-shadow(0 10px 12px rgba(42, 37, 31, 0.15))
-    drop-shadow(2px 3px 0 rgba(42, 37, 31, 0.1));
+    drop-shadow(0 14px 18px rgba(42, 37, 31, 0.18))
+    drop-shadow(2px 4px 0 rgba(42, 37, 31, 0.08));
   transition: transform 0.18s ease;
   position: relative;
   z-index: 1;
@@ -75,7 +75,7 @@
 .pet-bond {
   align-self: center;
   font-size: clamp(22px, 5vw, 30px);
-  margin-bottom: 24px;
+  margin-bottom: 44px;
 }
 
 .pet-stage.is-cheering .pet-doodle-cat {
