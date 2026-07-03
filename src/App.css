@@ -187,6 +187,87 @@
   color: var(--income) !important;
 }
 
+.view-tabs {
+  max-width: 1180px;
+  margin: -4px auto 22px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.view-tabs button {
+  border: 2.5px solid var(--line);
+  border-radius: 18px 8px 18px 8px;
+  padding: 10px 18px;
+  background: var(--paper-card);
+  color: var(--ink);
+  font-family: var(--font-hand);
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: var(--sticker-shadow-sm);
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease,
+    background 0.12s ease;
+}
+
+.view-tabs button.active {
+  background: var(--crayon-sun);
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--line);
+}
+
+.calendar-companion {
+  display: flex;
+  align-items: flex-end;
+  gap: 0;
+  padding: 3px 8px;
+  border: 2px solid var(--line-soft);
+  border-radius: 999px;
+  background: rgba(255, 253, 248, 0.78);
+  box-shadow: var(--sticker-shadow-sm);
+}
+
+.mini-companion {
+  width: 42px;
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 6px 8px rgba(42, 37, 31, 0.12));
+}
+
+.mini-companion-cat {
+  transform: rotate(-5deg);
+}
+
+.mini-companion-dog {
+  margin-left: -10px;
+  transform: rotate(5deg);
+}
+
+.daily-companion-note {
+  width: fit-content;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 6px 11px 6px 7px;
+  border: 2px solid var(--line-soft);
+  border-radius: 999px;
+  background: var(--paper-soft);
+  color: var(--ink-soft);
+  font-family: var(--font-hand);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.tiny-companion {
+  width: 32px;
+  height: auto;
+  flex: 0 0 auto;
+}
+
 .calendar-day-money {
   display: flex;
   flex-direction: column;
@@ -1190,6 +1271,10 @@ video.preview-image {
     min-width: 0;
   }
 
+  .view-tabs {
+    margin-bottom: 16px;
+  }
+
   .dashboard-grid {
     display: grid;
     gap: 16px;
@@ -1242,6 +1327,14 @@ video.preview-image {
     font-size: 22px;
     overflow-wrap: anywhere;
     word-break: keep-all;
+  }
+
+  .calendar-companion {
+    order: 3;
+  }
+
+  .daily-companion-note {
+    font-size: 13px;
   }
 
   .weekday-row,

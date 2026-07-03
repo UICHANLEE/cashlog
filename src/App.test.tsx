@@ -22,6 +22,19 @@ describe('Cashlog photo MVP', () => {
     expect(screen.getByRole('button', { name: /하루 스토리/i })).toBeDisabled()
   })
 
+  it('keeps the pet playground behind a dedicated tab', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    expect(screen.queryByText(/색칠 놀이터/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '가계부' })).toHaveAttribute('aria-pressed', 'true')
+
+    await user.click(screen.getByRole('button', { name: '나비·초코' }))
+
+    expect(screen.getByText(/나비 · 초코 색칠 놀이터/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '나비·초코' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
   it('opens the day photo story reel when 스토리 is enabled', async () => {
     const user = userEvent.setup()
     const todaySlice = new Date().toISOString().slice(0, 10)

@@ -60,6 +60,7 @@ import { createCashlogRepository, mergeExpenses } from './services/cashlogReposi
 
 type AddMode = 'closed' | 'choice' | 'photo' | 'manual'
 type StoryMode = null | 'day' | 'month'
+type AppView = 'diary' | 'pets'
 
 type ExpenseForm = {
   title: string
@@ -141,6 +142,7 @@ function App() {
   const posterFileRef = useRef<File | null>(null)
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [storyMode, setStoryMode] = useState<StoryMode>(null)
+  const [activeView, setActiveView] = useState<AppView>('diary')
   const [relativeMinuteTick, setRelativeMinuteTick] = useState(0)
   const [petState, setPetState] = useState<PetState>(loadPetState)
   const [session, setSession] = useState<CashlogSession | null>(null)
@@ -766,149 +768,195 @@ function App() {
         </div>
       </section>
 
-      <PetCorner
-        totalRecords={expenses.length}
-        petState={petState}
-        onOutfitChange={handleOutfitChange}
-        onPaletteChange={handlePaletteChange}
-      />
+      <nav className="view-tabs" aria-label="화면 전환">
+        <button
+          type="button"
+          className={activeView === 'diary' ? 'active' : ''}
+          aria-pressed={activeView === 'diary'}
+          onClick={() => setActiveView('diary')}
+        >
+          가계부
+        </button>
+        <button
+          type="button"
+          className={activeView === 'pets' ? 'active' : ''}
+          aria-pressed={activeView === 'pets'}
+          onClick={() => setActiveView('pets')}
+        >
+          나비·초코
+        </button>
+      </nav>
 
-      <section className="dashboard-grid">
-        <div className="calendar-card">
-          <div className="section-heading section-heading-toolbar">
-            <div>
-              <p className="eyebrow">Calendar</p>
-              <h2>
-                {visibleMonth.year}년 {visibleMonth.month + 1}월
-              </h2>
-            </div>
-            <button
-              type="button"
-              className="ghost-button story-launch-btn"
-              disabled={monthStorySlides.length === 0}
-              onClick={() => setStoryMode('month')}
-              title="이번 달 기록 재생"
-            >
-              📽 한 달 스토리
-            </button>
-          </div>
-          <div className="weekday-row">
-            {['일', '월', '화', '수', '목', '금', '토'].map((day) => (
-              <span key={day}>{day}</span>
-            ))}
-          </div>
-          <div className="calendar-grid">
-            {calendarDays.map((day) => {
-              const dayExpenses = getExpensesForDate(expenses, day.isoDate)
-              const spent = dayExpenseTotal(dayExpenses)
-              const earned = dayIncomeTotal(dayExpenses)
-              const hasPhoto = dayExpenses.some((expense) => expense.source === 'photo')
-
-              return (
-                <button
-                  type="button"
-                  key={day.isoDate}
-                  className={[
-                    'calendar-day',
-                    day.inCurrentMonth ? '' : 'muted',
-                    day.isoDate === selectedDate ? 'selected' : '',
-                  ].join(' ')}
-                  onClick={() => setSelectedDate(day.isoDate)}
-                >
-                  <span>{day.day}</span>
-                  <span className="calendar-day-money">
-                    {spent > 0 && <strong>{formatCurrency(spent)}</strong>}
-                    {earned > 0 && (
-                      <small className="calendar-day-income">수입 {formatCurrency(earned)}</small>
-                    )}
-                  </span>
-                  {hasPhoto && <small className="calendar-day-photo">사진 로그</small>}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        <aside className="daily-card">
-          <div className="section-heading section-heading-toolbar">
-            <div>
-              <p className="eyebrow">Daily log</p>
-              <h2>{selectedDate}</h2>
-            </div>
-            <button
-              type="button"
-              className="ghost-button story-launch-btn"
-              disabled={dayStorySlides.length === 0}
-              onClick={() => setStoryMode('day')}
-              title="선택한 날의 기록 재생"
-            >
-              📷 하루 스토리
-            </button>
-          </div>
-          <p className="daily-summary">{dailyLog.summary}</p>
-
-          <div className="timeline">
-            {selectedExpenses.length === 0 ? (
-              <div className="empty-state">
-                <CatDoodle className="empty-mascot" aria-hidden="true" />
-                <p>아직 기록이 없어요. + 버튼으로 첫 로그를 남겨보세요.</p>
+      {activeView === 'pets' ? (
+        <PetCorner
+          totalRecords={expenses.length}
+          petState={petState}
+          onOutfitChange={handleOutfitChange}
+          onPaletteChange={handlePaletteChange}
+        />
+      ) : (
+        <section className="dashboard-grid">
+          <div className="calendar-card">
+            <div className="section-heading section-heading-toolbar">
+              <div>
+                <p className="eyebrow">Calendar</p>
+                <h2>
+                  {visibleMonth.year}년 {visibleMonth.month + 1}월
+                </h2>
               </div>
-            ) : (
-              selectedExpenses.map((expense) => {
-                const accent = ledgerAccentColor(expense)
+              <div className="calendar-companion" aria-label="캘린더 친구">
+                <CatDoodle
+                  className="mini-companion mini-companion-cat"
+                  outfit={petState.catOutfit}
+                  palette={petState.catPalette}
+                />
+                <DogDoodle
+                  className="mini-companion mini-companion-dog"
+                  outfit={petState.dogOutfit}
+                  palette={petState.dogPalette}
+                />
+              </div>
+              <button
+                type="button"
+                className="ghost-button story-launch-btn"
+                disabled={monthStorySlides.length === 0}
+                onClick={() => setStoryMode('month')}
+                title="이번 달 기록 재생"
+              >
+                📽 한 달 스토리
+              </button>
+            </div>
+            <div className="weekday-row">
+              {['일', '월', '화', '수', '목', '금', '토'].map((day) => (
+                <span key={day}>{day}</span>
+              ))}
+            </div>
+            <div className="calendar-grid">
+              {calendarDays.map((day) => {
+                const dayExpenses = getExpensesForDate(expenses, day.isoDate)
+                const spent = dayExpenseTotal(dayExpenses)
+                const earned = dayIncomeTotal(dayExpenses)
+                const hasPhoto = dayExpenses.some((expense) => expense.source === 'photo')
+
                 return (
-                  <article
-                    className={`expense-card ${expense.kind === 'income' ? 'is-income' : ''}`}
-                    key={expense.id}
+                  <button
+                    type="button"
+                    key={day.isoDate}
+                    className={[
+                      'calendar-day',
+                      day.inCurrentMonth ? '' : 'muted',
+                      day.isoDate === selectedDate ? 'selected' : '',
+                    ].join(' ')}
+                    onClick={() => setSelectedDate(day.isoDate)}
                   >
-                    {expense.videoUrl ? (
-                      <video
-                        className="expense-image"
-                        src={expense.videoUrl}
-                        poster={expense.imageUrl}
-                        muted
-                        loop
-                        playsInline
-                        autoPlay
-                      />
-                    ) : expense.imageUrl ? (
-                      <img src={expense.imageUrl} alt="" className="expense-image" />
-                    ) : null}
-                    <div>
-                      <time
-                        dateTime={expense.dateTime}
-                        className="timeline-relative"
-                      >
-                        {formatDayLogRelativeKo(new Date(expense.dateTime))}
-                      </time>
-                      <div className="expense-title-row">
-                        <h3>
-                          {expense.kind === 'income' && (
-                            <span className="ledger-kind-badge ledger-kind-badge-income">
-                              수입
-                            </span>
-                          )}
-                          {expense.title}
-                        </h3>
-                        <strong className={expense.kind === 'income' ? 'amount-income' : undefined}>
-                          {expense.kind === 'income' ? '+' : ''}
-                          {formatCurrency(expense.amount)}
-                        </strong>
-                      </div>
-                      <p>
-                        <span className="category-label" style={{ color: accent }}>
-                          {formatLedgerCategory(expense)}
-                        </span>
-                        {expense.memo && ` · ${expense.memo}`}
-                      </p>
-                    </div>
-                  </article>
+                    <span>{day.day}</span>
+                    <span className="calendar-day-money">
+                      {spent > 0 && <strong>{formatCurrency(spent)}</strong>}
+                      {earned > 0 && (
+                        <small className="calendar-day-income">수입 {formatCurrency(earned)}</small>
+                      )}
+                    </span>
+                    {hasPhoto && <small className="calendar-day-photo">사진 로그</small>}
+                  </button>
                 )
-              })
-            )}
+              })}
+            </div>
           </div>
-        </aside>
-      </section>
+
+          <aside className="daily-card">
+            <div className="section-heading section-heading-toolbar">
+              <div>
+                <p className="eyebrow">Daily log</p>
+                <h2>{selectedDate}</h2>
+              </div>
+              <button
+                type="button"
+                className="ghost-button story-launch-btn"
+                disabled={dayStorySlides.length === 0}
+                onClick={() => setStoryMode('day')}
+                title="선택한 날의 기록 재생"
+              >
+                📷 하루 스토리
+              </button>
+            </div>
+            <div className="daily-companion-note">
+              <DogDoodle
+                className="tiny-companion"
+                outfit={petState.dogOutfit}
+                palette={petState.dogPalette}
+              />
+              <span>초코가 오늘 로그를 살짝 지켜보는 중</span>
+            </div>
+            <p className="daily-summary">{dailyLog.summary}</p>
+
+            <div className="timeline">
+              {selectedExpenses.length === 0 ? (
+                <div className="empty-state">
+                  <CatDoodle
+                    className="empty-mascot"
+                    outfit={petState.catOutfit}
+                    palette={petState.catPalette}
+                    aria-hidden="true"
+                  />
+                  <p>아직 기록이 없어요. + 버튼으로 첫 로그를 남겨보세요.</p>
+                </div>
+              ) : (
+                selectedExpenses.map((expense) => {
+                  const accent = ledgerAccentColor(expense)
+                  return (
+                    <article
+                      className={`expense-card ${expense.kind === 'income' ? 'is-income' : ''}`}
+                      key={expense.id}
+                    >
+                      {expense.videoUrl ? (
+                        <video
+                          className="expense-image"
+                          src={expense.videoUrl}
+                          poster={expense.imageUrl}
+                          muted
+                          loop
+                          playsInline
+                          autoPlay
+                        />
+                      ) : expense.imageUrl ? (
+                        <img src={expense.imageUrl} alt="" className="expense-image" />
+                      ) : null}
+                      <div>
+                        <time
+                          dateTime={expense.dateTime}
+                          className="timeline-relative"
+                        >
+                          {formatDayLogRelativeKo(new Date(expense.dateTime))}
+                        </time>
+                        <div className="expense-title-row">
+                          <h3>
+                            {expense.kind === 'income' && (
+                              <span className="ledger-kind-badge ledger-kind-badge-income">
+                                수입
+                              </span>
+                            )}
+                            {expense.title}
+                          </h3>
+                          <strong className={expense.kind === 'income' ? 'amount-income' : undefined}>
+                            {expense.kind === 'income' ? '+' : ''}
+                            {formatCurrency(expense.amount)}
+                          </strong>
+                        </div>
+                        <p>
+                          <span className="category-label" style={{ color: accent }}>
+                            {formatLedgerCategory(expense)}
+                          </span>
+                          {expense.memo && ` · ${expense.memo}`}
+                        </p>
+                      </div>
+                    </article>
+                  )
+                })
+              )}
+            </div>
+          </aside>
+        </section>
+      )}
 
       {addMode !== 'closed' && (
         <section className="sheet-backdrop" aria-label="기록 추가">
