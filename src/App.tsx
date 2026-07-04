@@ -63,6 +63,7 @@ import { createCashlogRepository, mergeExpenses } from './services/cashlogReposi
 type AddMode = 'closed' | 'choice' | 'photo' | 'manual'
 type StoryMode = null | 'day' | 'month'
 type AppView = 'diary' | 'pets'
+type AuthMode = 'signIn' | 'signUp' | 'magic'
 
 type ExpenseForm = {
   title: string
@@ -148,7 +149,9 @@ function App() {
   const [relativeMinuteTick, setRelativeMinuteTick] = useState(0)
   const [petState, setPetState] = useState<PetState>(loadPetState)
   const [session, setSession] = useState<CashlogSession | null>(null)
+  const [authMode, setAuthMode] = useState<AuthMode>('signIn')
   const [authEmail, setAuthEmail] = useState('')
+  const [authPassword, setAuthPassword] = useState('')
   const [authMessage, setAuthMessage] = useState('')
   const [syncStatus, setSyncStatus] = useState('Supabase 미연결 · 로컬 저장 중')
   const authClient = useMemo(() => createCashlogAuthClient(), [])
@@ -399,15 +402,50 @@ function App() {
       })
   }, [petState, repository, selectedPetName])
 
-  const handleSignIn = async (event: FormEvent<HTMLFormElement>) => {
+  const completeAuth = async (nextSession: CashlogSession, message: string) => {
+    const hydrated = await authClient.hydrateSession(nextSession)
+    authClient.saveSession(hydrated)
+    setSession(hydrated)
+    setAuthPassword('')
+    setAuthMessage(message)
+    setSyncStatus(hydrated.user ? `${hydrated.user.email} 동기화 준비` : '동기화 준비')
+  }
+
+  const handleAuthSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const email = authEmail.trim()
     if (!email) return
+    const password = authPassword.trim()
 
-    setAuthMessage('로그인 메일을 보내는 중...')
+    if (authMode !== 'magic' && password.length < 6) {
+      setAuthMessage('비밀번호는 6자 이상으로 입력해 주세요.')
+      return
+    }
+
+    setAuthMessage(
+      authMode === 'signUp'
+        ? '계정을 만드는 중...'
+        : authMode === 'magic'
+          ? '로그인 메일을 보내는 중...'
+          : '로그인 중...',
+    )
     try {
-      await authClient.signInWithEmail(email)
-      setAuthMessage('메일함에서 로그인 링크를 눌러 주세요.')
+      if (authMode === 'magic') {
+        await authClient.signInWithEmail(email)
+        setAuthMessage('메일함에서 로그인 링크를 눌러 주세요.')
+        return
+      }
+      if (authMode === 'signUp') {
+        const created = await authClient.signUpWithPassword(email, password)
+        if (created) {
+          await completeAuth(created, '가입 완료! 계정 동기화를 준비했어요.')
+        } else {
+          setAuthMessage('가입 확인 메일을 보냈어요. 메일에서 인증을 완료해 주세요.')
+        }
+        return
+      }
+      const nextSession = await authClient.signInWithPassword(email, password)
+      await completeAuth(nextSession, '로그인했어요. 기록을 계정과 맞출게요.')
     } catch (e) {
       setAuthMessage(e instanceof Error ? e.message : '로그인 요청에 실패했어요.')
     }
@@ -778,19 +816,64 @@ function App() {
                   </button>
                 </div>
               ) : (
-                <form className="account-form" onSubmit={handleSignIn}>
+                <form className="account-form" onSubmit={handleAuthSubmit}>
+                  <div className="account-mode-tabs" role="group" aria-label="로그인 방식">
+                    <button
+                      type="button"
+                      className={authMode === 'signIn' ? 'active' : ''}
+                      aria-pressed={authMode === 'signIn'}
+                      onClick={() => setAuthMode('signIn')}
+                    >
+                      로그인
+                    </button>
+                    <button
+                      type="button"
+                      className={authMode === 'signUp' ? 'active' : ''}
+                      aria-pressed={authMode === 'signUp'}
+                      onClick={() => setAuthMode('signUp')}
+                    >
+                      회원가입
+                    </button>
+                    <button
+                      type="button"
+                      className={authMode === 'magic' ? 'active' : ''}
+                      aria-pressed={authMode === 'magic'}
+                      onClick={() => setAuthMode('magic')}
+                    >
+                      메일링크
+                    </button>
+                  </div>
                   <input
                     type="email"
                     value={authEmail}
                     onChange={(event) => setAuthEmail(event.target.value)}
                     placeholder="email@example.com"
                     aria-label="로그인 이메일"
+                    autoComplete="email"
                   />
-                  <button type="submit">메일 로그인</button>
+                  {authMode !== 'magic' && (
+                    <input
+                      type="password"
+                      value={authPassword}
+                      onChange={(event) => setAuthPassword(event.target.value)}
+                      placeholder="비밀번호 6자 이상"
+                      aria-label="로그인 비밀번호"
+                      autoComplete={authMode === 'signUp' ? 'new-password' : 'current-password'}
+                    />
+                  )}
+                  <button type="submit">
+                    {authMode === 'signUp'
+                      ? '가입하고 시작'
+                      : authMode === 'magic'
+                        ? '메일 링크 받기'
+                        : '로그인'}
+                  </button>
                 </form>
               )
             ) : (
-              <small>VITE_SUPABASE_URL과 VITE_SUPABASE_ANON_KEY를 넣으면 로그인·DB 동기화가 켜져요.</small>
+              <small>
+                VITE_SUPABASE_URL과 VITE_SUPABASE_ANON_KEY를 넣으면 이메일 로그인·회원가입·DB 동기화가 켜져요.
+              </small>
             )}
             {authMessage && <small className="account-message">{authMessage}</small>}
           </section>

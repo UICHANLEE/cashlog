@@ -14,6 +14,16 @@ export type CashlogSession = {
   user?: CashlogUser
 }
 
+type SupabaseAuthBody = {
+  access_token?: string
+  refresh_token?: string
+  expires_in?: number
+  user?: {
+    id?: string
+    email?: string
+  }
+}
+
 const authHeaders = (config: SupabaseConfig, token?: string) => ({
   apikey: config.anonKey,
   Authorization: `Bearer ${token ?? config.anonKey}`,
@@ -29,6 +39,31 @@ const parseSessionPayload = (params: URLSearchParams): CashlogSession | null => 
     accessToken,
     refreshToken: params.get('refresh_token') ?? undefined,
     expiresAt: Number.isFinite(expiresIn) ? Date.now() + expiresIn * 1000 : undefined,
+  }
+}
+
+const sessionFromAuthBody = (body: SupabaseAuthBody): CashlogSession | null => {
+  if (!body.access_token) return null
+  const expiresIn = Number(body.expires_in)
+  const user =
+    body.user?.id && body.user?.email
+      ? { id: body.user.id, email: body.user.email }
+      : undefined
+  return {
+    accessToken: body.access_token,
+    refreshToken: body.refresh_token,
+    expiresAt: Number.isFinite(expiresIn) ? Date.now() + expiresIn * 1000 : undefined,
+    ...(user ? { user } : {}),
+  }
+}
+
+const readAuthError = async (response: Response, fallback: string) => {
+  const text = await response.text()
+  try {
+    const body = JSON.parse(text) as { error_description?: string; msg?: string; message?: string; error?: string }
+    return body.error_description ?? body.msg ?? body.message ?? body.error ?? fallback
+  } catch {
+    return text || fallback
   }
 }
 
@@ -88,6 +123,36 @@ export const createCashlogAuthClient = () => {
     }
   }
 
+  const signInWithPassword = async (email: string, password: string): Promise<CashlogSession> => {
+    if (!config) throw new Error('Supabase 환경변수가 설정되지 않았어요.')
+    const response = await fetch(`${config.url}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: authHeaders(config),
+      body: JSON.stringify({ email, password }),
+    })
+    if (!response.ok) {
+      throw new Error(await readAuthError(response, '이메일 또는 비밀번호를 확인해 주세요.'))
+    }
+    const body = (await response.json()) as SupabaseAuthBody
+    const session = sessionFromAuthBody(body)
+    if (!session) throw new Error('로그인 응답에 세션이 없어요.')
+    return session
+  }
+
+  const signUpWithPassword = async (email: string, password: string): Promise<CashlogSession | null> => {
+    if (!config) throw new Error('Supabase 환경변수가 설정되지 않았어요.')
+    const response = await fetch(`${config.url}/auth/v1/signup`, {
+      method: 'POST',
+      headers: authHeaders(config),
+      body: JSON.stringify({ email, password }),
+    })
+    if (!response.ok) {
+      throw new Error(await readAuthError(response, '회원가입 요청에 실패했어요.'))
+    }
+    const body = (await response.json()) as SupabaseAuthBody
+    return sessionFromAuthBody(body)
+  }
+
   const getUser = async (session: CashlogSession): Promise<CashlogUser | undefined> => {
     if (!config) return undefined
     const response = await fetch(`${config.url}/auth/v1/user`, {
@@ -113,8 +178,9 @@ export const createCashlogAuthClient = () => {
     saveSession,
     consumeSessionFromUrl,
     signInWithEmail,
+    signInWithPassword,
+    signUpWithPassword,
     hydrateSession,
     signOut,
   }
 }
-

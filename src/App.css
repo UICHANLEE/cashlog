@@ -118,9 +118,41 @@
   gap: 8px;
 }
 
+.account-form {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+.account-mode-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.account-mode-tabs button {
+  min-width: 0;
+  border: 2px solid var(--line);
+  border-radius: 12px 5px 12px 5px;
+  padding: 7px 8px;
+  background: var(--paper-card);
+  color: var(--ink);
+  font-family: var(--font-hand);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: var(--sticker-shadow-sm);
+}
+
+.account-mode-tabs button.active {
+  background: var(--crayon-sun);
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 var(--line);
+}
+
 .account-form input {
   min-width: 0;
-  flex: 1 1 160px;
+  width: 100%;
+  box-sizing: border-box;
   border: 2px solid var(--line);
   border-radius: 14px 6px 14px 6px;
   padding: 9px 11px;
@@ -129,7 +161,7 @@
   font: inherit;
 }
 
-.account-form button {
+.account-form > button[type='submit'] {
   border: 2px solid var(--line);
   border-radius: 14px 6px 14px 6px;
   padding: 9px 12px;

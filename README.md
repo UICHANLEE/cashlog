@@ -10,13 +10,15 @@
 - **사진·영상 흐름**: 사진 또는 영상으로 기록. 영상은 첫 장면(포스터)을 잡아 **mock 또는 Vision API** 가 금액·카테고리·제목·메모를 제안 (수정 후 저장)
 - **펫 놀이터**: 기록을 남길수록 고양이·강아지가 함께 레벨업, 레벨에 따라 코디(옷) 해금·갈아입히기
 - **일별 로그 & 스토리**: 선택한 날짜의 타임라인·일기형 요약, 하루/한 달을 인스타 스토리처럼 재생
+- **로그인·계정 동기화**: Supabase Auth 기반 이메일/비밀번호 가입·로그인, 메일 링크 로그인, 기록·펫 프로필 동기화
 - **손그림 다이어리 UI**: 손글씨 폰트·종이 질감·삐뚤 손그림 테두리의 1020 취향 디자인
-- **로컬 저장**: 브라우저 `localStorage`에 지출 목록 유지
+- **로컬 우선 저장**: 브라우저 `localStorage`에 먼저 저장하고, 로그인 시 계정 데이터와 병합
 
 ## 기술 스택
 
 - React 19, TypeScript, Vite
 - Vitest, Testing Library (단위·UI 테스트)
+- Supabase Auth / PostgREST 연동
 - 도메인·UI 코드: 대부분 [`src/domain/cashlog.ts`](src/domain/cashlog.ts)
 - 사진 분석 라우팅: [`src/ai/analyzePhoto.ts`](src/ai/analyzePhoto.ts) (`mock` / `remote`)
 
@@ -28,6 +30,19 @@
 4. **Vercel**: 프로젝트 환경 변수에 **`OPENAI_API_KEY`** 추가. `OPENAI_VISION_MODEL` 은 생략 시 `gpt-4o-mini` .
 
 서버 처리 코드: [`api/analyze.ts`](api/analyze.ts) — 카테고리 소분류 id 는 `cashlog.ts` 와 목록 동기화가 필요합니다.
+
+## 로그인·DB 동기화 설정
+
+1. Supabase 프로젝트를 만들고 Auth의 Email provider를 켭니다.
+2. SQL Editor에서 [`supabase/schema.sql`](supabase/schema.sql)을 실행해 `cashlog_entries`, `cashlog_media`, `cashlog_pet_profiles` 테이블과 RLS 정책을 만듭니다.
+3. 루트 `.env` 또는 Vercel 환경 변수에 아래 값을 넣습니다.
+
+```env
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+```
+
+앱에서는 이메일/비밀번호 회원가입·로그인, 비밀번호 없는 메일 링크 로그인을 모두 지원합니다. 로그인하면 로컬 기록과 원격 기록을 병합하고, 선택한 고양이/강아지 프로필도 계정에 저장합니다.
 
 ## 저장소
 
@@ -107,4 +122,4 @@ Cashlog 방향(사진·일기형 로그)을 잡을 때 비교해 보기 좋은 �
 ## 다음 단계 (참고)
 
 - Vision 프롬프트·모델 미세 조정; 카테고리 id 목록과 `api/analyze.ts` 동기화 자동화
-- 로그인·동기화 시 `localStorage` 대신 백엔드(Supabase 등)로 이전
+- 이미지·영상 파일 자체를 Blob Storage 또는 IndexedDB로 영구 저장

@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { createExpenseFromAnalysis, createManualExpense } from './domain/cashlog'
 
@@ -13,6 +13,11 @@ describe('Cashlog photo MVP', () => {
       createObjectURL: vi.fn(() => 'blob:cashlog-photo'),
       revokeObjectURL: vi.fn(),
     })
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.unstubAllGlobals()
   })
 
   it('shows disabled story playback until any entries exist', () => {
@@ -112,5 +117,46 @@ describe('Cashlog photo MVP', () => {
     expect(screen.getByText('환급')).toBeInTheDocument()
     expect(screen.getAllByText('+12,000원').length).toBeGreaterThan(0)
     expect(screen.getByText(/급여·근로 · 월급/)).toBeInTheDocument()
+  })
+
+  it('lets a configured user log in with email and password', async () => {
+    const user = userEvent.setup()
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://cashlog.supabase.co')
+    vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'anon-key')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+        if (url.includes('/auth/v1/token')) {
+          return new Response(
+            JSON.stringify({
+              access_token: 'access-token',
+              refresh_token: 'refresh-token',
+              expires_in: 3600,
+              user: { id: 'user-1', email: 'me@example.com' },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        if (url.includes('/rest/v1/cashlog_entries')) {
+          return new Response(init?.method === 'POST' ? '' : '[]', { status: 200 })
+        }
+        if (url.includes('/rest/v1/cashlog_pet_profiles')) {
+          return new Response(init?.method === 'POST' ? '' : '[]', { status: 200 })
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+
+    render(<App />)
+
+    const account = screen.getByRole('region', { name: '로그인과 동기화' })
+    await user.type(within(account).getByLabelText('로그인 이메일'), 'me@example.com')
+    await user.type(within(account).getByLabelText('로그인 비밀번호'), 'secret1')
+    const loginButtons = within(account).getAllByRole('button', { name: '로그인' })
+    await user.click(loginButtons[loginButtons.length - 1])
+
+    expect(await within(account).findByText('me@example.com')).toBeInTheDocument()
+    expect(await within(account).findByText(/동기화/)).toBeInTheDocument()
   })
 })
