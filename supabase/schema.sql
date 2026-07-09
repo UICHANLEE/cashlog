@@ -64,3 +64,70 @@ create policy "cashlog pet profiles are private"
   for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+-- Product-photo analysis artifacts from the B-plan pipeline.
+create table if not exists public.cashlog_detected_items (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  expense_id text references public.cashlog_entries(id) on delete cascade,
+  item_name text not null,
+  display_name text not null,
+  predicted_category text not null,
+  confidence double precision not null default 0,
+  bbox jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists cashlog_detected_items_expense_idx
+  on public.cashlog_detected_items (expense_id);
+
+alter table public.cashlog_detected_items enable row level security;
+
+drop policy if exists "cashlog detected items are private" on public.cashlog_detected_items;
+create policy "cashlog detected items are private"
+  on public.cashlog_detected_items
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create table if not exists public.cashlog_category_feedback (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  expense_id text references public.cashlog_entries(id) on delete set null,
+  model_category text not null,
+  user_category text not null,
+  confidence double precision,
+  item_keyword text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists cashlog_category_feedback_user_idx
+  on public.cashlog_category_feedback (user_id, item_keyword);
+
+alter table public.cashlog_category_feedback enable row level security;
+
+drop policy if exists "cashlog category feedback is private" on public.cashlog_category_feedback;
+create policy "cashlog category feedback is private"
+  on public.cashlog_category_feedback
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create table if not exists public.cashlog_user_category_rules (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  item_keyword text not null,
+  preferred_category text not null,
+  count integer not null default 1,
+  updated_at timestamptz not null default now(),
+  unique (user_id, item_keyword, preferred_category)
+);
+
+alter table public.cashlog_user_category_rules enable row level security;
+
+drop policy if exists "cashlog user category rules are private" on public.cashlog_user_category_rules;
+create policy "cashlog user category rules are private"
+  on public.cashlog_user_category_rules
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);

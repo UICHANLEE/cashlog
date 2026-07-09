@@ -8,6 +8,7 @@
 - **월 캘린더**: 날짜별 지출 합계, 사진 로그 여부 표시
 - **`+ 기록 추가`**: 카메라 촬영 / 갤러리 선택 / 직접 입력
 - **사진·영상 흐름**: 사진 또는 영상으로 기록. 영상은 첫 장면(포스터)을 잡아 **mock 또는 Vision API** 가 금액·카테고리·제목·메모를 제안 (수정 후 저장)
+- **상품 사진 카테고리 추천 구조**: B안 문서 기준 `/api/analyze-image` → 상품 item 탐지 결과 → 카테고리 추천 → 사용자 수정 피드백 저장
 - **펫 놀이터**: 기록을 남길수록 고양이·강아지가 함께 레벨업, 레벨에 따라 코디(옷) 해금·갈아입히기
 - **일별 로그 & 스토리**: 선택한 날짜의 타임라인·일기형 요약, 하루/한 달을 인스타 스토리처럼 재생
 - **로그인·계정 동기화**: Supabase Auth 기반 이메일/비밀번호 가입·로그인, 메일 링크 로그인, 기록·펫 프로필 동기화
@@ -26,10 +27,18 @@
 
 1. [.env.example](.env.example) 을 참고해 루트에 `.env` 를 만듭니다.
 2. **프론트**: `VITE_PHOTO_ANALYSIS_MODE=remote` — 기본 호출 주소는 `현재 도메인/api/analyze` 입니다.
+   - 상품 사진 B안 파이프라인은 `VITE_IMAGE_ANALYSIS_PIPELINE=product` 와 `/api/analyze-image` 를 사용합니다.
 3. **로컬**: 터미널 두 개에서 `vercel dev`(API, 보통 포트 3000) 와 `npm run dev`(Vite) 동시 실행. Vite 설정이 `/api` 를 3000으로 프록시합니다.
 4. **Vercel**: 프로젝트 환경 변수에 **`OPENAI_API_KEY`** 추가. `OPENAI_VISION_MODEL` 은 생략 시 `gpt-4o-mini` .
 
 서버 처리 코드: [`api/analyze.ts`](api/analyze.ts) — 카테고리 소분류 id 는 `cashlog.ts` 와 목록 동기화가 필요합니다.
+
+상품 사진 추천 구조:
+
+- [`api/analyze-image.ts`](api/analyze-image.ts): 문서 B안의 분석 API. `multipart/form-data` 이미지 업로드를 받고 상품 item, 추천 카테고리, 신뢰도, fallback 코드를 반환합니다.
+- [`src/domain/productImage.ts`](src/domain/productImage.ts): 상품군→Cashlog 카테고리 매핑, 분석 응답 정규화, 피드백 타입.
+- [`src/ai/remoteAnalyzeProductImage.ts`](src/ai/remoteAnalyzeProductImage.ts): 프론트에서 `/api/analyze-image`를 호출하고 기존 기록 폼이 쓰는 `PhotoAnalysis`로 변환합니다.
+- Supabase: `cashlog_detected_items`, `cashlog_category_feedback`, `cashlog_user_category_rules` 테이블로 탐지 결과와 사용자 수정 이력을 저장합니다.
 
 ## 로그인·DB 동기화 설정
 

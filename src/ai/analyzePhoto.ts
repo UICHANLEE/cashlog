@@ -1,13 +1,19 @@
 import type { PhotoAnalysis } from '../domain/cashlog'
 import { mockAnalyzePhoto } from './mockAnalyzePhoto'
 import { remoteAnalyzePhoto } from './remoteAnalyzePhoto'
+import { remoteAnalyzeProductImage } from './remoteAnalyzeProductImage'
 
 type AnalysisMode = 'mock' | 'remote'
+type AnalysisPipeline = 'receipt' | 'product'
 
 const mode = (import.meta.env.VITE_PHOTO_ANALYSIS_MODE ?? 'mock') as AnalysisMode
+const pipeline = (import.meta.env.VITE_IMAGE_ANALYSIS_PIPELINE ?? 'receipt') as AnalysisPipeline
 const remoteUrl =
   import.meta.env.VITE_ANALYZE_API_URL?.trim() ||
   (typeof window !== 'undefined' ? `${window.location.origin}/api/analyze` : '')
+const productRemoteUrl =
+  import.meta.env.VITE_ANALYZE_IMAGE_API_URL?.trim() ||
+  (typeof window !== 'undefined' ? `${window.location.origin}/api/analyze-image` : '')
 
 /**
  * 사진 → 지출 추천.
@@ -21,6 +27,12 @@ const remoteUrl =
  */
 export const analyzePhoto = async (file: File): Promise<PhotoAnalysis> => {
   if (mode === 'remote') {
+    if (pipeline === 'product') {
+      if (!productRemoteUrl) {
+        throw new Error('상품 이미지 분석 URL이 설정되지 않았어요. VITE_ANALYZE_IMAGE_API_URL을 확인하세요.')
+      }
+      return remoteAnalyzeProductImage(file, productRemoteUrl)
+    }
     if (!remoteUrl) {
       throw new Error('원격 분석 URL이 설정되지 않았어요. VITE_ANALYZE_API_URL을 확인하세요.')
     }

@@ -873,10 +873,38 @@
 
 .choice-card small,
 .analysis-note {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 2px dashed var(--line-soft);
+  border-radius: 14px 6px 14px 6px;
+  background: rgba(255, 253, 248, 0.78);
   color: var(--ink-soft);
   font-size: 15px;
   overflow-wrap: anywhere;
   word-break: keep-all;
+}
+
+.analysis-note p,
+.analysis-note small {
+  margin: 0;
+}
+
+.detected-item-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.detected-item-list span {
+  padding: 4px 9px;
+  border: 2px solid var(--line-soft);
+  border-radius: 999px;
+  background: var(--paper-card);
+  color: var(--ink);
+  font-family: var(--font-hand);
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .photo-flow,

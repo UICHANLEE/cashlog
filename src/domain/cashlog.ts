@@ -422,6 +422,10 @@ export type MediaAnalysisSnapshot = {
   model?: string
   ocrText?: string
   detectedObjects?: string[]
+  detectedItems?: DetectedProductItem[]
+  topCategories?: ProductCategoryCandidate[]
+  needUserCheck?: boolean
+  errorCode?: ProductDetectionErrorCode
   categoryReason?: string
   confidence?: number
 }
@@ -441,6 +445,14 @@ export type PhotoAnalysis = {
   ocrText?: string
   /** 피사체/장소/브랜드 등 카테고리 추론에 쓴 단서 */
   detectedObjects?: string[]
+  /** 상품 사진 분석에서 탐지된 crop/item 단위 결과 */
+  detectedItems?: DetectedProductItem[]
+  /** 대표 카테고리 후보 */
+  topCategories?: ProductCategoryCandidate[]
+  /** 낮은 신뢰도/다중 상품 등 사용자 확인 필요 여부 */
+  needUserCheck?: boolean
+  /** 분석 실패 또는 fallback 코드 */
+  errorCode?: ProductDetectionErrorCode
   /** 왜 이 카테고리를 골랐는지 사용자에게 보여 줄 짧은 근거 */
   categoryReason?: string
 }
@@ -496,6 +508,10 @@ export const createExpenseFromAnalysis = ({
       model: analysis.model,
       ocrText: analysis.ocrText ?? analysis.rawText,
       detectedObjects: analysis.detectedObjects ?? [],
+      detectedItems: analysis.detectedItems ?? [],
+      topCategories: analysis.topCategories ?? [],
+      needUserCheck: analysis.needUserCheck,
+      errorCode: analysis.errorCode,
       categoryReason: analysis.categoryReason,
       confidence: analysis.confidence,
     },
@@ -654,3 +670,8 @@ export const getCalendarDays = (year: number, month: number): CalendarDay[] => {
     }
   })
 }
+import type {
+  DetectedProductItem,
+  ProductCategoryCandidate,
+  ProductDetectionErrorCode,
+} from './productImage'

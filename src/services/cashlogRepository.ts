@@ -5,6 +5,7 @@ import {
   type LedgerKind,
 } from '../domain/cashlog'
 import { normalizePetState, type PetState } from '../domain/pet'
+import type { CategoryFeedbackPayload, DetectedProductItem } from '../domain/productImage'
 import type { CashlogSession } from './auth'
 import type { SupabaseConfig } from './supabaseConfig'
 
@@ -33,6 +34,8 @@ type PetProfileRow = {
 
 const entriesTableName = 'cashlog_entries'
 const petProfilesTableName = 'cashlog_pet_profiles'
+const detectedItemsTableName = 'cashlog_detected_items'
+const categoryFeedbackTableName = 'cashlog_category_feedback'
 
 const headers = (config: SupabaseConfig, session: CashlogSession) => ({
   apikey: config.anonKey,
@@ -93,6 +96,8 @@ export const createCashlogRepository = (
 
   const entriesBase = `${config.url}/rest/v1/${entriesTableName}`
   const petProfilesBase = `${config.url}/rest/v1/${petProfilesTableName}`
+  const detectedItemsBase = `${config.url}/rest/v1/${detectedItemsTableName}`
+  const categoryFeedbackBase = `${config.url}/rest/v1/${categoryFeedbackTableName}`
   const userId = session.user?.id
 
   const listExpenses = async (): Promise<Expense[]> => {
@@ -145,5 +150,55 @@ export const createCashlogRepository = (
     if (!response.ok) throw new Error(await response.text())
   }
 
-  return { listExpenses, upsertExpense, upsertExpenses, getPetState, upsertPetState }
+  const saveCategoryFeedback = async (feedback: CategoryFeedbackPayload) => {
+    const response = await fetch(categoryFeedbackBase, {
+      method: 'POST',
+      headers: {
+        ...headers(config, session),
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify({
+        ...(userId ? { user_id: userId } : {}),
+        expense_id: feedback.expenseId,
+        model_category: feedback.modelCategory,
+        user_category: feedback.userCategory,
+        confidence: feedback.confidence ?? null,
+        item_keyword: feedback.itemKeyword ?? null,
+      }),
+    })
+    if (!response.ok) throw new Error(await response.text())
+  }
+
+  const saveDetectedItems = async (expenseId: string, items: DetectedProductItem[]) => {
+    if (items.length === 0) return
+    const response = await fetch(detectedItemsBase, {
+      method: 'POST',
+      headers: {
+        ...headers(config, session),
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify(
+        items.map((item) => ({
+          ...(userId ? { user_id: userId } : {}),
+          expense_id: expenseId,
+          item_name: item.name,
+          display_name: item.displayName,
+          predicted_category: item.category,
+          confidence: item.confidence,
+          bbox: item.bbox ?? null,
+        })),
+      ),
+    })
+    if (!response.ok) throw new Error(await response.text())
+  }
+
+  return {
+    listExpenses,
+    upsertExpense,
+    upsertExpenses,
+    getPetState,
+    upsertPetState,
+    saveCategoryFeedback,
+    saveDetectedItems,
+  }
 }

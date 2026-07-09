@@ -740,8 +740,29 @@ function App() {
 
     setExpenses((current) => [expense, ...current])
     if (repository) {
+      const shouldSaveFeedback =
+        hasMedia &&
+        analysis &&
+        form.kind === 'expense' &&
+        categoryNormalized !== analysis.suggestedCategory
+      const firstDetectedItem = analysis?.detectedItems?.[0]
       repository
         .upsertExpense(expense)
+        .then(() => repository.saveDetectedItems(expense.id, analysis?.detectedItems ?? []))
+        .then(() =>
+          shouldSaveFeedback
+            ? repository.saveCategoryFeedback({
+                expenseId: expense.id,
+                modelCategory: analysis!.suggestedCategory,
+                userCategory: migrateCategoryId(String(categoryNormalized)),
+                confidence: analysis!.confidence,
+                itemKeyword:
+                  firstDetectedItem?.name ??
+                  firstDetectedItem?.displayName ??
+                  analysis!.detectedObjects?.[0],
+              })
+            : undefined,
+        )
         .then(() => setSyncStatus('새 기록 클라우드 저장 완료'))
         .catch((e: unknown) => {
           setSyncStatus(e instanceof Error ? `클라우드 저장 실패: ${e.message.slice(0, 80)}` : '클라우드 저장 실패')
@@ -1259,14 +1280,25 @@ function App() {
                   <img src={photoPreview} alt="" className="preview-image" />
                 )}
                 {analysis && (
-                  <p className="analysis-note">
-                    {(analysis.model ?? (analysis.engine === 'openai' ? 'Vision' : '목(mock)'))}
-                    {' '}분석 신뢰도 {Math.round(analysis.confidence * 100)}% ·{' '}
-                    {analysis.categoryReason ?? analysis.rawText}
-                    {analysis.detectedObjects?.length
-                      ? ` · 단서: ${analysis.detectedObjects.slice(0, 3).join(', ')}`
-                      : ''}
-                  </p>
+                  <div className="analysis-note">
+                    <p>
+                      {(analysis.model ?? (analysis.engine === 'openai' ? 'Vision' : '목(mock)'))}
+                      {' '}분석 신뢰도 {Math.round(analysis.confidence * 100)}% ·{' '}
+                      {analysis.categoryReason ?? analysis.rawText}
+                      {analysis.needUserCheck ? ' · 확인 필요' : ''}
+                    </p>
+                    {analysis.detectedItems?.length ? (
+                      <div className="detected-item-list" aria-label="탐지 상품 목록">
+                        {analysis.detectedItems.slice(0, 4).map((item) => (
+                          <span key={`${item.name}-${item.category}`}>
+                            {item.displayName} · {Math.round(item.confidence * 100)}%
+                          </span>
+                        ))}
+                      </div>
+                    ) : analysis.detectedObjects?.length ? (
+                      <small>단서: {analysis.detectedObjects.slice(0, 3).join(', ')}</small>
+                    ) : null}
+                  </div>
                 )}
                 <ExpenseEditor
                   form={form}
