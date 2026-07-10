@@ -157,6 +157,6 @@ describe('Cashlog photo MVP', () => {
     await user.click(loginButtons[loginButtons.length - 1])
 
     expect(await within(account).findByText('me@example.com')).toBeInTheDocument()
-    expect(await within(account).findByText(/동기화/)).toBeInTheDocument()
+    expect(await within(account).findByText(/기록 동기화 완료/)).toBeInTheDocument()
   })
 })

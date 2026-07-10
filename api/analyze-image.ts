@@ -54,6 +54,7 @@ type ProductItem = {
   category: LeafId
   confidence: number
   bbox?: [number, number, number, number]
+  top_categories?: { category: LeafId; confidence: number }[]
 }
 
 type ProductAnalysis = {
@@ -144,6 +145,20 @@ const normalizeBbox = (raw: unknown): [number, number, number, number] | undefin
   return values as [number, number, number, number]
 }
 
+const normalizeTopCategories = (raw: unknown): { category: LeafId; confidence: number }[] => {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((candidate) => {
+      const row = candidate as Record<string, unknown>
+      return {
+        category: normalizeLeafId(row.category),
+        confidence: clamp01(row.confidence),
+      }
+    })
+    .filter((candidate) => candidate.confidence > 0)
+    .slice(0, 3)
+}
+
 const normalizeAnalysis = (raw: Record<string, unknown>): ProductAnalysis => {
   const items = (Array.isArray(raw.items) ? raw.items : [])
     .map((item) => {
@@ -152,12 +167,14 @@ const normalizeAnalysis = (raw: Record<string, unknown>): ProductAnalysis => {
       const displayName = String(row.display_name ?? row.displayName ?? (name || '상품')).trim()
       const confidence = clamp01(row.confidence)
       const bbox = normalizeBbox(row.bbox)
+      const topCategories = normalizeTopCategories(row.top_categories ?? row.topCategories)
       return {
         name: name || displayName,
         display_name: displayName,
         category: normalizeLeafId(row.category),
         confidence,
         ...(bbox ? { bbox } : {}),
+        ...(topCategories.length ? { top_categories: topCategories } : {}),
       }
     })
     .filter((item) => item.name || item.display_name)
@@ -188,7 +205,31 @@ const normalizeAnalysis = (raw: Record<string, unknown>): ProductAnalysis => {
   }
 }
 
+const getCataiProductEndpoint = (): string | null => {
+  const raw = process.env.CATAI_PRODUCT_API_URL?.trim()
+  if (!raw) return null
+  const normalized = raw.replace(/\/$/, '')
+  return normalized.endsWith('/analyze-image') ? normalized : `${normalized}/analyze-image`
+}
+
+async function analyzeWithLocalCatai(input: ImageInput): Promise<ProductAnalysis | null> {
+  const endpoint = getCataiProductEndpoint()
+  if (!endpoint) return null
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  const raw = await response.text()
+  if (!response.ok) throw new Error(raw.slice(0, 500) || `Catai HTTP ${response.status}`)
+  return normalizeAnalysis(JSON.parse(raw) as Record<string, unknown>)
+}
+
 async function analyzeProductImage(input: ImageInput): Promise<ProductAnalysis> {
+  const localResult = await analyzeWithLocalCatai(input)
+  if (localResult) return localResult
+
   const apiBase = (process.env.VISION_API_BASE_URL?.trim() || 'https://api.openai.com/v1').replace(/\/$/, '')
   const model = process.env.VISION_MODEL?.trim() || process.env.OPENAI_VISION_MODEL?.trim() || 'gpt-4o-mini'
   const key = process.env.VISION_API_KEY || process.env.OPENAI_API_KEY

@@ -118,6 +118,20 @@ const bbox = (raw: unknown): BoundingBox | undefined => {
   return values as BoundingBox
 }
 
+const topCategories = (raw: unknown): ProductCategoryCandidate[] | undefined => {
+  if (!Array.isArray(raw)) return undefined
+  const values = raw
+    .map((candidate) => {
+      const row = candidate as Record<string, unknown>
+      return {
+        category: category(row.category),
+        confidence: confidence(row.confidence),
+      }
+    })
+    .filter((candidate) => candidate.confidence > 0)
+  return values.length ? values : undefined
+}
+
 export const normalizeProductImageAnalysis = (raw: unknown): ProductImageAnalysisResult => {
   const input = (raw ?? {}) as Record<string, unknown>
   const rawItems = Array.isArray(input.items) ? input.items : []
@@ -127,12 +141,14 @@ export const normalizeProductImageAnalysis = (raw: unknown): ProductImageAnalysi
       const name = String(row.name ?? row.item_name ?? '').trim()
       const displayName = String(row.display_name ?? row.displayName ?? (name || '상품')).trim()
       const itemCategory = category(row.category ?? row.predicted_category, `${name} ${displayName}`)
+      const itemTopCategories = topCategories(row.top_categories ?? row.topCategories)
       return {
         name: name || displayName,
         displayName,
         category: itemCategory,
         confidence: confidence(row.confidence),
         ...(bbox(row.bbox) ? { bbox: bbox(row.bbox) } : {}),
+        ...(itemTopCategories ? { topCategories: itemTopCategories } : {}),
       }
     })
     .filter((item) => item.name || item.displayName)

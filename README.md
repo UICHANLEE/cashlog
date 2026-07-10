@@ -40,6 +40,24 @@
 - [`src/ai/remoteAnalyzeProductImage.ts`](src/ai/remoteAnalyzeProductImage.ts): 프론트에서 `/api/analyze-image`를 호출하고 기존 기록 폼이 쓰는 `PhotoAnalysis`로 변환합니다.
 - Supabase: `cashlog_detected_items`, `cashlog_category_feedback`, `cashlog_user_category_rules` 테이블로 탐지 결과와 사용자 수정 이력을 저장합니다.
 
+로컬 학습 모델을 상품 사진 분석에 연결하려면:
+
+```bash
+cd /Users/uichan/workspace/catai
+.venv/bin/python -m pip install -e ".[serve]"
+CATAI_DEVICE=mps .venv/bin/catai-serve-cashlog --host 127.0.0.1 --port 8010
+```
+
+그리고 Cashlog 서버 환경 변수에 아래 값을 둡니다.
+
+```env
+CATAI_PRODUCT_API_URL=http://127.0.0.1:8010/analyze-image
+```
+
+이 값이 있으면 `/api/analyze-image`는 OpenAI/VLM fallback 전에 로컬 Catai
+MobileNetV4 모델을 먼저 호출합니다. 현재 로컬 checkpoint는 UECFood256에서
+확보된 `식비`, `카페/간식` 범위만 supervised 분류합니다.
+
 ## 로그인·DB 동기화 설정
 
 1. Supabase 프로젝트를 만들고 Auth의 Email provider를 켭니다.
