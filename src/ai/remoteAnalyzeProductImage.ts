@@ -1,6 +1,16 @@
 import { migrateCategoryId, type PhotoAnalysis } from '../domain/cashlog'
 import { normalizeProductImageAnalysis } from '../domain/productImage'
 
+const errorMessageFromResponseBody = (
+  body: Record<string, unknown>,
+  fallback: string,
+): string => {
+  if (typeof body.error === 'string') return body.error
+  if (typeof body.detail === 'string') return body.detail
+  if (Array.isArray(body.detail)) return body.detail.map((row) => JSON.stringify(row)).join('\n')
+  return fallback
+}
+
 export async function remoteAnalyzeProductImage(
   file: File,
   endpoint: string,
@@ -22,10 +32,10 @@ export async function remoteAnalyzeProductImage(
   }
 
   if (!response.ok) {
-    const error =
-      typeof (body as Record<string, unknown>).error === 'string'
-        ? ((body as Record<string, unknown>).error as string)
-        : text || `상품 분석 요청 실패 (${response.status})`
+    const error = errorMessageFromResponseBody(
+      body as Record<string, unknown>,
+      text || `상품 분석 요청 실패 (${response.status})`,
+    )
     throw new Error(error)
   }
 

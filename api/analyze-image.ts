@@ -206,7 +206,7 @@ const normalizeAnalysis = (raw: Record<string, unknown>): ProductAnalysis => {
 }
 
 const getCataiProductEndpoint = (): string | null => {
-  const raw = process.env.CATAI_PRODUCT_API_URL?.trim()
+  const raw = process.env.PRODUCT_ANALYZER_API_URL?.trim() || process.env.CATAI_PRODUCT_API_URL?.trim()
   if (!raw) return null
   const normalized = raw.replace(/\/$/, '')
   return normalized.endsWith('/analyze-image') ? normalized : `${normalized}/analyze-image`

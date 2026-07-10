@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test": "vitest run",
+    "check:product-analyzer": "node scripts/check-product-analyzer.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -28,7 +28,8 @@
 1. [.env.example](.env.example) 을 참고해 루트에 `.env` 를 만듭니다.
 2. **프론트**: `VITE_PHOTO_ANALYSIS_MODE=remote` — 기본 호출 주소는 `현재 도메인/api/analyze` 입니다.
    - 상품 사진 B안 파이프라인은 `VITE_IMAGE_ANALYSIS_PIPELINE=product` 와 `/api/analyze-image` 를 사용합니다.
-3. **로컬**: 터미널 두 개에서 `vercel dev`(API, 보통 포트 3000) 와 `npm run dev`(Vite) 동시 실행. Vite 설정이 `/api` 를 3000으로 프록시합니다.
+3. **로컬 상품 사진 분석**: FastAPI 모델 서버(8010)와 `npm run dev`(Vite)를 함께 실행합니다. Vite 설정이 `/api/analyze-image`를 FastAPI로 프록시합니다.
+   - 기존 receipt 분석은 `vercel dev`(API, 보통 포트 3000)와 `npm run dev`를 함께 실행합니다. Vite 설정이 나머지 `/api`를 3000으로 프록시합니다.
 4. **Vercel**: 프로젝트 환경 변수에 **`OPENAI_API_KEY`** 추가. `OPENAI_VISION_MODEL` 은 생략 시 `gpt-4o-mini` .
 
 서버 처리 코드: [`api/analyze.ts`](api/analyze.ts) — 카테고리 소분류 id 는 `cashlog.ts` 와 목록 동기화가 필요합니다.
@@ -40,23 +41,58 @@
 - [`src/ai/remoteAnalyzeProductImage.ts`](src/ai/remoteAnalyzeProductImage.ts): 프론트에서 `/api/analyze-image`를 호출하고 기존 기록 폼이 쓰는 `PhotoAnalysis`로 변환합니다.
 - Supabase: `cashlog_detected_items`, `cashlog_category_feedback`, `cashlog_user_category_rules` 테이블로 탐지 결과와 사용자 수정 이력을 저장합니다.
 
-로컬 학습 모델을 상품 사진 분석에 연결하려면:
+로컬 학습 모델을 상품 사진 분석에 연결하려면 FastAPI 서버가 아래 계약을
+지원해야 합니다.
+
+- `GET /health`: 서버 상태 JSON 반환
+- `POST /analyze-image`: `multipart/form-data`의 `image` 파일을 받아 상품 분석 JSON 반환
+
+pip 설치형 Catai 패키지로 서빙할 때의 실행 형태:
+
+```bash
+python -m pip install git+https://github.com/UICHANLEE/catai.git
+CATAI_DEVICE=mps catai-serve-cashlog --host 127.0.0.1 --port 8010
+```
+
+로컬 체크아웃에서 개발 중이면 아래처럼 editable 설치로 실행할 수 있습니다.
 
 ```bash
 cd /Users/uichan/workspace/catai
-.venv/bin/python -m pip install -e ".[serve]"
+.venv/bin/python -m pip install -e .
 CATAI_DEVICE=mps .venv/bin/catai-serve-cashlog --host 127.0.0.1 --port 8010
 ```
 
 그리고 Cashlog 서버 환경 변수에 아래 값을 둡니다.
 
 ```env
-CATAI_PRODUCT_API_URL=http://127.0.0.1:8010/analyze-image
+VITE_PHOTO_ANALYSIS_MODE=remote
+VITE_IMAGE_ANALYSIS_PIPELINE=product
+PRODUCT_ANALYZER_PROXY_TARGET=http://127.0.0.1:8010
+PRODUCT_ANALYZER_API_URL=http://127.0.0.1:8010/analyze-image
 ```
 
-이 값이 있으면 `/api/analyze-image`는 OpenAI/VLM fallback 전에 로컬 Catai
-MobileNetV4 모델을 먼저 호출합니다. 현재 로컬 checkpoint는 UECFood256에서
-확보된 `식비`, `카페/간식` 범위만 supervised 분류합니다.
+로컬 Vite 개발 서버에서는 `/api/analyze-image`가 FastAPI 서버로 직접
+프록시됩니다. Vercel/API 서버에서는 `PRODUCT_ANALYZER_API_URL` 값이 있으면
+OpenAI/VLM fallback 전에 FastAPI 모델 서버를 먼저 호출합니다. 기존
+`CATAI_DEV_PROXY_TARGET`, `CATAI_PRODUCT_API_URL`도 legacy alias로 지원합니다.
+
+서버 연결 확인:
+
+```bash
+npm run check:product-analyzer
+npm run check:product-analyzer -- /path/to/sample.jpg
+```
+
+현재 로컬 checkpoint는 UECFood256에서 확보된 `식비`, `카페/간식` 범위만
+supervised 분류합니다.
+
+Catai FastAPI 서버의 실제 엔드포인트 계약:
+
+| Method | Path | Cashlog 사용 |
+| --- | --- | --- |
+| `GET` | `/health` | `npm run check:product-analyzer`에서 서버/checkpoint 확인 |
+| `POST` | `/analyze-image` | 앱의 상품 사진 파일을 `multipart/form-data`의 `image`로 전송 |
+| `POST` | `/analyze-image` | 서버리스 fallback에서는 `{ imageBase64, mimeType }` JSON 전송 |
 
 ## 로그인·DB 동기화 설정
 

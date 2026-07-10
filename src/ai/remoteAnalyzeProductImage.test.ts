@@ -45,4 +45,20 @@ describe('remoteAnalyzeProductImage', () => {
     expect(result.topCategories?.[0]).toEqual({ category: 'meal_dining', confidence: 0.84 })
     expect(result.needUserCheck).toBe(false)
   })
+
+  it('uses FastAPI detail messages for failed product analysis requests', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ detail: 'image file or imageBase64 is required' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    )
+
+    await expect(
+      remoteAnalyzeProductImage(new File(['image'], 'empty.jpg', { type: 'image/jpeg' }), '/api/analyze-image'),
+    ).rejects.toThrow('image file or imageBase64 is required')
+  })
 })
