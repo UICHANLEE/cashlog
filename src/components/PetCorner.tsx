@@ -140,9 +140,7 @@ export function PetCorner({
           <h2>
             {activeName}와 함께 쓰는 가계부
           </h2>
-          <small className="pet-sync-caption">
-            {cloudStatus ?? '로그인하면 선택한 캐릭터가 다른 기기에도 동기화돼요.'}
-          </small>
+          {cloudStatus && <small className="pet-sync-caption">{cloudStatus}</small>}
         </div>
         <button type="button" className="ghost-button pet-play-btn" onClick={play}>
           🐾 쓰다듬기

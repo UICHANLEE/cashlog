@@ -6,12 +6,19 @@ import { remoteAnalyzeProductImage } from './remoteAnalyzeProductImage'
 type AnalysisMode = 'mock' | 'remote'
 type AnalysisPipeline = 'receipt' | 'product'
 
-const mode = (import.meta.env.VITE_PHOTO_ANALYSIS_MODE ?? 'mock') as AnalysisMode
-const pipeline = (import.meta.env.VITE_IMAGE_ANALYSIS_PIPELINE ?? 'receipt') as AnalysisPipeline
-const remoteUrl =
+const currentMode = (): AnalysisMode =>
+  import.meta.env.MODE === 'test'
+    ? 'mock'
+    : ((import.meta.env.VITE_PHOTO_ANALYSIS_MODE ?? 'mock') as AnalysisMode)
+
+const currentPipeline = (): AnalysisPipeline =>
+  (import.meta.env.VITE_IMAGE_ANALYSIS_PIPELINE ?? 'receipt') as AnalysisPipeline
+
+const currentRemoteUrl = () =>
   import.meta.env.VITE_ANALYZE_API_URL?.trim() ||
   (typeof window !== 'undefined' ? `${window.location.origin}/api/analyze` : '')
-const productRemoteUrl =
+
+const currentProductRemoteUrl = () =>
   import.meta.env.VITE_ANALYZE_IMAGE_API_URL?.trim() ||
   (typeof window !== 'undefined' ? `${window.location.origin}/api/analyze-image` : '')
 
@@ -26,13 +33,17 @@ const productRemoteUrl =
  *   설계 메모: docs/ocr-vision-roadmap.md
  */
 export const analyzePhoto = async (file: File): Promise<PhotoAnalysis> => {
+  const mode = currentMode()
+  const pipeline = currentPipeline()
   if (mode === 'remote') {
     if (pipeline === 'product') {
+      const productRemoteUrl = currentProductRemoteUrl()
       if (!productRemoteUrl) {
         throw new Error('상품 이미지 분석 URL이 설정되지 않았어요. VITE_ANALYZE_IMAGE_API_URL을 확인하세요.')
       }
       return remoteAnalyzeProductImage(file, productRemoteUrl)
     }
+    const remoteUrl = currentRemoteUrl()
     if (!remoteUrl) {
       throw new Error('원격 분석 URL이 설정되지 않았어요. VITE_ANALYZE_API_URL을 확인하세요.')
     }

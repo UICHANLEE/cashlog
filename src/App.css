@@ -177,6 +177,115 @@
   font-weight: 700;
 }
 
+.admin-shell {
+  display: grid;
+  align-content: start;
+  gap: 22px;
+}
+
+.admin-hero {
+  transform: rotate(-0.25deg);
+}
+
+.admin-summary-card {
+  min-width: min(100%, 280px);
+}
+
+.admin-home-link {
+  display: inline-flex;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  width: min(1180px, 100%);
+  margin: 0 auto;
+}
+
+.admin-card {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 22px;
+  border: 2.5px solid var(--line);
+  border-radius: var(--sketch-radius-alt);
+  background: var(--paper-card);
+  box-shadow: var(--sticker-shadow);
+}
+
+.admin-card:nth-child(2) {
+  transform: rotate(0.35deg);
+}
+
+.admin-card-wide {
+  grid-column: 1 / -1;
+  transform: rotate(-0.2deg);
+}
+
+.admin-status-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.8fr) minmax(0, 1.4fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 2px dashed var(--line-soft);
+}
+
+.admin-status-row span {
+  color: var(--ink-soft);
+  font-weight: 700;
+}
+
+.admin-status-row strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+
+.admin-status-pill {
+  justify-self: end;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 10px;
+  color: var(--ink);
+  font-family: var(--font-hand);
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 2px 2px 0 var(--line);
+}
+
+.admin-status-pill.ok {
+  background: var(--crayon-mint);
+}
+
+.admin-status-pill.warn {
+  background: var(--crayon-sun);
+}
+
+.admin-error {
+  margin: 0;
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+
+.admin-json {
+  max-height: 360px;
+  overflow: auto;
+  margin: 0;
+  padding: 16px;
+  border: 2px solid var(--line);
+  border-radius: 12px 5px 12px 5px;
+  background: var(--paper-soft);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
 .hero-month-stats {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

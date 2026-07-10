@@ -47,6 +47,7 @@ import {
 import { StoryReel, type StorySlide } from './story/StoryReel'
 import { CatDoodle, DogDoodle } from './components/Doodles'
 import { PetCorner } from './components/PetCorner'
+import { UichanAdmin } from './admin/UichanAdmin'
 import {
   defaultPetState,
   normalizePetState,
@@ -124,7 +125,7 @@ const emptyForm = (): ExpenseForm => ({
   kind: 'expense',
 })
 
-function App() {
+function CashlogApp() {
   const now = new Date()
   const [expenses, setExpenses] = useState<Expense[]>(loadExpenses)
   const [selectedDate, setSelectedDate] = useState(todayIsoDate)
@@ -153,7 +154,7 @@ function App() {
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
   const [authMessage, setAuthMessage] = useState('')
-  const [syncStatus, setSyncStatus] = useState('Supabase 미연결 · 로컬 저장 중')
+  const [, setSyncStatus] = useState('Supabase 미연결 · 로컬 저장 중')
   const authClient = useMemo(() => createCashlogAuthClient(), [])
   const repository = useMemo(
     () => createCashlogRepository(authClient.config, session),
@@ -824,7 +825,6 @@ function App() {
             <div>
               <p className="eyebrow">Account sync</p>
               <h2>{session?.user?.email ?? '로컬 모드'}</h2>
-              <p>{syncStatus}</p>
             </div>
             {authClient.isConfigured ? (
               session ? (
@@ -892,9 +892,7 @@ function App() {
                 </form>
               )
             ) : (
-              <small>
-                VITE_SUPABASE_URL과 VITE_SUPABASE_ANON_KEY를 넣으면 이메일 로그인·회원가입·DB 동기화가 켜져요.
-              </small>
+              null
             )}
             {authMessage && <small className="account-message">{authMessage}</small>}
           </section>
@@ -939,11 +937,6 @@ function App() {
         <PetCorner
           totalRecords={expenses.length}
           petState={petState}
-          cloudStatus={
-            repository
-              ? `${selectedPetName} 프로필이 계정에 동기화돼요.`
-              : '로그인하면 선택한 캐릭터가 다른 기기에도 동기화돼요.'
-          }
           onKindChange={handlePetKindChange}
           onBreedChange={handleBreedChange}
           onOutfitChange={handleOutfitChange}
@@ -1507,6 +1500,10 @@ function ExpenseEditor({
       </button>
     </form>
   )
+}
+
+function App() {
+  return window.location.pathname === '/uichan' ? <UichanAdmin /> : <CashlogApp />
 }
 
 export default App

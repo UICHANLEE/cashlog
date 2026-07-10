@@ -16,6 +16,7 @@ describe('Cashlog photo MVP', () => {
   })
 
   afterEach(() => {
+    window.history.pushState({}, '', '/')
     vi.unstubAllEnvs()
     vi.unstubAllGlobals()
   })
@@ -157,6 +158,39 @@ describe('Cashlog photo MVP', () => {
     await user.click(loginButtons[loginButtons.length - 1])
 
     expect(await within(account).findByText('me@example.com')).toBeInTheDocument()
-    expect(await within(account).findByText(/기록 동기화 완료/)).toBeInTheDocument()
+    expect(within(account).queryByText(/기록 동기화 완료/)).not.toBeInTheDocument()
+    expect(within(account).getByRole('button', { name: '지금 동기화' })).toBeInTheDocument()
+  })
+
+  it('renders the Uichan admin page on /uichan', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            checkedAt: '2026-07-10T00:00:00.000Z',
+            cashlog: {
+              supabaseConfigured: true,
+              productAnalyzerConfigured: true,
+              productAnalyzerOrigin: 'https://catai.example.com',
+              visionConfigured: true,
+              vercelEnv: 'preview',
+            },
+            analyzer: {
+              status: 'ok',
+              httpStatus: 200,
+              health: { status: 'ok' },
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      ),
+    )
+    window.history.pushState({}, '', '/uichan')
+
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: '분석 연결 정상' })).toBeInTheDocument()
+    expect(screen.getByText('https://catai.example.com')).toBeInTheDocument()
   })
 })
