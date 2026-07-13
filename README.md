@@ -34,6 +34,11 @@
 
 서버 처리 코드: [`api/analyze.ts`](api/analyze.ts) — 카테고리 소분류 id 는 `cashlog.ts` 와 목록 동기화가 필요합니다.
 
+상품 사진 추천 구조는 상세 I/O 계획서의 v1 계약을 따릅니다. 온디바이스 결과는
+`status: provisional`, `revision: 0`으로 즉시 표시하고 서버 검증 결과는
+`analysis_revision` 이벤트의 `status: final`로 반영합니다. 사용자가 먼저 카테고리를
+고쳤다면 서버 보정은 비교 근거로만 저장하고 사용자 선택을 덮어쓰지 않습니다.
+
 상품 사진 추천 구조:
 
 - [`api/analyze-image.ts`](api/analyze-image.ts): 문서 B안의 분석 API. `multipart/form-data` 이미지 업로드를 받고 상품 item, 추천 카테고리, 신뢰도, fallback 코드를 반환합니다.

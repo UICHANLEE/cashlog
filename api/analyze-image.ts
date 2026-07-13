@@ -74,6 +74,8 @@ type ImageInput = {
 
 const ALLOWED = new Set<string>(ALLOWED_LEAF_IDS)
 const LOW_CONFIDENCE_THRESHOLD = 0.65
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024
+const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/heic', 'image/webp'])
 
 export const config = {
   api: {
@@ -106,6 +108,61 @@ const parseJsonInput = (raw: Buffer): ImageInput | null => {
     return null
   }
 }
+
+const createRequestId = () => `req_${crypto.randomUUID()}`
+
+const groupIdForLeaf = (leaf: LeafId) => leaf.split('_')[0]
+
+const exactTop3 = (item: ProductItem) => {
+  const candidates = [...(item.top_categories ?? []), { category: item.category, confidence: item.confidence }]
+  const unique = [...new Map(candidates.map((candidate) => [candidate.category, candidate])).values()]
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, 3)
+  for (const fallback of ['misc_uncat', 'misc_other', 'meal_grocery'] as LeafId[]) {
+    if (unique.length >= 3) break
+    if (!unique.some((candidate) => candidate.category === fallback)) {
+      unique.push({ category: fallback, confidence: 0 })
+    }
+  }
+  const total = unique.reduce((sum, candidate) => sum + candidate.confidence, 0)
+  return unique.map((candidate, index) => ({
+    ...candidate,
+    confidence: total > 0 ? candidate.confidence / total : index === 0 ? 1 : 0,
+  }))
+}
+
+const toV1Response = (analysis: ProductAnalysis, requestId: string, modelVersion: string) => ({
+  request_id: requestId,
+  status: 'final',
+  revision: 1,
+  input_type: { id: 'product', confidence: analysis.confidence },
+  products: analysis.items.map((item, index) => ({
+    product_id: `p${index + 1}`,
+    display_name: item.display_name,
+    ...(item.bbox ? { bbox: item.bbox } : {}),
+    candidates: exactTop3(item).map((candidate, rank) => ({
+      rank: rank + 1,
+      group_id: groupIdForLeaf(candidate.category),
+      leaf_id: candidate.category,
+      confidence: candidate.confidence,
+    })),
+    evidence: { context: [], appearance: [item.display_name] },
+  })),
+  decision: {
+    mode: analysis.need_user_check ? (analysis.confidence >= 0.6 ? 'show_top3' : 'manual_select') : 'auto_select',
+    requires_user_confirmation: analysis.need_user_check,
+  },
+  verification: { state: 'completed' },
+  quality: { label: analysis.success ? 'valid' : 'invalid', confidence: analysis.confidence },
+  model_versions: { verifier: modelVersion },
+  taxonomy_version: '13.33.1',
+  success: analysis.success,
+  recommended_category: analysis.recommended_category,
+  confidence: analysis.confidence,
+  reason: analysis.reason,
+  need_user_check: analysis.need_user_check,
+  ...(analysis.error_code ? { error_code: analysis.error_code } : {}),
+})
 
 const parseMultipartInput = (raw: Buffer, contentType: string): ImageInput | null => {
   const boundary = contentType.match(/boundary=([^;]+)/)?.[1]
@@ -312,8 +369,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return
     }
 
+    const byteLength = Buffer.byteLength(input.imageBase64, 'base64')
+    if (byteLength > MAX_IMAGE_BYTES) {
+      res.status(413).json({ code: 'PAYLOAD_TOO_LARGE', error: '이미지는 최대 10MB까지 업로드할 수 있습니다.' })
+      return
+    }
+    if (!ALLOWED_IMAGE_TYPES.has(input.mimeType.toLowerCase())) {
+      res.status(400).json({ code: 'INVALID_INPUT', error: 'JPEG, PNG, HEIC, WebP 이미지만 지원합니다.' })
+      return
+    }
+
     const analysis = await analyzeProductImage(input)
-    res.status(200).json(analysis)
+    const modelVersion = getCataiProductEndpoint()
+      ? process.env.CATAI_MODEL_VERSION?.trim() || 'catai-cashlog'
+      : process.env.VISION_MODEL?.trim() || process.env.OPENAI_VISION_MODEL?.trim() || 'gpt-4o-mini'
+    res.status(200).json(toV1Response(analysis, createRequestId(), modelVersion))
   } catch (e) {
     const message = e instanceof Error ? e.message : 'SERVER_ERROR'
     res.status(502).json({

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Cat, Dog, Hand, Lock, Sparkles } from 'lucide-react'
 import {
   computeLevel,
   catBreeds,
@@ -16,7 +17,7 @@ import {
   type PetPaletteId,
   type PetState,
 } from '../domain/pet'
-import { CatDoodle, DogDoodle } from './Doodles'
+import { InteractivePet3D, PetPortrait } from './InteractivePet3D'
 import './PetCorner.css'
 
 type PetCornerProps = {
@@ -122,7 +123,7 @@ export function PetCorner({
                   play()
                 }}
               >
-                <span aria-hidden>{unlocked ? o.icon : '🔒'}</span>
+                <span aria-hidden>{unlocked ? <Sparkles size={15} /> : <Lock size={15} />}</span>
                 {o.name}
               </button>
             )
@@ -143,7 +144,7 @@ export function PetCorner({
           {cloudStatus && <small className="pet-sync-caption">{cloudStatus}</small>}
         </div>
         <button type="button" className="ghost-button pet-play-btn" onClick={play}>
-          🐾 쓰다듬기
+          <Hand size={17} aria-hidden="true" /> 쓰다듬기
         </button>
       </div>
 
@@ -157,13 +158,8 @@ export function PetCorner({
             play()
           }}
         >
-          <CatDoodle
-            className="pet-kind-preview"
-            outfit={petState.catOutfit}
-            palette={petState.catPalette}
-            breed={petState.catBreed}
-          />
-          <span>고양이</span>
+          <PetPortrait kind="cat" name={petState.catName} className="pet-kind-preview" />
+          <span><Cat size={15} aria-hidden="true" /> 고양이</span>
           <strong>{getPetBreed('cat', petState.catBreed).name}</strong>
         </button>
         <button
@@ -175,50 +171,31 @@ export function PetCorner({
             play()
           }}
         >
-          <DogDoodle
-            className="pet-kind-preview"
-            outfit={petState.dogOutfit}
-            palette={petState.dogPalette}
-            breed={petState.dogBreed}
-          />
-          <span>강아지</span>
+          <PetPortrait kind="dog" name={petState.dogName} className="pet-kind-preview" />
+          <span><Dog size={15} aria-hidden="true" /> 강아지</span>
           <strong>{getPetBreed('dog', petState.dogBreed).name}</strong>
         </button>
       </div>
 
-      <div className={`pet-stage${cheer ? ' is-cheering' : ''}`}>
-        <button
-          type="button"
-          className="pet-figure pet-figure-main"
-          onClick={play}
-          aria-label={`${activeName} 쓰다듬기`}
-        >
-          {activeKind === 'cat' ? (
-            <CatDoodle
-              className="pet-doodle pet-doodle-cat"
-              outfit={petState.catOutfit}
-              palette={petState.catPalette}
-              breed={petState.catBreed}
-            />
-          ) : (
-            <DogDoodle
-              className="pet-doodle pet-doodle-dog"
-              outfit={petState.dogOutfit}
-              palette={petState.dogPalette}
-              breed={petState.dogBreed}
-            />
-          )}
-        </button>
+      <div className={`pet-stage pet-stage-3d${cheer ? ' is-cheering' : ''}`}>
+        <InteractivePet3D
+          kind={activeKind}
+          name={activeName}
+          palette={activePalette}
+          outfit={activeOutfit}
+          breed={activeKind === 'cat' ? petState.catBreed : petState.dogBreed}
+          cheer={cheer}
+        />
         <div className="pet-stage-copy">
-          <span className="pet-bond" aria-hidden>{cheer ? '💕' : '🐾'}</span>
+          <span className="pet-bond" aria-hidden><Sparkles size={22} /></span>
           <strong>{activeBreed.name}</strong>
           <small>{activeBreed.vibe}</small>
         </div>
         {cheer && (
           <div className="pet-hearts" aria-hidden>
-            <span>❤</span>
-            <span>💛</span>
-            <span>💙</span>
+            <span>♡</span>
+            <span>♥</span>
+            <span>♡</span>
           </div>
         )}
       </div>
@@ -228,7 +205,7 @@ export function PetCorner({
           <strong>
             Lv.{level.level} · {level.title}
           </strong>
-          <span>{atMax ? '최고 레벨 달성! 🎉' : `다음 레벨까지 ${level.remaining}개`}</span>
+          <span>{atMax ? '최고 레벨 달성!' : `다음 레벨까지 ${level.remaining}개`}</span>
         </div>
         <div
           className="pet-level-bar"
@@ -279,7 +256,7 @@ export function PetCorner({
       <p className="pet-next-unlock">
         {(() => {
           const nextLocked = outfits.find((o) => !isOutfitUnlocked(o.id, level.level))
-          if (!nextLocked) return '모든 코디를 해금했어요! 마음껏 갈아입혀 주세요. ✨'
+          if (!nextLocked) return '모든 코디를 해금했어요! 마음껏 갈아입혀 주세요.'
           return `다음 코디 「${getOutfit(nextLocked.id).name}」는 Lv.${nextLocked.minLevel}에 열려요. 지금 ${activeName}는 ${getPetPalette(activePalette).name} 색칠, ${getOutfit(activeOutfit).name} 코디예요.`
         })()}
       </p>

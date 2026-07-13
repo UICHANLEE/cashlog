@@ -44,6 +44,9 @@ export async function remoteAnalyzeProductImage(
   const objects = analysis.items.map((item) => item.displayName || item.name).filter(Boolean)
 
   return {
+    requestId: analysis.requestId,
+    status: analysis.status,
+    revision: analysis.revision,
     suggestedAmount: 0,
     suggestedCategory: migrateCategoryId(analysis.recommendedCategory),
     suggestedTitle: firstItem?.displayName ? `${firstItem.displayName} 기록` : '상품 사진 기록',

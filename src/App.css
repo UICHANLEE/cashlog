@@ -36,6 +36,7 @@
 }
 
 .hero-panel > div:first-child {
+  flex: 1 1 650px;
   min-width: 0;
 }
 
@@ -78,7 +79,8 @@
 .hero-actions {
   display: grid;
   gap: 16px;
-  min-width: 230px;
+  flex: 0 1 360px;
+  min-width: 280px;
 }
 
 .account-card {
@@ -371,9 +373,10 @@
 }
 
 .mini-companion {
-  width: 42px;
-  height: auto;
+  width: 46px;
+  height: 46px;
   display: block;
+  object-position: center;
   filter: drop-shadow(0 6px 8px rgba(42, 37, 31, 0.12));
   transform: rotate(-4deg);
 }
@@ -396,8 +399,8 @@
 }
 
 .tiny-companion {
-  width: 32px;
-  height: auto;
+  width: 36px;
+  height: 36px;
   flex: 0 0 auto;
 }
 
@@ -745,42 +748,23 @@
 }
 
 .empty-mascot {
-  width: 92px;
-  height: auto;
+  width: 118px;
+  height: 118px;
   animation: mascot-bob 3.4s ease-in-out infinite;
 }
 
-/* 손그림 마스코트 (고양이·강아지) */
-.hero-mascots {
-  display: flex;
-  align-items: flex-end;
-  gap: 6px;
+.hero-pet-showcase {
+  position: relative;
+  max-width: 620px;
   margin-top: 18px;
-  min-height: 0;
-}
-
-.mascot {
-  width: 92px;
-  height: auto;
-  flex: 0 0 auto;
-  filter:
-    drop-shadow(0 10px 14px rgba(42, 37, 31, 0.16))
-    drop-shadow(2px 3px 0 rgba(42, 37, 31, 0.08));
-}
-
-.mascot-cat {
-  transform: rotate(-4deg);
-  animation: mascot-bob 3.2s ease-in-out infinite;
-}
-
-.mascot-dog {
-  transform: rotate(4deg);
-  animation: mascot-bob 3.2s ease-in-out infinite 0.5s;
+  transform: rotate(0.35deg);
 }
 
 .mascot-caption {
-  align-self: center;
-  margin-left: 4px;
+  position: absolute;
+  z-index: 4;
+  right: 18px;
+  bottom: 18px;
   padding: 7px 13px;
   border: 2.5px solid var(--line);
   border-radius: 16px 16px 16px 4px;
@@ -1432,6 +1416,10 @@ video.preview-image {
     min-width: 0;
   }
 
+  .hero-pet-showcase {
+    max-width: none;
+  }
+
   .view-tabs {
     margin-bottom: 16px;
   }
@@ -1467,6 +1455,21 @@ video.preview-image {
 
   .hero-copy {
     font-size: 16px;
+  }
+
+  .hero-panel h1 {
+    font-size: clamp(52px, 18vw, 72px);
+  }
+
+  .hero-pet-showcase {
+    margin-inline: -6px;
+  }
+
+  .mascot-caption {
+    right: 12px;
+    bottom: 62px;
+    max-width: 150px;
+    font-size: 14px;
   }
 
   .hero-month-stats > div {
@@ -1712,8 +1715,6 @@ video.preview-image {
     transform: none;
   }
 
-  .mascot-cat,
-  .mascot-dog,
   .empty-mascot {
     animation: none;
   }

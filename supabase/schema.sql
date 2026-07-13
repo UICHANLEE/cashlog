@@ -14,6 +14,10 @@ create table if not exists public.cashlog_entries (
   image_url text,
   video_url text,
   analysis jsonb,
+  taxonomy_version text not null default '13.33.1',
+  analysis_status text check (analysis_status in ('provisional', 'final')),
+  analysis_revision integer not null default 0,
+  user_category_edited_at timestamptz,
   created_at timestamptz not null,
   updated_at timestamptz not null
 );
@@ -75,6 +79,9 @@ create table if not exists public.cashlog_detected_items (
   predicted_category text not null,
   confidence double precision not null default 0,
   bbox jsonb,
+  top3 jsonb not null default '[]'::jsonb,
+  evidence jsonb not null default '{}'::jsonb,
+  model_version text,
   created_at timestamptz not null default now()
 );
 
@@ -98,6 +105,8 @@ create table if not exists public.cashlog_category_feedback (
   user_category text not null,
   confidence double precision,
   item_keyword text,
+  reason_code text,
+  session_id text,
   created_at timestamptz not null default now()
 );
 
@@ -119,6 +128,8 @@ create table if not exists public.cashlog_user_category_rules (
   item_keyword text not null,
   preferred_category text not null,
   count integer not null default 1,
+  last_applied_at timestamptz,
+  precision double precision,
   updated_at timestamptz not null default now(),
   unique (user_id, item_keyword, preferred_category)
 );
@@ -131,3 +142,16 @@ create policy "cashlog user category rules are private"
   for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+-- Existing projects can safely re-run this file after upgrading the analysis contract.
+alter table public.cashlog_entries add column if not exists taxonomy_version text not null default '13.33.1';
+alter table public.cashlog_entries add column if not exists analysis_status text;
+alter table public.cashlog_entries add column if not exists analysis_revision integer not null default 0;
+alter table public.cashlog_entries add column if not exists user_category_edited_at timestamptz;
+alter table public.cashlog_detected_items add column if not exists top3 jsonb not null default '[]'::jsonb;
+alter table public.cashlog_detected_items add column if not exists evidence jsonb not null default '{}'::jsonb;
+alter table public.cashlog_detected_items add column if not exists model_version text;
+alter table public.cashlog_category_feedback add column if not exists reason_code text;
+alter table public.cashlog_category_feedback add column if not exists session_id text;
+alter table public.cashlog_user_category_rules add column if not exists last_applied_at timestamptz;
+alter table public.cashlog_user_category_rules add column if not exists precision double precision;

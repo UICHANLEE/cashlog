@@ -42,8 +42,9 @@ describe('remoteAnalyzeProductImage', () => {
 
     expect(result.suggestedCategory).toBe('meal_dining')
     expect(result.detectedItems?.[0]?.displayName).toBe('식비')
-    expect(result.topCategories?.[0]).toEqual({ category: 'meal_dining', confidence: 0.84 })
+    expect(result.topCategories?.[0]).toMatchObject({ category: 'meal_dining', confidence: 0.84 })
     expect(result.needUserCheck).toBe(false)
+    expect(result.status).toBe('final')
   })
 
   it('uses FastAPI detail messages for failed product analysis requests', async () => {

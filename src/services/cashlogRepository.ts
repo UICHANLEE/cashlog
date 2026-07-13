@@ -186,6 +186,9 @@ export const createCashlogRepository = (
           predicted_category: item.category,
           confidence: item.confidence,
           bbox: item.bbox ?? null,
+          top3: item.topCategories ?? [],
+          evidence: item.evidence ?? {},
+          model_version: null,
         })),
       ),
     })

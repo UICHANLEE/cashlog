@@ -45,7 +45,7 @@ import {
   formatMonthLogRelativeKo,
 } from './domain/relativeLabelsKo'
 import { StoryReel, type StorySlide } from './story/StoryReel'
-import { CatDoodle, DogDoodle } from './components/Doodles'
+import { InteractivePet3D, PetPortrait } from './components/InteractivePet3D'
 import { PetCorner } from './components/PetCorner'
 import { UichanAdmin } from './admin/UichanAdmin'
 import {
@@ -339,7 +339,6 @@ function CashlogApp() {
   const selectedPetOutfit = petState.selectedKind === 'cat' ? petState.catOutfit : petState.dogOutfit
   const selectedPetPalette = petState.selectedKind === 'cat' ? petState.catPalette : petState.dogPalette
   const selectedPetBreed = petState.selectedKind === 'cat' ? petState.catBreed : petState.dogBreed
-  const SelectedPetDoodle = petState.selectedKind === 'cat' ? CatDoodle : DogDoodle
 
   const syncWithCloud = async () => {
     if (!repository) {
@@ -814,9 +813,15 @@ function CashlogApp() {
           <p className="hero-copy">
             찍은 사진 기록만 모아 오늘이나 한 달을 스토리처럼 되감습니다. 수입·지출을 간단히 입력할 수 있어요.
           </p>
-          <div className="hero-mascots" aria-hidden="true">
-            <CatDoodle className="mascot mascot-cat" />
-            <DogDoodle className="mascot mascot-dog" />
+          <div className="hero-pet-showcase">
+            <InteractivePet3D
+              compact
+              kind={petState.selectedKind}
+              name={selectedPetName}
+              palette={selectedPetPalette}
+              outfit={selectedPetOutfit}
+              breed={selectedPetBreed}
+            />
             <span className="mascot-caption">오늘도 같이 기록해요!</span>
           </div>
         </div>
@@ -953,11 +958,10 @@ function CashlogApp() {
                 </h2>
               </div>
               <div className="calendar-companion" aria-label="캘린더 친구">
-                <SelectedPetDoodle
+                <PetPortrait
+                  kind={petState.selectedKind}
+                  name={selectedPetName}
                   className="mini-companion"
-                  outfit={selectedPetOutfit}
-                  palette={selectedPetPalette}
-                  breed={selectedPetBreed}
                 />
               </div>
               <button
@@ -1024,11 +1028,10 @@ function CashlogApp() {
               </button>
             </div>
             <div className="daily-companion-note">
-              <SelectedPetDoodle
+              <PetPortrait
+                kind={petState.selectedKind}
+                name={selectedPetName}
                 className="tiny-companion"
-                outfit={selectedPetOutfit}
-                palette={selectedPetPalette}
-                breed={selectedPetBreed}
               />
               <span>{selectedPetName}가 오늘 로그를 살짝 지켜보는 중</span>
             </div>
@@ -1037,12 +1040,10 @@ function CashlogApp() {
             <div className="timeline">
               {selectedExpenses.length === 0 ? (
                 <div className="empty-state">
-                  <SelectedPetDoodle
+                  <PetPortrait
+                    kind={petState.selectedKind}
+                    name={selectedPetName}
                     className="empty-mascot"
-                    outfit={selectedPetOutfit}
-                    palette={selectedPetPalette}
-                    breed={selectedPetBreed}
-                    aria-hidden="true"
                   />
                   <p>아직 기록이 없어요. + 버튼으로 첫 로그를 남겨보세요.</p>
                 </div>

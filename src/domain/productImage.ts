@@ -1,4 +1,4 @@
-import type { CategoryId } from './cashlog'
+import { getCategoryMeta, migrateCategoryId, type CategoryGroupId, type CategoryId } from './cashlog'
 
 export type ProductDetectionErrorCode =
   | 'NO_OBJECT_DETECTED'
@@ -10,19 +10,37 @@ export type BoundingBox = [number, number, number, number]
 
 export type ProductCategoryCandidate = {
   category: CategoryId
+  groupId?: CategoryGroupId
   confidence: number
+  rank?: 1 | 2 | 3
+}
+
+export type ProductAnalysisStatus = 'provisional' | 'final'
+export type ProductDecisionMode = 'auto_select' | 'show_top3' | 'manual_select' | 'retake'
+export type ProductVerificationState = 'queued' | 'running' | 'completed' | 'failed'
+
+export type ProductEvidence = {
+  context: string[]
+  appearance: string[]
+  ocr?: string[]
+  barcode?: string[]
 }
 
 export type DetectedProductItem = {
+  productId?: string
   name: string
   displayName: string
   category: CategoryId
   confidence: number
   bbox?: BoundingBox
   topCategories?: ProductCategoryCandidate[]
+  evidence?: ProductEvidence
 }
 
 export type ProductImageAnalysisResult = {
+  requestId?: string
+  status: ProductAnalysisStatus
+  revision: number
   success: boolean
   recommendedCategory: CategoryId
   confidence: number
@@ -30,6 +48,19 @@ export type ProductImageAnalysisResult = {
   items: DetectedProductItem[]
   needUserCheck: boolean
   errorCode?: ProductDetectionErrorCode
+  decision: {
+    mode: ProductDecisionMode
+    requiresUserConfirmation: boolean
+  }
+  verification: { state: ProductVerificationState }
+  modelVersions: Record<string, string>
+  taxonomyVersion: string
+}
+
+export type ProductAnalysisRevision = ProductImageAnalysisResult & {
+  event: 'analysis_revision'
+  changed: boolean
+  reason?: string
 }
 
 export type CategoryFeedbackPayload = {
@@ -109,7 +140,7 @@ const confidence = (raw: unknown): number => {
 }
 
 const category = (raw: unknown, fallbackKeyword = ''): CategoryId =>
-  typeof raw === 'string' && raw ? (raw as CategoryId) : mapProductKeywordToCategory(fallbackKeyword)
+  typeof raw === 'string' && raw ? migrateCategoryId(raw) : mapProductKeywordToCategory(fallbackKeyword)
 
 const bbox = (raw: unknown): BoundingBox | undefined => {
   if (!Array.isArray(raw) || raw.length !== 4) return undefined
@@ -118,37 +149,77 @@ const bbox = (raw: unknown): BoundingBox | undefined => {
   return values as BoundingBox
 }
 
-const topCategories = (raw: unknown): ProductCategoryCandidate[] | undefined => {
-  if (!Array.isArray(raw)) return undefined
-  const values = raw
+const topCategories = (raw: unknown, primary: CategoryId, primaryConfidence: number): ProductCategoryCandidate[] => {
+  const source = Array.isArray(raw) ? raw : []
+  const values = source
     .map((candidate) => {
       const row = candidate as Record<string, unknown>
       return {
-        category: category(row.category),
+        category: category(row.leaf_id ?? row.category),
         confidence: confidence(row.confidence),
       }
     })
     .filter((candidate) => candidate.confidence > 0)
-  return values.length ? values : undefined
+  if (!values.some((candidate) => candidate.category === primary)) {
+    values.push({ category: primary, confidence: primaryConfidence })
+  }
+  const unique = [...new Map(values.map((candidate) => [candidate.category, candidate])).values()]
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, 3)
+  for (const fallback of ['misc_uncat', 'misc_other', 'meal_grocery'] as CategoryId[]) {
+    if (unique.length >= 3) break
+    if (!unique.some((candidate) => candidate.category === fallback)) {
+      unique.push({ category: fallback, confidence: 0 })
+    }
+  }
+  const total = unique.reduce((sum, candidate) => sum + candidate.confidence, 0)
+  return unique.map((candidate, index) => ({
+    ...candidate,
+    confidence: total > 0 ? candidate.confidence / total : index === 0 ? 1 : 0,
+    groupId: getCategoryMeta(candidate.category).group.id,
+    rank: (index + 1) as 1 | 2 | 3,
+  }))
 }
 
 export const normalizeProductImageAnalysis = (raw: unknown): ProductImageAnalysisResult => {
   const input = (raw ?? {}) as Record<string, unknown>
-  const rawItems = Array.isArray(input.items) ? input.items : []
+  const rawItems = Array.isArray(input.products)
+    ? input.products
+    : Array.isArray(input.items)
+      ? input.items
+      : []
   const items: DetectedProductItem[] = rawItems
     .map((item) => {
       const row = item as Record<string, unknown>
-      const name = String(row.name ?? row.item_name ?? '').trim()
+      const name = String(row.name ?? row.item_name ?? row.display_name ?? '').trim()
       const displayName = String(row.display_name ?? row.displayName ?? (name || '상품')).trim()
-      const itemCategory = category(row.category ?? row.predicted_category, `${name} ${displayName}`)
-      const itemTopCategories = topCategories(row.top_categories ?? row.topCategories)
+      const rawCandidates = row.candidates ?? row.top_categories ?? row.topCategories
+      const firstCandidate = Array.isArray(rawCandidates)
+        ? (rawCandidates[0] as Record<string, unknown> | undefined)
+        : undefined
+      const itemCategory = category(
+        firstCandidate?.leaf_id ?? firstCandidate?.category ?? row.category ?? row.predicted_category,
+        `${name} ${displayName}`,
+      )
+      const itemConfidence = confidence(firstCandidate?.confidence ?? row.confidence)
+      const itemTopCategories = topCategories(rawCandidates, itemCategory, itemConfidence)
+      const rawEvidence = (row.evidence ?? {}) as Record<string, unknown>
+      const stringList = (value: unknown) =>
+        Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
       return {
+        productId: String(row.product_id ?? '').trim() || undefined,
         name: name || displayName,
         displayName,
         category: itemCategory,
-        confidence: confidence(row.confidence),
+        confidence: itemTopCategories[0]?.confidence ?? itemConfidence,
         ...(bbox(row.bbox) ? { bbox: bbox(row.bbox) } : {}),
-        ...(itemTopCategories ? { topCategories: itemTopCategories } : {}),
+        topCategories: itemTopCategories,
+        evidence: {
+          context: stringList(rawEvidence.context),
+          appearance: stringList(rawEvidence.appearance),
+          ...(stringList(rawEvidence.ocr).length ? { ocr: stringList(rawEvidence.ocr) } : {}),
+          ...(stringList(rawEvidence.barcode).length ? { barcode: stringList(rawEvidence.barcode) } : {}),
+        },
       }
     })
     .filter((item) => item.name || item.displayName)
@@ -157,7 +228,14 @@ export const normalizeProductImageAnalysis = (raw: unknown): ProductImageAnalysi
     input.recommended_category ?? input.recommendedCategory,
     items.map((item) => item.name).join(' '),
   )
-  const resultConfidence = confidence(input.confidence)
+  const resultConfidence = confidence(input.confidence ?? items[0]?.confidence)
+  const status: ProductAnalysisStatus = input.status === 'provisional' ? 'provisional' : 'final'
+  const rawDecision = (input.decision ?? {}) as Record<string, unknown>
+  const rawVerification = (input.verification ?? {}) as Record<string, unknown>
+  const requiresUserConfirmation =
+    Boolean(rawDecision.requires_user_confirmation ?? rawDecision.requiresUserConfirmation) ||
+    resultConfidence < LOW_CONFIDENCE_THRESHOLD
+  const mode = String(rawDecision.mode ?? (requiresUserConfirmation ? 'show_top3' : 'auto_select')) as ProductDecisionMode
   const errorCode =
     typeof input.error_code === 'string'
       ? (input.error_code as ProductDetectionErrorCode)
@@ -166,6 +244,9 @@ export const normalizeProductImageAnalysis = (raw: unknown): ProductImageAnalysi
         : undefined
 
   return {
+    requestId: String(input.request_id ?? input.requestId ?? '').trim() || undefined,
+    status,
+    revision: Math.max(0, Math.floor(Number(input.revision) || 0)),
     success: Boolean(input.success ?? items.length > 0),
     recommendedCategory,
     confidence: resultConfidence,
@@ -173,5 +254,30 @@ export const normalizeProductImageAnalysis = (raw: unknown): ProductImageAnalysi
     items,
     needUserCheck: Boolean(input.need_user_check ?? input.needUserCheck) || resultConfidence < LOW_CONFIDENCE_THRESHOLD,
     ...(errorCode ? { errorCode } : {}),
+    decision: { mode, requiresUserConfirmation },
+    verification: {
+      state: String(rawVerification.state ?? (status === 'provisional' ? 'queued' : 'completed')) as ProductVerificationState,
+    },
+    modelVersions: (input.model_versions ?? input.modelVersions ?? {}) as Record<string, string>,
+    taxonomyVersion: String(input.taxonomy_version ?? input.taxonomyVersion ?? '13.33.1'),
+  }
+}
+
+export const applyProductAnalysisRevision = ({
+  current,
+  revision,
+  userEditedCategory,
+}: {
+  current: ProductImageAnalysisResult
+  revision: ProductAnalysisRevision
+  userEditedCategory?: CategoryId
+}): ProductImageAnalysisResult => {
+  if (revision.requestId !== current.requestId || revision.revision <= current.revision) return current
+  if (!userEditedCategory) return revision
+  return {
+    ...revision,
+    recommendedCategory: userEditedCategory,
+    needUserCheck: false,
+    decision: { mode: 'auto_select', requiresUserConfirmation: false },
   }
 }

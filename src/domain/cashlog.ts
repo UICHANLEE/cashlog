@@ -418,6 +418,9 @@ export type DailyLog = {
 export type AnalysisEngine = 'mock' | 'openai' | 'qwen' | 'paddleocr' | 'custom'
 
 export type MediaAnalysisSnapshot = {
+  requestId?: string
+  status?: 'provisional' | 'final'
+  revision?: number
   engine?: AnalysisEngine
   model?: string
   ocrText?: string
@@ -431,6 +434,9 @@ export type MediaAnalysisSnapshot = {
 }
 
 export type PhotoAnalysis = {
+  requestId?: string
+  status?: 'provisional' | 'final'
+  revision?: number
   suggestedAmount: number
   suggestedCategory: CategoryId
   suggestedTitle: string
@@ -504,6 +510,9 @@ export const createExpenseFromAnalysis = ({
     source: 'photo',
     imageUrl,
     analysis: {
+      requestId: analysis.requestId,
+      status: analysis.status,
+      revision: analysis.revision,
       engine: analysis.engine,
       model: analysis.model,
       ocrText: analysis.ocrText ?? analysis.rawText,

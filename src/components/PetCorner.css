@@ -10,6 +10,9 @@
 }
 
 .pet-play-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   background: var(--crayon-pink) !important;
 }
 
@@ -65,14 +68,17 @@
 
 .pet-kind-preview {
   grid-area: preview;
-  width: 82px;
-  height: auto;
+  width: 92px;
+  height: 92px;
   filter: drop-shadow(0 8px 10px rgba(42, 37, 31, 0.16));
 }
 
 .pet-kind-card span {
   grid-area: label;
   align-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-family: var(--font-hand);
   font-size: 15px;
   color: var(--ink-soft);
@@ -102,6 +108,33 @@
     var(--paper-soft);
   min-height: 210px;
   overflow: hidden;
+}
+
+.pet-stage.pet-stage-3d {
+  display: block;
+  min-height: 370px;
+  padding: 0;
+  border: 0;
+  overflow: visible;
+  background: transparent;
+}
+
+.pet-stage-3d > .interactive-pet-3d {
+  min-height: 370px;
+}
+
+.pet-stage-3d .pet-stage-copy {
+  position: absolute;
+  z-index: 5;
+  right: 18px;
+  top: 64px;
+  min-width: 126px;
+  pointer-events: none;
+  transform: rotate(1.4deg);
+}
+
+.pet-stage-3d .pet-hearts {
+  z-index: 6;
 }
 
 .pet-stage::after {
@@ -150,7 +183,9 @@
 }
 
 .pet-bond {
+  display: inline-flex;
   font-size: clamp(22px, 5vw, 30px);
+  color: var(--accent);
 }
 
 .pet-stage-copy {
@@ -380,6 +415,11 @@
     box-shadow 0.12s ease;
 }
 
+.outfit-chip > span {
+  display: inline-flex;
+  align-items: center;
+}
+
 .palette-chip {
   background: #fffdf7;
 }
@@ -436,9 +476,6 @@
     transform: translateY(-2px) rotate(-0.2deg);
   }
 
-  .pet-figure:hover .pet-doodle {
-    transform: translateY(-4px) rotate(0deg);
-  }
 }
 
 @media (max-width: 640px) {
@@ -452,20 +489,41 @@
     font-size: 19px;
   }
 
-  .pet-kind-grid,
-  .breed-grid {
+  .pet-kind-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pet-kind-card {
     grid-template-columns: 1fr;
-  }
-
-  .pet-stage {
-    flex-direction: column;
-    align-items: center;
-    min-height: 260px;
-  }
-
-  .pet-stage-copy {
-    width: min(100%, 260px);
+    grid-template-areas:
+      'preview'
+      'label'
+      'breed';
+    justify-items: center;
+    min-height: 166px;
     text-align: center;
+  }
+
+  .pet-kind-preview {
+    width: 88px;
+    height: 88px;
+  }
+
+  .breed-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pet-stage.pet-stage-3d,
+  .pet-stage-3d > .interactive-pet-3d {
+    min-height: 330px;
+  }
+
+  .pet-stage-3d .pet-stage-copy {
+    right: 10px;
+    top: 58px;
+    min-width: 108px;
+    max-width: 138px;
+    padding: 9px 11px;
   }
 }
 
@@ -474,8 +532,6 @@
     transform: none;
   }
 
-  .pet-stage.is-cheering .pet-doodle-cat,
-  .pet-stage.is-cheering .pet-doodle-dog,
   .pet-hearts span {
     animation: none;
   }

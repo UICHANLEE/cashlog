@@ -39,6 +39,13 @@ describe('Cashlog photo MVP', () => {
 
     expect(screen.getByText(/나비와 함께 쓰는 가계부/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '나비' })).toHaveAttribute('aria-pressed', 'true')
+
+    const petStages = screen.getAllByRole('button', { name: /나비 쓰다듬기\. 드래그하면/ })
+    await user.click(petStages[petStages.length - 1])
+    expect(screen.getByText('나비가 기분 좋게 꼬리를 흔들어요')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /초코 캐릭터.*강아지.*말티즈/ }))
+    expect(screen.getAllByRole('button', { name: /초코 쓰다듬기\. 드래그하면/ })).toHaveLength(2)
   })
 
   it('opens the day photo story reel when 스토리 is enabled', async () => {
