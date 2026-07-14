@@ -5,8 +5,9 @@ export type SupabaseConfig = {
 
 export const getSupabaseConfig = (): SupabaseConfig | null => {
   const url = import.meta.env.VITE_SUPABASE_URL?.trim()
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim()
+  const anonKey =
+    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim() ||
+    import.meta.env.VITE_SUPABASE_ANON_KEY?.trim()
   if (!url || !anonKey) return null
   return { url: url.replace(/\/$/, ''), anonKey }
 }
-

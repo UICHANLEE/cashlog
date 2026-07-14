@@ -95,7 +95,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     cashlog: {
       nodeEnv: process.env.NODE_ENV ?? 'unknown',
       vercelEnv: process.env.VERCEL_ENV ?? null,
-      supabaseConfigured: Boolean(process.env.VITE_SUPABASE_URL && process.env.VITE_SUPABASE_ANON_KEY),
+      supabaseConfigured: Boolean(
+        process.env.VITE_SUPABASE_URL &&
+          (process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY),
+      ),
       productAnalyzerConfigured: Boolean(analyzerEndpoint),
       productAnalyzerOrigin: safeOrigin(analyzerEndpoint),
       openAiConfigured: Boolean(process.env.OPENAI_API_KEY),

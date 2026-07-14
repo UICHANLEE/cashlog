@@ -108,8 +108,10 @@ Catai FastAPI 서버의 실제 엔드포인트 계약:
 
 ```env
 VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_xxx
 ```
+
+기존 프로젝트의 legacy `anon` 키를 사용한다면 `VITE_SUPABASE_ANON_KEY`도 계속 지원합니다. Vercel 환경 변수는 빌드 시 주입되므로 값을 추가하거나 수정한 뒤 반드시 새로 배포해야 합니다.
 
 앱에서는 이메일/비밀번호 회원가입·로그인, 비밀번호 없는 메일 링크 로그인을 모두 지원합니다. 회원가입 시 만 14세 이상, 개인정보, 사진·시간 처리 필수 동의와 위치정보 선택 동의를 구분해 받고 동의 버전을 저장합니다. 로그인하면 로컬 기록과 원격 기록을 병합하고, 선택한 고양이/강아지 프로필과 사진 보관본도 계정에 저장합니다.
 
