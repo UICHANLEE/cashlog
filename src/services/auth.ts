@@ -14,6 +14,15 @@ export type CashlogSession = {
   user?: CashlogUser
 }
 
+export const CASHLOG_CONSENT_VERSION = '2026-07-14'
+
+export type SignupConsents = {
+  age14: true
+  privacy: true
+  photoAndTime: true
+  location: boolean
+}
+
 type SupabaseAuthBody = {
   access_token?: string
   refresh_token?: string
@@ -113,7 +122,7 @@ export const createCashlogAuthClient = () => {
       headers: authHeaders(config),
       body: JSON.stringify({
         email,
-        create_user: true,
+        create_user: false,
         options: redirectTo ? { email_redirect_to: redirectTo } : undefined,
       }),
     })
@@ -139,12 +148,28 @@ export const createCashlogAuthClient = () => {
     return session
   }
 
-  const signUpWithPassword = async (email: string, password: string): Promise<CashlogSession | null> => {
+  const signUpWithPassword = async (
+    email: string,
+    password: string,
+    consents: SignupConsents,
+  ): Promise<CashlogSession | null> => {
     if (!config) throw new Error('Supabase 환경변수가 설정되지 않았어요.')
     const response = await fetch(`${config.url}/auth/v1/signup`, {
       method: 'POST',
       headers: authHeaders(config),
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({
+        email,
+        password,
+        data: {
+          app_id: 'cashlog',
+          consent_version: CASHLOG_CONSENT_VERSION,
+          consented_at: new Date().toISOString(),
+          age_14_or_older: consents.age14,
+          privacy_consent: consents.privacy,
+          photo_time_consent: consents.photoAndTime,
+          location_consent: consents.location,
+        },
+      }),
     })
     if (!response.ok) {
       throw new Error(await readAuthError(response, '회원가입 요청에 실패했어요.'))

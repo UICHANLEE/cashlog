@@ -12,6 +12,7 @@ create table if not exists public.cashlog_entries (
   memo text not null default '',
   source text not null check (source in ('photo', 'manual')),
   image_url text,
+  image_storage_path text,
   video_url text,
   analysis jsonb,
   taxonomy_version text not null default '13.33.1',
@@ -34,13 +35,20 @@ create policy "cashlog entries are private"
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
--- Optional future table for durable media storage metadata.
+-- Private media metadata. Binary files live in the private cashlog-media bucket.
 create table if not exists public.cashlog_media (
   id text primary key,
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  expense_id text references public.cashlog_entries(id) on delete cascade,
   storage_path text not null,
   media_type text not null check (media_type in ('image', 'video')),
   thumbnail_path text,
+  original_filename text,
+  mime_type text,
+  size_bytes bigint,
+  width integer,
+  height integer,
+  captured_at timestamptz,
   created_at timestamptz not null default now()
 );
 
@@ -52,6 +60,100 @@ create policy "cashlog media are private"
   for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+-- Signup consent history. app_id keeps this isolated when the Auth project is shared.
+create table if not exists public.cashlog_user_consents (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  app_id text not null check (app_id = 'cashlog'),
+  consent_version text not null,
+  age_14_or_older boolean not null,
+  privacy_consent boolean not null,
+  photo_time_consent boolean not null,
+  location_consent boolean not null default false,
+  consented_at timestamptz not null,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.cashlog_user_consents enable row level security;
+
+drop policy if exists "cashlog users read own consents" on public.cashlog_user_consents;
+create policy "cashlog users read own consents"
+  on public.cashlog_user_consents
+  for select
+  using (auth.uid() = user_id);
+
+create or replace function public.capture_cashlog_signup_consents()
+returns trigger
+language plpgsql
+security definer set search_path = ''
+as $$
+begin
+  if new.raw_user_meta_data ->> 'app_id' = 'cashlog' then
+    insert into public.cashlog_user_consents (
+      user_id, app_id, consent_version, age_14_or_older, privacy_consent,
+      photo_time_consent, location_consent, consented_at
+    ) values (
+      new.id,
+      'cashlog',
+      coalesce(new.raw_user_meta_data ->> 'consent_version', 'unknown'),
+      coalesce((new.raw_user_meta_data ->> 'age_14_or_older')::boolean, false),
+      coalesce((new.raw_user_meta_data ->> 'privacy_consent')::boolean, false),
+      coalesce((new.raw_user_meta_data ->> 'photo_time_consent')::boolean, false),
+      coalesce((new.raw_user_meta_data ->> 'location_consent')::boolean, false),
+      coalesce((new.raw_user_meta_data ->> 'consented_at')::timestamptz, now())
+    )
+    on conflict (user_id) do update set
+      consent_version = excluded.consent_version,
+      age_14_or_older = excluded.age_14_or_older,
+      privacy_consent = excluded.privacy_consent,
+      photo_time_consent = excluded.photo_time_consent,
+      location_consent = excluded.location_consent,
+      consented_at = excluded.consented_at,
+      updated_at = now();
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_cashlog_user_created on auth.users;
+create trigger on_cashlog_user_created
+  after insert on auth.users
+  for each row execute procedure public.capture_cashlog_signup_consents();
+
+-- The bucket is private. A user can access only files under <auth.uid()>/...
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'cashlog-media',
+  'cashlog-media',
+  false,
+  52428800,
+  array['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
+)
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "cashlog storage select own folder" on storage.objects;
+create policy "cashlog storage select own folder"
+  on storage.objects for select to authenticated
+  using (bucket_id = 'cashlog-media' and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "cashlog storage insert own folder" on storage.objects;
+create policy "cashlog storage insert own folder"
+  on storage.objects for insert to authenticated
+  with check (bucket_id = 'cashlog-media' and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "cashlog storage update own folder" on storage.objects;
+create policy "cashlog storage update own folder"
+  on storage.objects for update to authenticated
+  using (bucket_id = 'cashlog-media' and (storage.foldername(name))[1] = auth.uid()::text)
+  with check (bucket_id = 'cashlog-media' and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "cashlog storage delete own folder" on storage.objects;
+create policy "cashlog storage delete own folder"
+  on storage.objects for delete to authenticated
+  using (bucket_id = 'cashlog-media' and (storage.foldername(name))[1] = auth.uid()::text);
 
 -- User-level pet profile so the selected cat/dog, breed, color, and outfit follow the account.
 create table if not exists public.cashlog_pet_profiles (
@@ -145,6 +247,7 @@ create policy "cashlog user category rules are private"
 
 -- Existing projects can safely re-run this file after upgrading the analysis contract.
 alter table public.cashlog_entries add column if not exists taxonomy_version text not null default '13.33.1';
+alter table public.cashlog_entries add column if not exists image_storage_path text;
 alter table public.cashlog_entries add column if not exists analysis_status text;
 alter table public.cashlog_entries add column if not exists analysis_revision integer not null default 0;
 alter table public.cashlog_entries add column if not exists user_category_edited_at timestamptz;
@@ -155,3 +258,10 @@ alter table public.cashlog_category_feedback add column if not exists reason_cod
 alter table public.cashlog_category_feedback add column if not exists session_id text;
 alter table public.cashlog_user_category_rules add column if not exists last_applied_at timestamptz;
 alter table public.cashlog_user_category_rules add column if not exists precision double precision;
+alter table public.cashlog_media add column if not exists expense_id text references public.cashlog_entries(id) on delete cascade;
+alter table public.cashlog_media add column if not exists original_filename text;
+alter table public.cashlog_media add column if not exists mime_type text;
+alter table public.cashlog_media add column if not exists size_bytes bigint;
+alter table public.cashlog_media add column if not exists width integer;
+alter table public.cashlog_media add column if not exists height integer;
+alter table public.cashlog_media add column if not exists captured_at timestamptz;

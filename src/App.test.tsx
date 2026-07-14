@@ -169,6 +169,38 @@ describe('Cashlog photo MVP', () => {
     expect(within(account).getByRole('button', { name: '지금 동기화' })).toBeInTheDocument()
   })
 
+  it('requires signup consent while keeping location optional', async () => {
+    const user = userEvent.setup()
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://cashlog.supabase.co')
+    vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'anon-key')
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void input
+      void init
+      return new Response('{}', { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<App />)
+    await user.click(screen.getByRole('button', { name: '계정 메뉴 열기' }))
+    const account = screen.getByRole('region', { name: '로그인과 동기화' })
+    await user.click(within(account).getByRole('button', { name: '회원가입' }))
+    await user.type(within(account).getByLabelText('로그인 이메일'), 'new@example.com')
+    await user.type(within(account).getByLabelText('로그인 비밀번호'), 'secret1')
+    await user.click(within(account).getByRole('button', { name: '가입하고 시작' }))
+
+    expect(await within(account).findByText('필수 동의 항목을 모두 확인해 주세요.')).toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    await user.click(within(account).getByText(/만 14세 이상입니다/))
+    await user.click(within(account).getByText(/계정·가계부 기록 수집/))
+    await user.click(within(account).getByText(/사진과 촬영·기록 시간/))
+    await user.click(within(account).getByRole('button', { name: '가입하고 시작' }))
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as { data: Record<string, unknown> }
+    expect(body.data.location_consent).toBe(false)
+  })
+
   it('renders the Uichan admin page on /uichan', async () => {
     vi.stubGlobal(
       'fetch',

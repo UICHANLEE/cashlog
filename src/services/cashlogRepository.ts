@@ -20,6 +20,7 @@ type CashlogEntryRow = {
   memo: string
   source: ExpenseSource
   image_url?: string | null
+  image_storage_path?: string | null
   video_url?: string | null
   analysis?: Expense['analysis'] | null
   created_at: string
@@ -36,12 +37,16 @@ const entriesTableName = 'cashlog_entries'
 const petProfilesTableName = 'cashlog_pet_profiles'
 const detectedItemsTableName = 'cashlog_detected_items'
 const categoryFeedbackTableName = 'cashlog_category_feedback'
+const mediaTableName = 'cashlog_media'
 
 const headers = (config: SupabaseConfig, session: CashlogSession) => ({
   apikey: config.anonKey,
   Authorization: `Bearer ${session.accessToken}`,
   'Content-Type': 'application/json',
 })
+
+const durableUrl = (value?: string) =>
+  value && !value.startsWith('blob:') && !value.startsWith('data:') ? value : null
 
 const expenseToRow = (expense: Expense, userId?: string): CashlogEntryRow => ({
   id: expense.id,
@@ -53,8 +58,9 @@ const expenseToRow = (expense: Expense, userId?: string): CashlogEntryRow => ({
   title: expense.title,
   memo: expense.memo,
   source: expense.source,
-  image_url: expense.imageUrl ?? null,
-  video_url: expense.videoUrl ?? null,
+  image_url: expense.imageStoragePath ? null : durableUrl(expense.imageUrl),
+  image_storage_path: expense.imageStoragePath ?? null,
+  video_url: durableUrl(expense.videoUrl),
   analysis: expense.analysis ?? null,
   created_at: expense.createdAt,
   updated_at: expense.updatedAt,
@@ -70,6 +76,7 @@ const rowToExpense = (row: CashlogEntryRow): Expense => ({
   memo: row.memo,
   source: row.source,
   ...(row.image_url ? { imageUrl: row.image_url } : {}),
+  ...(row.image_storage_path ? { imageStoragePath: row.image_storage_path } : {}),
   ...(row.video_url ? { videoUrl: row.video_url } : {}),
   ...(row.analysis ? { analysis: row.analysis } : {}),
   createdAt: row.created_at,
@@ -98,6 +105,7 @@ export const createCashlogRepository = (
   const petProfilesBase = `${config.url}/rest/v1/${petProfilesTableName}`
   const detectedItemsBase = `${config.url}/rest/v1/${detectedItemsTableName}`
   const categoryFeedbackBase = `${config.url}/rest/v1/${categoryFeedbackTableName}`
+  const mediaBase = `${config.url}/rest/v1/${mediaTableName}`
   const userId = session.user?.id
 
   const listExpenses = async (): Promise<Expense[]> => {
@@ -195,6 +203,39 @@ export const createCashlogRepository = (
     if (!response.ok) throw new Error(await response.text())
   }
 
+  const saveImageMetadata = async (input: {
+    expenseId: string
+    storagePath: string
+    originalFilename: string
+    mimeType: string
+    sizeBytes: number
+    width?: number
+    height?: number
+    capturedAt: string
+  }) => {
+    const response = await fetch(`${mediaBase}?on_conflict=id`, {
+      method: 'POST',
+      headers: {
+        ...headers(config, session),
+        Prefer: 'resolution=merge-duplicates,return=minimal',
+      },
+      body: JSON.stringify({
+        id: `${input.expenseId}-image`,
+        ...(userId ? { user_id: userId } : {}),
+        expense_id: input.expenseId,
+        storage_path: input.storagePath,
+        media_type: 'image',
+        original_filename: input.originalFilename,
+        mime_type: input.mimeType,
+        size_bytes: input.sizeBytes,
+        width: input.width ?? null,
+        height: input.height ?? null,
+        captured_at: input.capturedAt,
+      }),
+    })
+    if (!response.ok) throw new Error(await response.text())
+  }
+
   return {
     listExpenses,
     upsertExpense,
@@ -203,5 +244,6 @@ export const createCashlogRepository = (
     upsertPetState,
     saveCategoryFeedback,
     saveDetectedItems,
+    saveImageMetadata,
   }
 }

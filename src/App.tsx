@@ -73,6 +73,8 @@ import {
 } from './domain/pet'
 import { createCashlogAuthClient, type CashlogSession } from './services/auth'
 import { createCashlogRepository, mergeExpenses } from './services/cashlogRepository'
+import { createCashlogStorage } from './services/supabaseStorage'
+import { prepareImageForStorage } from './media/prepareImageForStorage'
 
 type AddMode = 'closed' | 'choice' | 'photo' | 'manual'
 type StoryMode = null | 'day' | 'month'
@@ -146,9 +148,11 @@ function CashlogApp() {
   const [addMode, setAddMode] = useState<AddMode>('closed')
   const [form, setForm] = useState<ExpenseForm>(emptyForm)
   const [photoPreview, setPhotoPreview] = useState('')
+  const photoFileRef = useRef<File | null>(null)
   const [analysis, setAnalysis] = useState<PhotoAnalysis | null>(null)
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
   const [cameraError, setCameraError] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const [captureKind, setCaptureKind] = useState<'photo' | 'video'>('photo')
   const [isRecording, setIsRecording] = useState(false)
@@ -169,10 +173,20 @@ function CashlogApp() {
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
   const [authMessage, setAuthMessage] = useState('')
+  const [signupConsents, setSignupConsents] = useState({
+    age14: false,
+    privacy: false,
+    photoAndTime: false,
+    location: false,
+  })
   const [, setSyncStatus] = useState('Supabase 미연결 · 로컬 저장 중')
   const authClient = useMemo(() => createCashlogAuthClient(), [])
   const repository = useMemo(
     () => createCashlogRepository(authClient.config, session),
+    [authClient.config, session],
+  )
+  const storage = useMemo(
+    () => createCashlogStorage(authClient.config, session),
     [authClient.config, session],
   )
   const initialSyncedSessionRef = useRef<string | null>(null)
@@ -216,12 +230,14 @@ function CashlogApp() {
     setIsRecording(false)
     setRecordSeconds(0)
     recordedChunksRef.current = []
+    photoFileRef.current = null
     posterFileRef.current = null
     mediaRecorderRef.current = null
   }, [clearRecordTimer])
 
   const applyPhotoFile = useCallback(async (file: File) => {
     setCameraError(null)
+    photoFileRef.current = file
     setPhotoPreview((prev) => {
       if (prev.startsWith('blob:')) URL.revokeObjectURL(prev)
       return URL.createObjectURL(file)
@@ -244,6 +260,23 @@ function CashlogApp() {
       setForm(emptyForm())
     }
   }, [])
+
+  const hydrateExpenseImages = useCallback(
+    async (items: Expense[]) => {
+      if (!storage) return items
+      return Promise.all(
+        items.map(async (item) => {
+          if (!item.imageStoragePath) return item
+          try {
+            return { ...item, imageUrl: await storage.createSignedUrl(item.imageStoragePath) }
+          } catch {
+            return { ...item, imageUrl: undefined }
+          }
+        }),
+      )
+    },
+    [storage],
+  )
 
   useEffect(() => {
     const video = videoRef.current
@@ -363,7 +396,7 @@ function CashlogApp() {
 
     setSyncStatus('클라우드와 맞추는 중...')
     try {
-      const remote = await repository.listExpenses()
+      const remote = await hydrateExpenseImages(await repository.listExpenses())
       const merged = mergeExpenses(expenses, remote)
       setExpenses(merged)
       await repository.upsertExpenses(merged)
@@ -380,7 +413,7 @@ function CashlogApp() {
     const runInitialSync = async () => {
       setSyncStatus('클라우드와 맞추는 중...')
       try {
-        const remote = await repository.listExpenses()
+        const remote = await hydrateExpenseImages(await repository.listExpenses())
         const remotePet = await repository.getPetState()
         if (remotePet) {
           setPetState(remotePet)
@@ -405,7 +438,7 @@ function CashlogApp() {
       }
     }
     void runInitialSync()
-  }, [petState, repository, session?.accessToken])
+  }, [hydrateExpenseImages, petState, repository, session?.accessToken])
 
   useEffect(() => {
     if (!repository || !petCloudReadyRef.current) return
@@ -451,7 +484,16 @@ function CashlogApp() {
         return
       }
       if (authMode === 'signUp') {
-        const created = await authClient.signUpWithPassword(email, password)
+        if (!signupConsents.age14 || !signupConsents.privacy || !signupConsents.photoAndTime) {
+          setAuthMessage('필수 동의 항목을 모두 확인해 주세요.')
+          return
+        }
+        const created = await authClient.signUpWithPassword(email, password, {
+          age14: true,
+          privacy: true,
+          photoAndTime: true,
+          location: signupConsents.location,
+        })
         if (created) {
           await completeAuth(created, '가입 완료! 계정 동기화를 준비했어요.')
         } else {
@@ -713,11 +755,19 @@ function CashlogApp() {
     await applyPhotoFile(file)
   }
 
-  const handleSave = (event: FormEvent<HTMLFormElement>) => {
+  const handleSave = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
     const amount = Number(form.amount)
     if (!form.title.trim() || Number.isNaN(amount) || amount <= 0) return
+
+    if (photoFileRef.current && authClient.isConfigured && !storage) {
+      setShowAccount(true)
+      setAuthMessage('사진 보관본을 계정에 저장하려면 먼저 로그인해 주세요.')
+      return
+    }
+
+    setIsSaving(true)
 
     const dateTime = new Date(`${selectedDate}T12:00:00`).toISOString()
     const categoryNormalized: LedgerCategoryId =
@@ -765,6 +815,27 @@ function CashlogApp() {
       })
     }
 
+    const photoFile = photoFileRef.current
+    let preparedImage: Awaited<ReturnType<typeof prepareImageForStorage>> | null = null
+    if (photoFile && storage) {
+      try {
+        preparedImage = await prepareImageForStorage(photoFile)
+        const uploaded = await storage.uploadImage(preparedImage.file, expense.id)
+        expense = {
+          ...expense,
+          imageStoragePath: uploaded.path,
+          imageUrl: uploaded.signedUrl,
+        }
+        setCameraError(null)
+      } catch (e) {
+        setCameraError(
+          e instanceof Error ? `사진 보관에 실패했어요: ${e.message.slice(0, 80)}` : '사진 보관에 실패했어요.',
+        )
+        setIsSaving(false)
+        return
+      }
+    }
+
     setExpenses((current) => [expense, ...current])
     if (repository) {
       const shouldSaveFeedback =
@@ -775,6 +846,22 @@ function CashlogApp() {
       const firstDetectedItem = analysis?.detectedItems?.[0]
       repository
         .upsertExpense(expense)
+        .then(() =>
+          preparedImage && expense.imageStoragePath
+            ? repository.saveImageMetadata({
+                expenseId: expense.id,
+                storagePath: expense.imageStoragePath,
+                originalFilename: photoFile?.name ?? preparedImage.file.name,
+                mimeType: preparedImage.file.type,
+                sizeBytes: preparedImage.file.size,
+                width: preparedImage.width,
+                height: preparedImage.height,
+                capturedAt: photoFile?.lastModified
+                  ? new Date(photoFile.lastModified).toISOString()
+                  : expense.dateTime,
+              })
+            : undefined,
+        )
         .then(() => repository.saveDetectedItems(expense.id, analysis?.detectedItems ?? []))
         .then(() =>
           shouldSaveFeedback
@@ -798,9 +885,11 @@ function CashlogApp() {
     stopCamera()
     // 미리보기 URL의 소유권을 저장된 기록으로 넘김 (여기서 revoke 하지 않음)
     setPhotoPreview('')
+    photoFileRef.current = null
     setVideoPreview('')
     setAnalysis(null)
     setAddMode('closed')
+    setIsSaving(false)
   }
 
   const updateForm = (field: keyof ExpenseForm, value: string | LedgerKind) => {
@@ -881,6 +970,52 @@ function CashlogApp() {
                 <input type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="email@example.com" aria-label="로그인 이메일" autoComplete="email" />
                 {authMode !== 'magic' && (
                   <input type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder="비밀번호 6자 이상" aria-label="로그인 비밀번호" autoComplete={authMode === 'signUp' ? 'new-password' : 'current-password'} />
+                )}
+                {authMode === 'signUp' && (
+                  <fieldset className="signup-consents">
+                    <legend>가입 및 개인정보 동의</legend>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={signupConsents.age14}
+                        onChange={(event) => setSignupConsents((current) => ({ ...current, age14: event.target.checked }))}
+                      />
+                      <span><strong>[필수]</strong> 만 14세 이상입니다.</span>
+                    </label>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={signupConsents.privacy}
+                        onChange={(event) => setSignupConsents((current) => ({ ...current, privacy: event.target.checked }))}
+                      />
+                      <span><strong>[필수]</strong> 계정·가계부 기록 수집 및 이용에 동의합니다.</span>
+                    </label>
+                    <details>
+                      <summary>개인정보 수집 내용</summary>
+                      <p>이메일, 계정 식별자, 소비 기록을 가입·동기화·서비스 제공 목적으로 처리하며, 탈퇴 시 지체 없이 삭제합니다. 관련 법령에 따른 보존 의무가 있는 정보는 해당 기간 동안 보관할 수 있습니다.</p>
+                    </details>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={signupConsents.photoAndTime}
+                        onChange={(event) => setSignupConsents((current) => ({ ...current, photoAndTime: event.target.checked }))}
+                      />
+                      <span><strong>[필수]</strong> 사진과 촬영·기록 시간의 저장 및 AI 분석에 동의합니다.</span>
+                    </label>
+                    <details>
+                      <summary>사진 처리 내용</summary>
+                      <p>사진은 용량을 줄인 비공개 보관본으로 계정에 저장되며 카테고리 추천에 사용됩니다. 다른 사용자는 볼 수 없고, 원할 때 삭제를 요청할 수 있습니다.</p>
+                    </details>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={signupConsents.location}
+                        onChange={(event) => setSignupConsents((current) => ({ ...current, location: event.target.checked }))}
+                      />
+                      <span><strong>[선택]</strong> 사진 촬영 위치의 저장 및 개인화에 동의합니다.</span>
+                    </label>
+                    <p className="consent-note">위치 동의를 거부해도 가입할 수 있으며, 실제 위치 권한은 기능을 사용할 때 기기에서 다시 확인합니다.</p>
+                  </fieldset>
                 )}
                 <button type="submit">{authMode === 'signUp' ? '가입하고 시작' : authMode === 'magic' ? '메일 링크 받기' : '로그인'}</button>
               </form>
@@ -1284,6 +1419,7 @@ function CashlogApp() {
                   onChange={updateForm}
                   onLedgerKindChange={handleLedgerKindChange}
                   onSubmit={handleSave}
+                  isSaving={isSaving}
                 />
               </div>
             )}
@@ -1294,6 +1430,7 @@ function CashlogApp() {
                 onChange={updateForm}
                 onLedgerKindChange={handleLedgerKindChange}
                 onSubmit={handleSave}
+                isSaving={isSaving}
               />
             )}
           </div>
@@ -1326,11 +1463,13 @@ function ExpenseEditor({
   onChange,
   onLedgerKindChange,
   onSubmit,
+  isSaving,
 }: {
   form: ExpenseForm
   onChange: (field: keyof ExpenseForm, value: string | LedgerKind) => void
   onLedgerKindChange: (kind: LedgerKind) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
+  isSaving: boolean
 }) {
   const expenseMeta = getCategoryMeta(form.category as CategoryId)
   const expenseActiveGroup = expenseMeta.group
@@ -1479,8 +1618,8 @@ function ExpenseEditor({
           placeholder="기억하고 싶은 내용을 남겨보세요."
         />
       </label>
-      <button type="submit" className="primary-button">
-        저장하기
+      <button type="submit" className="primary-button" disabled={isSaving}>
+        {isSaving ? '사진 보관 중...' : '저장하기'}
       </button>
     </form>
   )
