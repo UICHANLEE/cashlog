@@ -3,6 +3,7 @@ import { createCashlogAuthClient } from './auth'
 
 describe('Cashlog signup consent', () => {
   afterEach(() => {
+    localStorage.clear()
     window.history.replaceState({}, '', '/')
     vi.unstubAllEnvs()
     vi.unstubAllGlobals()
@@ -78,5 +79,51 @@ describe('Cashlog signup consent', () => {
       'Email link is invalid',
     )
     expect(window.location.hash).toBe('')
+  })
+
+  it('builds Google and Kakao authorize URLs that return to Cashlog', () => {
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://cashlog.supabase.co')
+    vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'anon-key')
+    const client = createCashlogAuthClient()
+
+    const google = new URL(client.getOAuthAuthorizeUrl('google'))
+    const kakao = new URL(client.getOAuthAuthorizeUrl('kakao'))
+
+    expect(google.pathname).toBe('/auth/v1/authorize')
+    expect(google.searchParams.get('provider')).toBe('google')
+    expect(google.searchParams.get('redirect_to')).toBe(window.location.origin + '/')
+    expect(kakao.searchParams.get('provider')).toBe('kakao')
+  })
+
+  it('stores pending OAuth consent in the authenticated user row', async () => {
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://cashlog.supabase.co')
+    vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'anon-key')
+    localStorage.setItem('cashlog.oauth.pending-consent', JSON.stringify({
+      age14: true,
+      privacy: true,
+      photoAndTime: true,
+      location: false,
+      consentVersion: '2026-07-14',
+      consentedAt: '2026-07-14T00:00:00.000Z',
+    }))
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response('', { status: 201 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const saved = await createCashlogAuthClient().persistPendingOAuthConsent({
+      accessToken: 'oauth-access',
+      user: { id: 'oauth-user', email: 'oauth@example.com' },
+    })
+
+    expect(saved).toBe(true)
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(String(url)).toContain('/rest/v1/cashlog_user_consents?on_conflict=user_id')
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      user_id: 'oauth-user',
+      app_id: 'cashlog',
+      privacy_consent: true,
+      location_consent: false,
+    })
+    expect(localStorage.getItem('cashlog.oauth.pending-consent')).toBeNull()
   })
 })

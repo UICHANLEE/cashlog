@@ -1,10 +1,13 @@
 import { getSupabaseConfig, type SupabaseConfig } from './supabaseConfig'
 
 const SESSION_STORAGE_KEY = 'cashlog.supabase.session'
+const OAUTH_CONSENT_STORAGE_KEY = 'cashlog.oauth.pending-consent'
+
+export type OAuthProvider = 'google' | 'kakao'
 
 export type CashlogUser = {
   id: string
-  email: string
+  email?: string
 }
 
 export type CashlogSession = {
@@ -31,6 +34,11 @@ type SupabaseAuthBody = {
     id?: string
     email?: string
   }
+}
+
+type PendingOAuthConsent = SignupConsents & {
+  consentVersion: string
+  consentedAt: string
 }
 
 const redirectTarget = () =>
@@ -67,10 +75,9 @@ const parseSessionPayload = (params: URLSearchParams): CashlogSession | null => 
 const sessionFromAuthBody = (body: SupabaseAuthBody): CashlogSession | null => {
   if (!body.access_token) return null
   const expiresIn = Number(body.expires_in)
-  const user =
-    body.user?.id && body.user?.email
-      ? { id: body.user.id, email: body.user.email }
-      : undefined
+  const user = body.user?.id
+    ? { id: body.user.id, ...(body.user.email ? { email: body.user.email } : {}) }
+    : undefined
   return {
     accessToken: body.access_token,
     refreshToken: body.refresh_token,
@@ -186,6 +193,66 @@ export const createCashlogAuthClient = () => {
     return session
   }
 
+  const getOAuthAuthorizeUrl = (provider: OAuthProvider) => {
+    if (!config) throw new Error('Supabase 환경변수가 설정되지 않았어요.')
+    const endpoint = new URL(`${config.url}/auth/v1/authorize`)
+    endpoint.searchParams.set('provider', provider)
+    const redirectTo = redirectTarget()
+    if (redirectTo) endpoint.searchParams.set('redirect_to', redirectTo)
+    return endpoint.toString()
+  }
+
+  const signInWithOAuth = (provider: OAuthProvider, consents: SignupConsents) => {
+    if (typeof window === 'undefined') return
+    const pendingConsent: PendingOAuthConsent = {
+      ...consents,
+      consentVersion: CASHLOG_CONSENT_VERSION,
+      consentedAt: new Date().toISOString(),
+    }
+    localStorage.setItem(OAUTH_CONSENT_STORAGE_KEY, JSON.stringify(pendingConsent))
+    window.location.assign(getOAuthAuthorizeUrl(provider))
+  }
+
+  const persistPendingOAuthConsent = async (session: CashlogSession) => {
+    if (!config || typeof window === 'undefined') return false
+    const raw = localStorage.getItem(OAUTH_CONSENT_STORAGE_KEY)
+    if (!raw) return false
+
+    let consent: PendingOAuthConsent
+    try {
+      consent = JSON.parse(raw) as PendingOAuthConsent
+    } catch {
+      localStorage.removeItem(OAUTH_CONSENT_STORAGE_KEY)
+      return false
+    }
+
+    const user = session.user ?? (await getUser(session))
+    if (!user?.id) throw new Error('간편 로그인 계정 정보를 확인하지 못했어요.')
+    const response = await fetch(`${config.url}/rest/v1/cashlog_user_consents?on_conflict=user_id`, {
+      method: 'POST',
+      headers: {
+        ...authHeaders(config, session.accessToken),
+        Prefer: 'resolution=merge-duplicates,return=minimal',
+      },
+      body: JSON.stringify({
+        user_id: user.id,
+        app_id: 'cashlog',
+        consent_version: consent.consentVersion,
+        age_14_or_older: consent.age14,
+        privacy_consent: consent.privacy,
+        photo_time_consent: consent.photoAndTime,
+        location_consent: consent.location,
+        consented_at: consent.consentedAt,
+        updated_at: new Date().toISOString(),
+      }),
+    })
+    if (!response.ok) {
+      throw new Error(await readAuthError(response, '간편 로그인 동의 내역을 저장하지 못했어요.'))
+    }
+    localStorage.removeItem(OAUTH_CONSENT_STORAGE_KEY)
+    return true
+  }
+
   const signUpWithPassword = async (
     email: string,
     password: string,
@@ -226,8 +293,8 @@ export const createCashlogAuthClient = () => {
     })
     if (!response.ok) return undefined
     const body = (await response.json()) as { id?: string; email?: string }
-    if (!body.id || !body.email) return undefined
-    return { id: body.id, email: body.email }
+    if (!body.id) return undefined
+    return { id: body.id, ...(body.email ? { email: body.email } : {}) }
   }
 
   const hydrateSession = async (session: CashlogSession): Promise<CashlogSession> => {
@@ -245,7 +312,10 @@ export const createCashlogAuthClient = () => {
     consumeSessionFromUrl,
     signInWithEmail,
     signInWithPassword,
+    getOAuthAuthorizeUrl,
+    signInWithOAuth,
     signUpWithPassword,
+    persistPendingOAuthConsent,
     hydrateSession,
     signOut,
   }

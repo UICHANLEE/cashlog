@@ -71,7 +71,11 @@ import {
   type PetKind,
   type PetState,
 } from './domain/pet'
-import { createCashlogAuthClient, type CashlogSession } from './services/auth'
+import {
+  createCashlogAuthClient,
+  type CashlogSession,
+  type OAuthProvider,
+} from './services/auth'
 import { createCashlogRepository, mergeExpenses } from './services/cashlogRepository'
 import { createCashlogStorage } from './services/supabaseStorage'
 import { prepareImageForStorage } from './media/prepareImageForStorage'
@@ -173,6 +177,7 @@ function CashlogApp() {
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
   const [authMessage, setAuthMessage] = useState('')
+  const [showSocialConsents, setShowSocialConsents] = useState(false)
   const [signupConsents, setSignupConsents] = useState({
     age14: false,
     privacy: false,
@@ -319,14 +324,21 @@ function CashlogApp() {
           return
         }
         const hydrated = await authClient.hydrateSession(stored)
+        const savedOAuthConsent = fromUrl
+          ? await authClient.persistPendingOAuthConsent(hydrated)
+          : false
         if (!alive) return
         authClient.saveSession(hydrated)
         setSession(hydrated)
         if (fromUrl) {
           setShowAccount(true)
-          setAuthMessage('메일 인증이 완료됐어요. 계정으로 로그인했습니다.')
+          setAuthMessage(
+            savedOAuthConsent
+              ? '간편 로그인이 완료됐어요. 기록을 계정과 맞출게요.'
+              : '메일 인증이 완료됐어요. 계정으로 로그인했습니다.',
+          )
         }
-        setSyncStatus(hydrated.user ? `${hydrated.user.email} 동기화 준비` : '동기화 준비')
+        setSyncStatus(hydrated.user?.email ? `${hydrated.user.email} 동기화 준비` : '동기화 준비')
       } catch (error) {
         if (!alive) return
         setShowAccount(true)
@@ -465,7 +477,26 @@ function CashlogApp() {
     setSession(hydrated)
     setAuthPassword('')
     setAuthMessage(message)
-    setSyncStatus(hydrated.user ? `${hydrated.user.email} 동기화 준비` : '동기화 준비')
+    setSyncStatus(hydrated.user?.email ? `${hydrated.user.email} 동기화 준비` : '동기화 준비')
+  }
+
+  const handleSocialLogin = (provider: OAuthProvider) => {
+    if (!authClient.isConfigured) {
+      setAuthMessage('로그인 서비스 연결이 아직 완료되지 않았어요.')
+      return
+    }
+    if (!signupConsents.age14 || !signupConsents.privacy || !signupConsents.photoAndTime) {
+      setShowSocialConsents(true)
+      setAuthMessage('간편 가입에 필요한 필수 동의를 확인해 주세요.')
+      return
+    }
+    setAuthMessage(`${provider === 'google' ? 'Google' : '카카오'} 로그인으로 이동할게요.`)
+    authClient.signInWithOAuth(provider, {
+      age14: true,
+      privacy: true,
+      photoAndTime: true,
+      location: signupConsents.location,
+    })
   }
 
   const handleAuthSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -981,6 +1012,38 @@ function CashlogApp() {
               </div>
             ) : (
               <form className="account-form" onSubmit={handleAuthSubmit}>
+                <div className="social-login-buttons" aria-label="간편 로그인">
+                  <button type="button" className="social-login google" onClick={() => handleSocialLogin('google')}>
+                    <span className="social-mark google-mark" aria-hidden>G</span>
+                    Google로 계속하기
+                  </button>
+                  <button type="button" className="social-login kakao" onClick={() => handleSocialLogin('kakao')}>
+                    <span className="social-mark kakao-mark" aria-hidden>톡</span>
+                    카카오로 계속하기
+                  </button>
+                </div>
+                {showSocialConsents && authMode !== 'signUp' && (
+                  <fieldset className="signup-consents social-consents">
+                    <legend>간편 가입 동의</legend>
+                    <label>
+                      <input type="checkbox" checked={signupConsents.age14} onChange={(event) => setSignupConsents((current) => ({ ...current, age14: event.target.checked }))} />
+                      <span><strong>[필수]</strong> 만 14세 이상입니다.</span>
+                    </label>
+                    <label>
+                      <input type="checkbox" checked={signupConsents.privacy} onChange={(event) => setSignupConsents((current) => ({ ...current, privacy: event.target.checked }))} />
+                      <span><strong>[필수]</strong> 계정·가계부 기록 수집 및 이용에 동의합니다.</span>
+                    </label>
+                    <label>
+                      <input type="checkbox" checked={signupConsents.photoAndTime} onChange={(event) => setSignupConsents((current) => ({ ...current, photoAndTime: event.target.checked }))} />
+                      <span><strong>[필수]</strong> 사진과 촬영·기록 시간의 저장 및 AI 분석에 동의합니다.</span>
+                    </label>
+                    <label>
+                      <input type="checkbox" checked={signupConsents.location} onChange={(event) => setSignupConsents((current) => ({ ...current, location: event.target.checked }))} />
+                      <span><strong>[선택]</strong> 사진 촬영 위치의 저장 및 개인화에 동의합니다.</span>
+                    </label>
+                  </fieldset>
+                )}
+                <div className="account-divider"><span>또는 이메일로</span></div>
                 <div className="account-mode-tabs" role="group" aria-label="로그인 방식">
                   <button type="button" className={authMode === 'signIn' ? 'active' : ''} onClick={() => setAuthMode('signIn')}>로그인</button>
                   <button type="button" className={authMode === 'signUp' ? 'active' : ''} onClick={() => setAuthMode('signUp')}>회원가입</button>

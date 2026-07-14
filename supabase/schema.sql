@@ -82,6 +82,19 @@ create policy "cashlog users read own consents"
   for select
   using (auth.uid() = user_id);
 
+drop policy if exists "cashlog users insert own consents" on public.cashlog_user_consents;
+create policy "cashlog users insert own consents"
+  on public.cashlog_user_consents
+  for insert
+  with check (auth.uid() = user_id and app_id = 'cashlog');
+
+drop policy if exists "cashlog users update own consents" on public.cashlog_user_consents;
+create policy "cashlog users update own consents"
+  on public.cashlog_user_consents
+  for update
+  using (auth.uid() = user_id and app_id = 'cashlog')
+  with check (auth.uid() = user_id and app_id = 'cashlog');
+
 create or replace function public.capture_cashlog_signup_consents()
 returns trigger
 language plpgsql

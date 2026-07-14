@@ -125,6 +125,82 @@
   grid-template-columns: 1fr;
 }
 
+.social-login-buttons {
+  display: grid;
+  gap: 8px;
+}
+
+.social-login {
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 28px;
+  align-items: center;
+  min-height: 44px;
+  border: 2px solid var(--line);
+  border-radius: 13px 6px 13px 6px;
+  padding: 7px 10px;
+  color: #241f1b;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: var(--sticker-shadow-sm);
+}
+
+.social-login::after {
+  content: '';
+}
+
+.social-login.google {
+  background: #fff;
+}
+
+.social-login.kakao {
+  background: #fee500;
+}
+
+.social-mark {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.google-mark {
+  color: #4285f4;
+  background: #fff;
+  border: 1px solid #dadce0;
+}
+
+.kakao-mark {
+  color: #fee500;
+  background: #241f1b;
+  font-size: 11px;
+}
+
+.account-divider {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.account-divider::before,
+.account-divider::after {
+  content: '';
+  height: 1px;
+  background: color-mix(in srgb, var(--line) 32%, transparent);
+}
+
+.social-consents {
+  background: rgba(255, 249, 226, 0.9);
+}
+
 .account-mode-tabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

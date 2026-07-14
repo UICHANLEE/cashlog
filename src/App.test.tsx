@@ -44,6 +44,23 @@ describe('Cashlog photo MVP', () => {
     expect(within(account).getByText('로그인 서비스 연결이 아직 완료되지 않았어요.')).toBeInTheDocument()
   })
 
+  it('offers Google and Kakao login and asks for required consent first', async () => {
+    const user = userEvent.setup()
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://cashlog.supabase.co')
+    vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'anon-key')
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '계정 메뉴 열기' }))
+    const account = screen.getByRole('region', { name: '로그인과 동기화' })
+    expect(within(account).getByRole('button', { name: 'Google로 계속하기' })).toBeInTheDocument()
+    expect(within(account).getByRole('button', { name: '카카오로 계속하기' })).toBeInTheDocument()
+
+    await user.click(within(account).getByRole('button', { name: 'Google로 계속하기' }))
+
+    expect(within(account).getByText('간편 가입에 필요한 필수 동의를 확인해 주세요.')).toBeInTheDocument()
+    expect(within(account).getByText('간편 가입 동의')).toBeInTheDocument()
+  })
+
   it('keeps the pet playground behind a dedicated tab', async () => {
     const user = userEvent.setup()
     render(<App />)

@@ -11,7 +11,7 @@
 - **상품 사진 카테고리 추천 구조**: B안 문서 기준 `/api/analyze-image` → 상품 item 탐지 결과 → 카테고리 추천 → 사용자 수정 피드백 저장
 - **펫 놀이터**: 기록을 남길수록 고양이·강아지가 함께 레벨업, 레벨에 따라 코디(옷) 해금·갈아입히기
 - **일별 로그 & 스토리**: 선택한 날짜의 타임라인·일기형 요약, 하루/한 달을 인스타 스토리처럼 재생
-- **로그인·계정 동기화**: Supabase Auth 기반 이메일/비밀번호 가입·로그인, 메일 링크 로그인, 기록·펫 프로필 동기화
+- **로그인·계정 동기화**: Supabase Auth 기반 Google·카카오 간편 로그인, 이메일 가입·로그인, 기록·펫 프로필 동기화
 - **비공개 사진 보관**: 촬영 원본의 구도를 유지한 최대 2560px JPEG 보관본을 개인 Storage 폴더에 저장하고, 만료되는 서명 URL로만 표시
 - **손그림 다이어리 UI**: 손글씨 폰트·종이 질감·삐뚤 손그림 테두리의 1020 취향 디자인
 - **로컬 우선 저장**: 브라우저 `localStorage`에 먼저 저장하고, 로그인 시 계정 데이터와 병합
@@ -102,7 +102,7 @@ Catai FastAPI 서버의 실제 엔드포인트 계약:
 
 ## 로그인·DB 동기화 설정
 
-1. Supabase 프로젝트를 만들고 Auth의 Email provider를 켭니다.
+1. Supabase 프로젝트를 만들고 Auth의 Email, Google, Kakao provider를 켭니다.
 2. SQL Editor에서 [`supabase/schema.sql`](supabase/schema.sql)을 실행해 앱 전용 테이블, 비공개 `cashlog-media` 버킷, RLS 정책을 만듭니다.
 3. 루트 `.env` 또는 Vercel 환경 변수에 아래 값을 넣습니다.
 
@@ -117,6 +117,18 @@ Supabase Dashboard의 **Authentication → URL Configuration**도 설정해야 �
 
 - Site URL: 실제 Cashlog 프로덕션 주소(예: `https://cashlog.example.com`)
 - Redirect URLs: 프로덕션 주소와 로컬 개발 주소(예: `http://localhost:5175/`)
+
+### Google·카카오 간편 로그인
+
+프론트에 Google/Kakao 비밀키를 넣지 않습니다. 공급자 키는 모두 **Supabase Dashboard → Authentication → Providers**에만 저장합니다.
+
+1. Google Cloud Console에서 OAuth 웹 클라이언트를 만들고, 승인된 리디렉션 URI에 Supabase가 Provider 화면에서 안내하는 콜백 주소를 등록합니다. 보통 `https://<project-ref>.supabase.co/auth/v1/callback` 형식입니다.
+2. 발급된 Google Client ID와 Client Secret을 Supabase의 Google Provider에 입력하고 활성화합니다.
+3. Kakao Developers에서 앱을 만든 뒤 카카오 로그인과 동의 항목을 설정하고, 같은 Supabase 콜백 주소를 Redirect URI에 등록합니다.
+4. Kakao REST API 키와 Client Secret을 Supabase의 Kakao Provider에 입력하고 활성화합니다. Cashlog에서 이메일을 표시하려면 카카오 동의 항목에서 계정 이메일 제공도 설정합니다.
+5. 변경된 [`supabase/schema.sql`](supabase/schema.sql)을 SQL Editor에서 다시 실행합니다. 기존 데이터를 삭제하지 않고 OAuth 사용자가 자신의 가입 동의 내역을 저장할 RLS 정책을 추가합니다.
+
+Google·카카오 로그인에는 별도의 Vercel 환경 변수가 필요하지 않습니다. 기존 `VITE_SUPABASE_URL`과 `VITE_SUPABASE_PUBLISHABLE_KEY`만 유지하면 됩니다.
 
 가입·메일링크 요청은 현재 접속 중인 Cashlog 주소를 `redirect_to`로 전달합니다. 기본 세션 fragment와 커스텀 이메일 템플릿의 `token_hash` 콜백을 모두 처리합니다.
 
