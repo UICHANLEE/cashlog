@@ -79,6 +79,9 @@ h1 {
   max-width: 650px;
   font-size: clamp(54px, 7.2vw, 98px);
   line-height: 0.94;
+  word-break: keep-all;
+  overflow-wrap: normal;
+  text-wrap: balance;
 }
 
 .hero-copy-block > p:not(.eyebrow) {
@@ -226,7 +229,11 @@ h1 {
 @media (max-width: 760px) {
   .reservation-hero { min-height: 860px; padding: 20px 20px 74px; }
   .hero-copy-block { width: 100%; padding-top: 58px; }
-  h1 { font-size: clamp(50px, 15vw, 70px); }
+  h1 {
+    max-width: 100%;
+    font-size: clamp(46px, 13.5vw, 66px);
+    line-height: 1.02;
+  }
   .hero-copy-block > p:not(.eyebrow) { max-width: 90%; font-size: 17px; }
   .reservation-form { margin-top: 26px; }
   .reservation-form > div { grid-template-columns: 1fr; }
