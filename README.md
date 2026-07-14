@@ -130,6 +130,10 @@ Supabase Dashboard의 **Authentication → URL Configuration**도 설정해야 �
 
 Google·카카오 로그인에는 별도의 Vercel 환경 변수가 필요하지 않습니다. 기존 `VITE_SUPABASE_URL`과 `VITE_SUPABASE_PUBLISHABLE_KEY`만 유지하면 됩니다.
 
+### 사전예약 이메일 확인
+
+`/reservation.html`에서 제출한 이메일은 브라우저가 아니라 Supabase의 `public.cashlog_reservations` 테이블에 저장됩니다. 최신 [`supabase/schema.sql`](supabase/schema.sql)을 SQL Editor에서 실행한 뒤 **Table Editor → cashlog_reservations**에서 확인할 수 있습니다. 방문자는 RLS 정책상 예약 추가만 가능하며 이메일 목록을 조회할 수 없습니다.
+
 가입·메일링크 요청은 현재 접속 중인 Cashlog 주소를 `redirect_to`로 전달합니다. 기본 세션 fragment와 커스텀 이메일 템플릿의 `token_hash` 콜백을 모두 처리합니다.
 
 앱에서는 이메일/비밀번호 회원가입·로그인, 비밀번호 없는 메일 링크 로그인을 모두 지원합니다. 회원가입 시 만 14세 이상, 개인정보, 사진·시간 처리 필수 동의와 위치정보 선택 동의를 구분해 받고 동의 버전을 저장합니다. 로그인하면 로컬 기록과 원격 기록을 병합하고, 선택한 고양이/강아지 프로필과 사진 보관본도 계정에 저장합니다.

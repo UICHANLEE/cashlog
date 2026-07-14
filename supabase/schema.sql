@@ -133,6 +133,31 @@ create trigger on_cashlog_user_created
   after insert on auth.users
   for each row execute procedure public.capture_cashlog_signup_consents();
 
+-- Public launch reservations. Visitors may insert, but only project admins can read emails.
+create table if not exists public.cashlog_reservations (
+  id uuid primary key default gen_random_uuid(),
+  email text not null check (char_length(email) between 3 and 320),
+  marketing_consent boolean not null check (marketing_consent = true),
+  consent_version text not null,
+  consented_at timestamptz not null,
+  source text not null default 'reservation' check (source = 'reservation'),
+  created_at timestamptz not null default now()
+);
+
+create unique index if not exists cashlog_reservations_email_unique
+  on public.cashlog_reservations (lower(email));
+
+alter table public.cashlog_reservations enable row level security;
+
+drop policy if exists "cashlog visitors create reservations" on public.cashlog_reservations;
+create policy "cashlog visitors create reservations"
+  on public.cashlog_reservations
+  for insert
+  to anon, authenticated
+  with check (marketing_consent = true and source = 'reservation');
+
+grant insert on public.cashlog_reservations to anon, authenticated;
+
 -- The bucket is private. A user can access only files under <auth.uid()>/...
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (

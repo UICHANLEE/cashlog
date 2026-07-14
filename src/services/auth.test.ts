@@ -106,8 +106,10 @@ describe('Cashlog signup consent', () => {
       consentVersion: '2026-07-14',
       consentedAt: '2026-07-14T00:00:00.000Z',
     }))
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
-      new Response('', { status: 201 }))
+    const fetchMock = vi.fn(async (...args: [RequestInfo | URL, RequestInit?]) => {
+      void args
+      return new Response('', { status: 201 })
+    })
     vi.stubGlobal('fetch', fetchMock)
 
     const saved = await createCashlogAuthClient().persistPendingOAuthConsent({
