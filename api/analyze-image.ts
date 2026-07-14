@@ -9,6 +9,8 @@
  */
 import type { IncomingMessage } from 'node:http'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { guardApiOrigin } from '../server/httpSecurity'
+import { assertValidImageBytes } from '../src/media/imageSignature'
 
 const ALLOWED_LEAF_IDS = [
   'meal_grocery',
@@ -70,12 +72,12 @@ type ProductAnalysis = {
 type ImageInput = {
   imageBase64: string
   mimeType: string
+  filename?: string
 }
 
 const ALLOWED = new Set<string>(ALLOWED_LEAF_IDS)
 const LOW_CONFIDENCE_THRESHOLD = 0.65
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
-const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/heic', 'image/webp'])
 
 export const config = {
   api: {
@@ -98,11 +100,12 @@ const getHeader = (req: VercelRequest, name: string) => {
 
 const parseJsonInput = (raw: Buffer): ImageInput | null => {
   try {
-    const body = JSON.parse(raw.toString('utf8')) as { imageBase64?: string; mimeType?: string }
+    const body = JSON.parse(raw.toString('utf8')) as { imageBase64?: string; mimeType?: string; filename?: string }
     if (!body.imageBase64?.trim()) return null
     return {
       imageBase64: body.imageBase64.trim(),
-      mimeType: body.mimeType?.includes('/') ? body.mimeType : 'image/jpeg',
+      mimeType: body.mimeType?.trim() ?? '',
+      ...(body.filename?.trim() ? { filename: body.filename.trim() } : {}),
     }
   } catch {
     return null
@@ -174,13 +177,15 @@ const parseMultipartInput = (raw: Buffer, contentType: string): ImageInput | nul
     const headerEnd = part.indexOf('\r\n\r\n')
     if (headerEnd < 0) continue
     const header = part.slice(0, headerEnd)
-    const mimeType = header.match(/Content-Type:\s*([^\r\n]+)/i)?.[1]?.trim() || 'image/jpeg'
+    const mimeType = header.match(/Content-Type:\s*([^\r\n]+)/i)?.[1]?.trim() ?? ''
+    const filename = header.match(/filename="([^"]+)"/i)?.[1]?.trim()
     const content = part.slice(headerEnd + 4).replace(/\r\n$/, '')
     const fileBuffer = Buffer.from(content, 'binary')
     if (fileBuffer.length === 0) return null
     return {
       imageBase64: fileBuffer.toString('base64'),
       mimeType,
+      ...(filename ? { filename } : {}),
     }
   }
   return null
@@ -352,6 +357,7 @@ async function analyzeProductImage(input: ImageInput): Promise<ProductAnalysis> 
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (!guardApiOrigin(req, res)) return
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method Not Allowed' })
     return
@@ -374,8 +380,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.status(413).json({ code: 'PAYLOAD_TOO_LARGE', error: '이미지는 최대 10MB까지 업로드할 수 있습니다.' })
       return
     }
-    if (!ALLOWED_IMAGE_TYPES.has(input.mimeType.toLowerCase())) {
-      res.status(400).json({ code: 'INVALID_INPUT', error: 'JPEG, PNG, HEIC, WebP 이미지만 지원합니다.' })
+    try {
+      assertValidImageBytes(
+        new Uint8Array(Buffer.from(input.imageBase64, 'base64')),
+        input.mimeType,
+        input.filename,
+      )
+    } catch (error) {
+      res.status(400).json({
+        code: 'INVALID_INPUT',
+        error: error instanceof Error ? error.message : '유효한 이미지 파일이 아니에요.',
+      })
       return
     }
 

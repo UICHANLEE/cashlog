@@ -270,6 +270,18 @@ h1 {
 .preview-steps strong { font-family: 'Gaegu', cursive; font-size: 26px; }
 .preview-steps span { font-size: 18px; line-height: 1.55; }
 
+.reservation-footer {
+  display: flex;
+  justify-content: center;
+  gap: 22px;
+  padding: 24px;
+  border-top: 2px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.reservation-footer a { color: inherit; text-underline-offset: 3px; }
+
 @media (max-width: 760px) {
   .reservation-hero { min-height: 860px; padding: 20px 20px 74px; }
   .hero-copy-block { width: 100%; padding-top: 58px; }

@@ -1,5 +1,6 @@
 import type { CashlogSession } from './auth'
 import type { SupabaseConfig } from './supabaseConfig'
+import { assertValidImageFile } from '../media/imageSignature'
 
 const BUCKET = 'cashlog-media'
 
@@ -44,6 +45,10 @@ export const createCashlogStorage = (
   }
 
   const uploadImage = async (file: File, expenseId: string): Promise<StoredImage> => {
+    await assertValidImageFile(file)
+    if (file.type !== 'image/jpeg') {
+      throw new Error('보관용 사진은 안전하게 변환된 JPEG만 지원해요.')
+    }
     const path = `${userId}/${expenseId}/original.${extensionFor(file.type)}`
     const response = await fetch(
       `${config.url}/storage/v1/object/${BUCKET}/${encodePath(path)}`,

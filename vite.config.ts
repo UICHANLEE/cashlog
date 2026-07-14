@@ -15,6 +15,7 @@ export default defineConfig({
       input: {
         main: 'index.html',
         reservation: 'reservation.html',
+        privacy: 'privacy.html',
       },
     },
   },

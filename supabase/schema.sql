@@ -165,7 +165,7 @@ values (
   'cashlog-media',
   false,
   52428800,
-  array['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
+  array['image/jpeg']
 )
 on conflict (id) do update set
   public = excluded.public,

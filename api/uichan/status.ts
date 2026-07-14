@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { guardApiOrigin } from '../../server/httpSecurity'
 
 type AnalyzerStatus =
   | {
@@ -82,6 +83,7 @@ const checkAnalyzer = async (endpoint: string | null): Promise<AnalyzerStatus> =
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (!guardApiOrigin(req, res)) return
   if (req.method !== 'GET') {
     res.status(405).json({ error: 'Method Not Allowed' })
     return

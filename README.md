@@ -100,6 +100,12 @@ Catai FastAPI 서버의 실제 엔드포인트 계약:
 | `POST` | `/analyze-image` | 앱의 상품 사진 파일을 `multipart/form-data`의 `image`로 전송 |
 | `POST` | `/analyze-image` | 서버리스 fallback에서는 `{ imageBase64, mimeType }` JSON 전송 |
 
+배포된 Catai 서버에서는 Cashlog 프로덕션 주소만 CORS 허용 목록에 넣습니다.
+
+```env
+CATAI_CORS_ALLOWED_ORIGINS=https://your-cashlog-domain.example
+```
+
 ## 로그인·DB 동기화 설정
 
 1. Supabase 프로젝트를 만들고 Auth의 Email, Google, Kakao provider를 켭니다.
@@ -130,6 +136,16 @@ Supabase Dashboard의 **Authentication → URL Configuration**도 설정해야 �
 
 Google·카카오 로그인에는 별도의 Vercel 환경 변수가 필요하지 않습니다. 기존 `VITE_SUPABASE_URL`과 `VITE_SUPABASE_PUBLISHABLE_KEY`만 유지하면 됩니다.
 
+### 보안 설정
+
+Vercel API는 와일드카드 CORS를 사용하지 않습니다. 커스텀 도메인을 사용하면 Vercel 환경 변수에 실제 Cashlog 주소를 쉼표로 구분해 등록합니다. `VERCEL_URL`과 `VERCEL_PROJECT_PRODUCTION_URL`은 자동으로 허용됩니다.
+
+```env
+CASHLOG_ALLOWED_ORIGINS=https://your-cashlog-domain.example
+```
+
+전 페이지에는 iframe 삽입 차단, MIME 스니핑 차단, 리퍼러·권한 정책 보안 헤더가 적용됩니다. 사진 분석 API는 확장자, 선언 MIME 타입, 파일 시그니처가 일치하는 JPEG, PNG, WebP, HEIC/HEIF만 처리합니다. 계정 저장본은 EXIF를 제거한 JPEG로 재인코딩한 뒤 사용자별 비공개 Supabase Storage 경로에 저장합니다.
+
 ### 사전예약 이메일 확인
 
 `/reservation.html`에서 제출한 이메일은 브라우저가 아니라 Supabase의 `public.cashlog_reservations` 테이블에 저장됩니다. 최신 [`supabase/schema.sql`](supabase/schema.sql)을 SQL Editor에서 실행한 뒤 **Table Editor → cashlog_reservations**에서 확인할 수 있습니다. 방문자는 RLS 정책상 예약 추가만 가능하며 이메일 목록을 조회할 수 없습니다.
@@ -150,7 +166,7 @@ Supabase 프로젝트는 GitHub 저장소에 종속되지 않으므로 서로 �
 - `service_role` 키는 어느 프론트 저장소에도 넣지 않습니다. 브라우저에는 anon/publishable key만 사용합니다.
 - 완전히 무관한 운영 서비스라면 프로젝트 분리가 더 안전하지만, 무료 한도 때문에 공유하는 경우 위 격리를 반드시 유지합니다.
 
-화면의 동의 문구와 이력 저장 구조는 제품 구현용 초안입니다. 출시 전 실제 개인정보처리방침, 보존 기간, 만 14세 미만 사용 정책은 법률 검토를 거쳐 확정해야 합니다.
+공개용 개인정보처리방침은 [`privacy.html`](privacy.html)에 있습니다. 실제 운영 리전, AI 제공자, 보존 기간이나 담당 연락처가 바뀌면 배포 전에 방침도 함께 갱신하고 법률 검토를 거쳐야 합니다.
 
 ## 저장소
 

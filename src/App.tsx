@@ -79,6 +79,7 @@ import {
 import { createCashlogRepository, mergeExpenses } from './services/cashlogRepository'
 import { createCashlogStorage } from './services/supabaseStorage'
 import { prepareImageForStorage } from './media/prepareImageForStorage'
+import { assertValidImageFile } from './media/imageSignature'
 
 type AddMode = 'closed' | 'choice' | 'photo' | 'manual'
 type StoryMode = null | 'day' | 'month'
@@ -242,6 +243,14 @@ function CashlogApp() {
 
   const applyPhotoFile = useCallback(async (file: File) => {
     setCameraError(null)
+    try {
+      await assertValidImageFile(file)
+    } catch (error) {
+      photoFileRef.current = null
+      setCameraError(error instanceof Error ? error.message : '유효한 이미지 파일이 아니에요.')
+      setForm(emptyForm())
+      return
+    }
     photoFileRef.current = file
     setPhotoPreview((prev) => {
       if (prev.startsWith('blob:')) URL.revokeObjectURL(prev)
@@ -1517,6 +1526,10 @@ function CashlogApp() {
           </div>
         </section>
       )}
+      <footer className="legal-footer">
+        <a href="/privacy.html">개인정보처리방침</a>
+        <a href="https://github.com/UICHANLEE/cashlog">GitHub</a>
+      </footer>
       {storyMode === 'day' && dayStorySlides.length > 0 && (
         <StoryReel
           key={`story-day-${selectedDate}-${dayStorySlides.map((s) => s.id).join()}`}

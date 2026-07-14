@@ -20,7 +20,9 @@ describe('Supabase private media storage', () => {
       { url: 'https://cashlog.supabase.co', anonKey: 'anon-key' },
       { accessToken: 'access-token', user: { id: 'user-1', email: 'me@example.com' } },
     )
-    const image = new File(['photo'], 'receipt.jpg', { type: 'image/jpeg' })
+    const image = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0])], 'receipt.jpg', {
+      type: 'image/jpeg',
+    })
     const result = await storage!.uploadImage(image, 'expense-1')
 
     expect(fetchMock.mock.calls[0][0]).toBe(

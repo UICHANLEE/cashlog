@@ -2367,6 +2367,17 @@ video.preview-image {
   font-weight: 700;
 }
 
+.legal-footer {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  margin: 28px 0 98px;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.legal-footer a { color: inherit; text-underline-offset: 3px; }
+
 .pet-context-question {
   display: grid;
   grid-template-columns: 76px minmax(0, 1fr);

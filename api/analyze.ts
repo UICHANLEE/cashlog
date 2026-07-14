@@ -7,6 +7,8 @@
  * 카테고리 id는 프론트 `src/domain/cashlog.ts` 의 소분류 id와 반드시 동기화할 것.
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { guardApiOrigin } from '../server/httpSecurity'
+import { assertValidImageBytes } from '../src/media/imageSignature'
 
 const ALLOWED_LEAF_IDS = [
   'meal_grocery',
@@ -47,6 +49,7 @@ const ALLOWED_LEAF_IDS = [
 type LeafId = (typeof ALLOWED_LEAF_IDS)[number]
 
 const ALLOWED = new Set<string>(ALLOWED_LEAF_IDS)
+const MAX_IMAGE_BYTES = 6 * 1024 * 1024
 
 type VisionModelPresetId = 'openai-mini' | 'qwen25vl3b-hf' | 'qwen25vl3b-local'
 
@@ -233,18 +236,37 @@ export const config = {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (!guardApiOrigin(req, res)) return
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method Not Allowed' })
     return
   }
 
   try {
-    const body = req.body as { imageBase64?: string; mimeType?: string } | undefined
+    const body = req.body as { imageBase64?: string; mimeType?: string; filename?: string } | undefined
     const imageBase64 = typeof body?.imageBase64 === 'string' ? body.imageBase64 : ''
-    const mimeType = typeof body?.mimeType === 'string' ? body.mimeType : 'image/jpeg'
+    const mimeType = typeof body?.mimeType === 'string' ? body.mimeType : ''
 
     if (!imageBase64.trim()) {
       res.status(400).json({ error: 'imageBase64가 필요합니다' })
+      return
+    }
+
+    const bytes = Buffer.from(imageBase64.trim(), 'base64')
+    if (bytes.byteLength > MAX_IMAGE_BYTES) {
+      res.status(413).json({ error: '이미지는 최대 6MB까지 분석할 수 있어요.' })
+      return
+    }
+    try {
+      assertValidImageBytes(
+        new Uint8Array(bytes),
+        mimeType,
+        typeof body?.filename === 'string' ? body.filename : undefined,
+      )
+    } catch (error) {
+      res.status(400).json({
+        error: error instanceof Error ? error.message : '유효한 이미지 파일이 아니에요.',
+      })
       return
     }
 

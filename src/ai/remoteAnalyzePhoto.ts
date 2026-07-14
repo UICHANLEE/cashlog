@@ -12,7 +12,7 @@ export async function remoteAnalyzePhoto(
   const res = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ imageBase64, mimeType }),
+    body: JSON.stringify({ imageBase64, mimeType, filename: file.name }),
   })
 
   const text = await res.text()

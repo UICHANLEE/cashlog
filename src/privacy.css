@@ -1,0 +1,78 @@
+:root {
+  --paper: #fff9ee;
+  --paper-card: #fffef9;
+  --ink: #2f2a24;
+  --ink-soft: #766a58;
+  --line: #2a251f;
+  --coral: #ff6f59;
+  --mint: #8ee2c3;
+  font-family: 'Gowun Dodum', ui-sans-serif, system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; background: var(--paper); }
+a { color: inherit; text-underline-offset: 3px; }
+
+.privacy-header,
+.privacy-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px max(22px, calc((100vw - 900px) / 2));
+  border-bottom: 2px solid var(--line);
+}
+
+.privacy-brand {
+  font-family: 'Gaegu', cursive;
+  font-size: 32px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.privacy-main {
+  width: min(100% - 40px, 900px);
+  margin: 0 auto;
+  padding: 72px 0 84px;
+}
+
+.eyebrow { margin: 0 0 8px; color: #a43e2e; font-size: 13px; font-weight: 800; }
+h1, h2 { font-family: 'Gaegu', cursive; letter-spacing: 0; }
+h1 { margin: 0; font-size: 58px; line-height: 1; }
+h2 { margin: 0 0 14px; font-size: 28px; }
+.privacy-lead { max-width: 700px; margin: 22px 0 10px; font-size: 18px; line-height: 1.7; }
+.effective-date { color: var(--ink-soft); font-size: 14px; }
+
+.privacy-main section {
+  margin-top: 44px;
+  padding-top: 26px;
+  border-top: 2px dashed rgba(42, 37, 31, 0.32);
+}
+
+.privacy-main p,
+.privacy-main li { font-size: 15px; line-height: 1.75; }
+.privacy-main ul { padding-left: 22px; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--paper-card);
+  font-size: 14px;
+}
+
+th, td { padding: 12px; border: 1px solid rgba(42, 37, 31, 0.28); text-align: left; vertical-align: top; line-height: 1.55; }
+th { background: var(--mint); }
+.privacy-footer { border-top: 2px solid var(--line); border-bottom: 0; color: var(--ink-soft); }
+
+@media (max-width: 640px) {
+  .privacy-main { width: min(100% - 32px, 900px); padding-top: 52px; }
+  h1 { font-size: 46px; }
+  .privacy-header, .privacy-footer { align-items: flex-start; padding-inline: 16px; }
+  table, thead, tbody, tr, th, td { display: block; }
+  thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  tr + tr { border-top: 2px solid var(--line); }
+  td { border-width: 0 1px 1px; }
+  td:first-child { font-weight: 800; background: rgba(142, 226, 195, 0.35); }
+}
