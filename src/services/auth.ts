@@ -33,6 +33,19 @@ type SupabaseAuthBody = {
   }
 }
 
+const redirectTarget = () =>
+  typeof window !== 'undefined' ? window.location.origin + window.location.pathname : undefined
+
+const clearAuthParamsFromUrl = () => {
+  if (typeof window === 'undefined') return
+  const url = new URL(window.location.href)
+  for (const key of ['token_hash', 'type', 'code', 'error', 'error_code', 'error_description']) {
+    url.searchParams.delete(key)
+  }
+  url.hash = ''
+  window.history.replaceState(null, document.title, url.pathname + url.search)
+}
+
 const authHeaders = (config: SupabaseConfig, token?: string) => ({
   apikey: config.anonKey,
   Authorization: `Bearer ${token ?? config.anonKey}`,
@@ -102,22 +115,47 @@ export const createCashlogAuthClient = () => {
     localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session))
   }
 
-  const consumeSessionFromUrl = (): CashlogSession | null => {
+  const consumeSessionFromUrl = async (): Promise<CashlogSession | null> => {
     if (!config || typeof window === 'undefined') return null
     const hash = window.location.hash.replace(/^#/, '')
-    if (!hash.includes('access_token=')) return null
-    const session = parseSessionPayload(new URLSearchParams(hash))
-    if (session) {
-      window.history.replaceState(null, document.title, window.location.pathname + window.location.search)
+    const hashParams = new URLSearchParams(hash)
+    const authError = hashParams.get('error_description') ?? hashParams.get('error')
+    if (authError) {
+      clearAuthParamsFromUrl()
+      throw new Error(decodeURIComponent(authError.replace(/\+/g, ' ')))
     }
+
+    if (hash.includes('access_token=')) {
+      const session = parseSessionPayload(hashParams)
+      if (session) clearAuthParamsFromUrl()
+      return session
+    }
+
+    const query = new URLSearchParams(window.location.search)
+    const tokenHash = query.get('token_hash')
+    const type = query.get('type')
+    if (!tokenHash || !type) return null
+
+    const response = await fetch(`${config.url}/auth/v1/verify`, {
+      method: 'POST',
+      headers: authHeaders(config),
+      body: JSON.stringify({ token_hash: tokenHash, type }),
+    })
+    clearAuthParamsFromUrl()
+    if (!response.ok) {
+      throw new Error(await readAuthError(response, '인증 링크가 만료되었거나 이미 사용되었어요.'))
+    }
+    const session = sessionFromAuthBody((await response.json()) as SupabaseAuthBody)
+    if (!session) throw new Error('인증은 완료됐지만 로그인 세션을 만들지 못했어요.')
     return session
   }
 
   const signInWithEmail = async (email: string) => {
     if (!config) throw new Error('Supabase 환경변수가 설정되지 않았어요.')
-    const redirectTo =
-      typeof window !== 'undefined' ? window.location.origin + window.location.pathname : undefined
-    const response = await fetch(`${config.url}/auth/v1/otp`, {
+    const redirectTo = redirectTarget()
+    const endpoint = new URL(`${config.url}/auth/v1/otp`)
+    if (redirectTo) endpoint.searchParams.set('redirect_to', redirectTo)
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: authHeaders(config),
       body: JSON.stringify({
@@ -154,7 +192,10 @@ export const createCashlogAuthClient = () => {
     consents: SignupConsents,
   ): Promise<CashlogSession | null> => {
     if (!config) throw new Error('Supabase 환경변수가 설정되지 않았어요.')
-    const response = await fetch(`${config.url}/auth/v1/signup`, {
+    const endpoint = new URL(`${config.url}/auth/v1/signup`)
+    const redirectTo = redirectTarget()
+    if (redirectTo) endpoint.searchParams.set('redirect_to', redirectTo)
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: authHeaders(config),
       body: JSON.stringify({

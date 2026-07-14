@@ -311,18 +311,27 @@ function CashlogApp() {
 
     let alive = true
     const loadSession = async () => {
-      await Promise.resolve()
-      const fromUrl = authClient.consumeSessionFromUrl()
-      const stored = fromUrl ?? authClient.loadStoredSession()
-      if (!stored) {
-        setSyncStatus('로그인 대기 · 로컬 저장 중')
-        return
+      try {
+        const fromUrl = await authClient.consumeSessionFromUrl()
+        const stored = fromUrl ?? authClient.loadStoredSession()
+        if (!stored) {
+          setSyncStatus('로그인 대기 · 로컬 저장 중')
+          return
+        }
+        const hydrated = await authClient.hydrateSession(stored)
+        if (!alive) return
+        authClient.saveSession(hydrated)
+        setSession(hydrated)
+        if (fromUrl) {
+          setShowAccount(true)
+          setAuthMessage('메일 인증이 완료됐어요. 계정으로 로그인했습니다.')
+        }
+        setSyncStatus(hydrated.user ? `${hydrated.user.email} 동기화 준비` : '동기화 준비')
+      } catch (error) {
+        if (!alive) return
+        setShowAccount(true)
+        setAuthMessage(error instanceof Error ? error.message : '메일 인증에 실패했어요.')
       }
-      const hydrated = await authClient.hydrateSession(stored)
-      if (!alive) return
-      authClient.saveSession(hydrated)
-      setSession(hydrated)
-      setSyncStatus(hydrated.user ? `${hydrated.user.email} 동기화 준비` : '동기화 준비')
     }
 
     void loadSession()

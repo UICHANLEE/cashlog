@@ -113,6 +113,13 @@ VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_xxx
 
 기존 프로젝트의 legacy `anon` 키를 사용한다면 `VITE_SUPABASE_ANON_KEY`도 계속 지원합니다. Vercel 환경 변수는 빌드 시 주입되므로 값을 추가하거나 수정한 뒤 반드시 새로 배포해야 합니다.
 
+Supabase Dashboard의 **Authentication → URL Configuration**도 설정해야 이메일 인증 링크가 Cashlog로 돌아옵니다.
+
+- Site URL: 실제 Cashlog 프로덕션 주소(예: `https://cashlog.example.com`)
+- Redirect URLs: 프로덕션 주소와 로컬 개발 주소(예: `http://localhost:5175/`)
+
+가입·메일링크 요청은 현재 접속 중인 Cashlog 주소를 `redirect_to`로 전달합니다. 기본 세션 fragment와 커스텀 이메일 템플릿의 `token_hash` 콜백을 모두 처리합니다.
+
 앱에서는 이메일/비밀번호 회원가입·로그인, 비밀번호 없는 메일 링크 로그인을 모두 지원합니다. 회원가입 시 만 14세 이상, 개인정보, 사진·시간 처리 필수 동의와 위치정보 선택 동의를 구분해 받고 동의 버전을 저장합니다. 로그인하면 로컬 기록과 원격 기록을 병합하고, 선택한 고양이/강아지 프로필과 사진 보관본도 계정에 저장합니다.
 
 사진 보관본은 브라우저에서 다시 인코딩해 EXIF 메타데이터를 제거합니다. 위치 선택 동의만으로 위치 권한을 요청하지 않으며, 실제 위치 기능을 추가할 때 OS 권한 요청과 별도 안내를 함께 제공해야 합니다.

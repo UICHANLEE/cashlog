@@ -9,10 +9,12 @@ const STORAGE_KEY = 'cashlog.expenses'
 describe('Cashlog photo MVP', () => {
   beforeEach(() => {
     localStorage.clear()
-    vi.stubGlobal('URL', {
-      createObjectURL: vi.fn(() => 'blob:cashlog-photo'),
-      revokeObjectURL: vi.fn(),
-    })
+    const NativeURL = URL
+    class MockURL extends NativeURL {
+      static createObjectURL = vi.fn(() => 'blob:cashlog-photo')
+      static revokeObjectURL = vi.fn()
+    }
+    vi.stubGlobal('URL', MockURL)
   })
 
   afterEach(() => {

@@ -3,6 +3,7 @@ import { createCashlogAuthClient } from './auth'
 
 describe('Cashlog signup consent', () => {
   afterEach(() => {
+    window.history.replaceState({}, '', '/')
     vi.unstubAllEnvs()
     vi.unstubAllGlobals()
   })
@@ -29,7 +30,9 @@ describe('Cashlog signup consent', () => {
 
     const request = fetchMock.mock.calls[0]
     const body = JSON.parse(String(request[1]?.body)) as { data: Record<string, unknown> }
-    expect(request[0]).toBe('https://cashlog.supabase.co/auth/v1/signup')
+    const signupUrl = new URL(String(request[0]))
+    expect(signupUrl.origin + signupUrl.pathname).toBe('https://cashlog.supabase.co/auth/v1/signup')
+    expect(signupUrl.searchParams.get('redirect_to')).toBe(window.location.origin + '/')
     expect(body.data).toMatchObject({
       app_id: 'cashlog',
       consent_version: '2026-07-14',
@@ -39,5 +42,41 @@ describe('Cashlog signup consent', () => {
       location_consent: false,
     })
     expect(body.data.consented_at).toEqual(expect.any(String))
+  })
+
+  it('exchanges a token-hash confirmation link for a session', async () => {
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://cashlog.supabase.co')
+    vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'anon-key')
+    window.history.replaceState({}, '', '/?token_hash=confirm-token&type=signup')
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe('https://cashlog.supabase.co/auth/v1/verify')
+      expect(JSON.parse(String(init?.body))).toEqual({ token_hash: 'confirm-token', type: 'signup' })
+      return new Response(
+        JSON.stringify({
+          access_token: 'verified-access',
+          refresh_token: 'verified-refresh',
+          expires_in: 3600,
+          user: { id: 'user-1', email: 'me@example.com' },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      )
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const session = await createCashlogAuthClient().consumeSessionFromUrl()
+
+    expect(session?.accessToken).toBe('verified-access')
+    expect(window.location.search).toBe('')
+  })
+
+  it('surfaces errors returned in an email-link fragment', async () => {
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://cashlog.supabase.co')
+    vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'anon-key')
+    window.history.replaceState({}, '', '/#error=access_denied&error_description=Email+link+is+invalid')
+
+    await expect(createCashlogAuthClient().consumeSessionFromUrl()).rejects.toThrow(
+      'Email link is invalid',
+    )
+    expect(window.location.hash).toBe('')
   })
 })
