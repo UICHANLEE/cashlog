@@ -1,0 +1,242 @@
+:root {
+  --paper: #fff9ee;
+  --ink: #2f2a24;
+  --ink-soft: #766a58;
+  --line: #2a251f;
+  --coral: #ff6f59;
+  --mint: #8ee2c3;
+  --sun: #ffd966;
+  font-family: 'Gowun Dodum', ui-sans-serif, system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; min-width: 320px; background: var(--paper); }
+button, input { font: inherit; }
+
+.reservation-hero {
+  position: relative;
+  min-height: min(92svh, 900px);
+  overflow: hidden;
+  padding: 30px max(24px, calc((100vw - 1180px) / 2)) 72px;
+  border-bottom: 2px solid var(--line);
+  background-color: var(--paper);
+  background-image: radial-gradient(rgba(42, 37, 31, 0.08) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+.reservation-nav {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.reservation-nav a { color: var(--ink); text-decoration: none; }
+.reservation-nav > a:last-child {
+  padding: 9px 15px;
+  border: 2px solid var(--line);
+  border-radius: 12px 5px 12px 5px;
+  background: var(--sun);
+  font-family: 'Gaegu', cursive;
+  font-size: 18px;
+  font-weight: 700;
+  box-shadow: 3px 3px 0 var(--line);
+}
+
+.brand {
+  font-family: 'Gaegu', cursive;
+  font-size: 34px;
+  font-weight: 700;
+}
+
+.hero-copy-block {
+  position: relative;
+  z-index: 5;
+  width: min(660px, 62vw);
+  padding-top: clamp(90px, 14vh, 160px);
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: #aa3d2c;
+  font-family: 'Gaegu', cursive;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+h1, h2 {
+  margin: 0;
+  font-family: 'Gaegu', cursive;
+  letter-spacing: 0;
+}
+
+h1 {
+  max-width: 650px;
+  font-size: clamp(54px, 7.2vw, 98px);
+  line-height: 0.94;
+}
+
+.hero-copy-block > p:not(.eyebrow) {
+  max-width: 540px;
+  margin: 24px 0 0;
+  color: var(--ink-soft);
+  font-size: clamp(17px, 1.5vw, 21px);
+  line-height: 1.65;
+}
+
+.reservation-form {
+  max-width: 610px;
+  margin-top: 34px;
+}
+
+.reservation-form label {
+  display: block;
+  margin-bottom: 8px;
+  font-family: 'Gaegu', cursive;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.reservation-form > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.reservation-form input,
+.reservation-form button {
+  min-height: 54px;
+  border: 2px solid var(--line);
+  color: var(--ink);
+}
+
+.reservation-form input {
+  min-width: 0;
+  padding: 0 16px;
+  border-radius: 15px 6px 15px 6px;
+  background: rgba(255, 255, 255, 0.88);
+  outline: none;
+}
+
+.reservation-form input:focus { box-shadow: 0 0 0 4px rgba(142, 226, 195, 0.6); }
+
+.reservation-form button {
+  padding: 0 21px;
+  border-radius: 15px 6px 15px 6px;
+  background: var(--coral);
+  color: white;
+  font-family: 'Gaegu', cursive;
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 4px 4px 0 var(--line);
+}
+
+#reservation-message {
+  min-height: 24px;
+  margin: 10px 0 0;
+  color: #147655;
+  font-weight: 700;
+}
+
+.moment-photo {
+  position: absolute;
+  z-index: 2;
+  top: 14%;
+  right: max(40px, calc((100vw - 1120px) / 2));
+  width: clamp(250px, 29vw, 410px);
+  transform: rotate(4deg);
+}
+
+.moment-photo img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  border: 3px solid var(--line);
+  border-radius: 22px 8px 22px 8px;
+  object-fit: cover;
+  box-shadow: 8px 9px 0 var(--line);
+}
+
+.moment-photo span {
+  position: absolute;
+  right: -18px;
+  bottom: 18px;
+  padding: 8px 12px;
+  border: 2px solid var(--line);
+  border-radius: 12px 4px 12px 4px;
+  background: var(--mint);
+  font-family: 'Gaegu', cursive;
+  font-size: 17px;
+  font-weight: 700;
+  box-shadow: 3px 3px 0 var(--line);
+}
+
+.reservation-pet {
+  position: absolute;
+  z-index: 4;
+  right: max(6px, calc((100vw - 1260px) / 2));
+  bottom: -42px;
+  width: clamp(270px, 34vw, 500px);
+  filter: drop-shadow(0 18px 18px rgba(47, 42, 36, 0.16));
+  animation: pet-float 3.4s ease-in-out infinite;
+}
+
+@keyframes pet-float { 50% { transform: translateY(-9px) rotate(-1deg); } }
+
+.next-hint {
+  position: absolute;
+  z-index: 7;
+  left: 50%;
+  bottom: 18px;
+  color: var(--ink);
+  font-family: 'Gaegu', cursive;
+  font-size: 17px;
+  font-weight: 700;
+  text-decoration: none;
+  transform: translateX(-50%);
+}
+
+.preview-band {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 80px;
+  padding: 100px max(24px, calc((100vw - 1120px) / 2));
+  background: var(--mint);
+}
+
+.preview-heading h2 { font-size: clamp(40px, 5vw, 68px); line-height: 1; }
+.preview-steps { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.preview-steps li {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 18px;
+  padding: 20px 0;
+  border-bottom: 2px dashed rgba(42, 37, 31, 0.42);
+}
+.preview-steps strong { font-family: 'Gaegu', cursive; font-size: 26px; }
+.preview-steps span { font-size: 18px; line-height: 1.55; }
+
+@media (max-width: 760px) {
+  .reservation-hero { min-height: 860px; padding: 20px 20px 74px; }
+  .hero-copy-block { width: 100%; padding-top: 58px; }
+  h1 { font-size: clamp(50px, 15vw, 70px); }
+  .hero-copy-block > p:not(.eyebrow) { max-width: 90%; font-size: 17px; }
+  .reservation-form { margin-top: 26px; }
+  .reservation-form > div { grid-template-columns: 1fr; }
+  .moment-photo { top: auto; right: 36px; bottom: 130px; width: 210px; }
+  .reservation-pet { right: -66px; bottom: -22px; width: 270px; }
+  .next-hint { left: 20px; transform: none; white-space: nowrap; }
+  .preview-band { grid-template-columns: 1fr; gap: 46px; padding: 72px 24px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .reservation-pet { animation: none; }
+}

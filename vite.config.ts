@@ -10,6 +10,14 @@ const productAnalyzerProxyTarget =
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      input: {
+        main: 'index.html',
+        reservation: 'reservation.html',
+      },
+    },
+  },
   server: {
     // localhost만 열려 있으면 같은 네트워크 폰 브라우저에서 접속 불가 → host: true
     host: true,

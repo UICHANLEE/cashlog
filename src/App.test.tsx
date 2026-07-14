@@ -24,8 +24,7 @@ describe('Cashlog photo MVP', () => {
   it('shows disabled story playback until any entries exist', () => {
     render(<App />)
 
-    expect(screen.getByRole('button', { name: /한 달 스토리/i })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /하루 스토리/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /오늘 한줄/i })).toBeDisabled()
   })
 
   it('keeps the pet playground behind a dedicated tab', async () => {
@@ -33,7 +32,7 @@ describe('Cashlog photo MVP', () => {
     render(<App />)
 
     expect(screen.queryByText(/함께 쓰는 가계부/)).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '가계부' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '하루 타임라인' })).toHaveAttribute('aria-pressed', 'true')
 
     await user.click(screen.getByRole('button', { name: '나비' }))
 
@@ -45,7 +44,7 @@ describe('Cashlog photo MVP', () => {
     expect(screen.getByText('나비가 기분 좋게 꼬리를 흔들어요')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /초코 캐릭터.*강아지.*말티즈/ }))
-    expect(screen.getAllByRole('button', { name: /초코 쓰다듬기\. 드래그하면/ })).toHaveLength(2)
+    expect(screen.getAllByRole('button', { name: /초코 쓰다듬기\. 드래그하면/ })).toHaveLength(1)
   })
 
   it('opens the day photo story reel when 스토리 is enabled', async () => {
@@ -67,7 +66,7 @@ describe('Cashlog photo MVP', () => {
 
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /하루 스토리/i }))
+    await user.click(screen.getByRole('button', { name: /오늘 한줄/i }))
     const dialog = screen.getByRole('dialog', { name: `${todaySlice} 기록` })
     expect(dialog).toBeInTheDocument()
     expect(within(dialog).getByText('오늘의 카페')).toBeInTheDocument()
@@ -105,8 +104,8 @@ describe('Cashlog photo MVP', () => {
 
     render(<App />)
 
-    expect(screen.getByRole('button', { name: /하루 스토리/i })).not.toBeDisabled()
-    await user.click(screen.getByRole('button', { name: /하루 스토리/i }))
+    expect(screen.getByRole('button', { name: /오늘 한줄/i })).not.toBeDisabled()
+    await user.click(screen.getByRole('button', { name: /오늘 한줄/i }))
     const dialog = screen.getByRole('dialog', { name: `${todaySlice} 기록` })
     expect(within(dialog).getByText('메모만')).toBeInTheDocument()
   })
@@ -158,6 +157,7 @@ describe('Cashlog photo MVP', () => {
 
     render(<App />)
 
+    await user.click(screen.getByRole('button', { name: '계정 메뉴 열기' }))
     const account = screen.getByRole('region', { name: '로그인과 동기화' })
     await user.type(within(account).getByLabelText('로그인 이메일'), 'me@example.com')
     await user.type(within(account).getByLabelText('로그인 비밀번호'), 'secret1')

@@ -7,6 +7,21 @@ import {
   useRef,
   useState,
 } from 'react'
+import {
+  BarChart3,
+  CalendarDays,
+  Camera,
+  Check,
+  ChevronDown,
+  Image as ImageIcon,
+  Menu,
+  Mic,
+  PawPrint,
+  Pencil,
+  Sparkles,
+  Utensils,
+  X,
+} from 'lucide-react'
 import './App.css'
 import { analyzePhoto } from './ai/analyzePhoto'
 import { captureFrameFromVideo } from './camera/captureFromVideo'
@@ -22,7 +37,6 @@ import {
   formatCurrency,
   formatIncomeCategoryLabel,
   formatLedgerCategory,
-  generateDailyLog,
   getCalendarDays,
   getStoryEntriesForDate,
   getStoryEntriesForMonth,
@@ -30,7 +44,6 @@ import {
   getCategoryMeta,
   getIncomeCategoryMeta,
   getMonthlyExpenseTotal,
-  getMonthlyIncomeTotal,
   type IncomeCategoryId,
   incomeCategoryTree,
   type LedgerCategoryId,
@@ -45,7 +58,7 @@ import {
   formatMonthLogRelativeKo,
 } from './domain/relativeLabelsKo'
 import { StoryReel, type StorySlide } from './story/StoryReel'
-import { InteractivePet3D, PetPortrait } from './components/InteractivePet3D'
+import { PetPortrait } from './components/InteractivePet3D'
 import { PetCorner } from './components/PetCorner'
 import { UichanAdmin } from './admin/UichanAdmin'
 import {
@@ -63,7 +76,7 @@ import { createCashlogRepository, mergeExpenses } from './services/cashlogReposi
 
 type AddMode = 'closed' | 'choice' | 'photo' | 'manual'
 type StoryMode = null | 'day' | 'month'
-type AppView = 'diary' | 'pets'
+type AppView = 'diary' | 'calendar' | 'pets'
 type AuthMode = 'signIn' | 'signUp' | 'magic'
 
 type ExpenseForm = {
@@ -147,6 +160,8 @@ function CashlogApp() {
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [storyMode, setStoryMode] = useState<StoryMode>(null)
   const [activeView, setActiveView] = useState<AppView>('diary')
+  const [showAccount, setShowAccount] = useState(false)
+  const [aiContext, setAiContext] = useState<'friends' | 'solo' | null>(null)
   const [relativeMinuteTick, setRelativeMinuteTick] = useState(0)
   const [petState, setPetState] = useState<PetState>(loadPetState)
   const [session, setSession] = useState<CashlogSession | null>(null)
@@ -321,10 +336,6 @@ function CashlogApp() {
     () => getExpensesForDate(expenses, selectedDate),
     [expenses, selectedDate],
   )
-  const dailyLog = useMemo(
-    () => generateDailyLog(selectedDate, expenses),
-    [expenses, selectedDate],
-  )
   const calendarDays = useMemo(
     () => getCalendarDays(visibleMonth.year, visibleMonth.month),
     [visibleMonth],
@@ -334,11 +345,15 @@ function CashlogApp() {
     [visibleMonth.year, visibleMonth.month],
   )
   const monthlyExpense = getMonthlyExpenseTotal(expenses, yearMonth)
-  const monthlyIncome = getMonthlyIncomeTotal(expenses, yearMonth)
   const selectedPetName = petState.selectedKind === 'cat' ? petState.catName : petState.dogName
-  const selectedPetOutfit = petState.selectedKind === 'cat' ? petState.catOutfit : petState.dogOutfit
-  const selectedPetPalette = petState.selectedKind === 'cat' ? petState.catPalette : petState.dogPalette
-  const selectedPetBreed = petState.selectedKind === 'cat' ? petState.catBreed : petState.dogBreed
+  const selectedDaySpent = dayExpenseTotal(selectedExpenses)
+  const selectedDayEarned = dayIncomeTotal(selectedExpenses)
+  const selectedDayPhotos = selectedExpenses.filter((expense) => expense.imageUrl).slice(0, 3)
+  const selectedDateLabel = new Intl.DateTimeFormat('ko-KR', {
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  }).format(new Date(`${selectedDate}T12:00:00`))
 
   const syncWithCloud = async () => {
     if (!repository) {
@@ -494,6 +509,16 @@ function CashlogApp() {
     setCaptureKind('photo')
     setForm(emptyForm())
     setAddMode('choice')
+  }
+
+  const openPhotoCapture = async () => {
+    stopCamera()
+    revokeAndClearPreview()
+    setCaptureKind('photo')
+    setForm(emptyForm())
+    setAiContext(null)
+    setAddMode('photo')
+    await startCamera()
   }
 
   const openManual = () => {
@@ -660,6 +685,8 @@ function CashlogApp() {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
+    setAddMode('photo')
+    setAiContext(null)
     const isImage = file.type.startsWith('image/')
     const isVideo = file.type.startsWith('video/')
     if (!isImage && !isVideo) {
@@ -804,139 +831,64 @@ function CashlogApp() {
     }))
   }, [])
 
-  return (
-    <main className="app-shell">
-      <section className="hero-panel">
-        <div>
-          <p className="eyebrow">Photo first money diary</p>
-          <h1>Cashlog</h1>
-          <p className="hero-copy">
-            찍은 사진 기록만 모아 오늘이나 한 달을 스토리처럼 되감습니다. 수입·지출을 간단히 입력할 수 있어요.
-          </p>
-          <div className="hero-pet-showcase">
-            <InteractivePet3D
-              compact
-              kind={petState.selectedKind}
-              name={selectedPetName}
-              palette={selectedPetPalette}
-              outfit={selectedPetOutfit}
-              breed={selectedPetBreed}
-            />
-            <span className="mascot-caption">오늘도 같이 기록해요!</span>
-          </div>
-        </div>
-        <div className="hero-actions">
-          <section className="account-card" aria-label="로그인과 동기화">
-            <div>
-              <p className="eyebrow">Account sync</p>
-              <h2>{session?.user?.email ?? '로컬 모드'}</h2>
-            </div>
-            {authClient.isConfigured ? (
-              session ? (
-                <div className="account-actions">
-                  <button type="button" className="ghost-button" onClick={syncWithCloud}>
-                    지금 동기화
-                  </button>
-                  <button type="button" className="ghost-button" onClick={handleSignOut}>
-                    로그아웃
-                  </button>
-                </div>
-              ) : (
-                <form className="account-form" onSubmit={handleAuthSubmit}>
-                  <div className="account-mode-tabs" role="group" aria-label="로그인 방식">
-                    <button
-                      type="button"
-                      className={authMode === 'signIn' ? 'active' : ''}
-                      aria-pressed={authMode === 'signIn'}
-                      onClick={() => setAuthMode('signIn')}
-                    >
-                      로그인
-                    </button>
-                    <button
-                      type="button"
-                      className={authMode === 'signUp' ? 'active' : ''}
-                      aria-pressed={authMode === 'signUp'}
-                      onClick={() => setAuthMode('signUp')}
-                    >
-                      회원가입
-                    </button>
-                    <button
-                      type="button"
-                      className={authMode === 'magic' ? 'active' : ''}
-                      aria-pressed={authMode === 'magic'}
-                      onClick={() => setAuthMode('magic')}
-                    >
-                      메일링크
-                    </button>
-                  </div>
-                  <input
-                    type="email"
-                    value={authEmail}
-                    onChange={(event) => setAuthEmail(event.target.value)}
-                    placeholder="email@example.com"
-                    aria-label="로그인 이메일"
-                    autoComplete="email"
-                  />
-                  {authMode !== 'magic' && (
-                    <input
-                      type="password"
-                      value={authPassword}
-                      onChange={(event) => setAuthPassword(event.target.value)}
-                      placeholder="비밀번호 6자 이상"
-                      aria-label="로그인 비밀번호"
-                      autoComplete={authMode === 'signUp' ? 'new-password' : 'current-password'}
-                    />
-                  )}
-                  <button type="submit">
-                    {authMode === 'signUp'
-                      ? '가입하고 시작'
-                      : authMode === 'magic'
-                        ? '메일 링크 받기'
-                        : '로그인'}
-                  </button>
-                </form>
-              )
-            ) : (
-              null
-            )}
-            {authMessage && <small className="account-message">{authMessage}</small>}
-          </section>
-          <div className="hero-month-stats">
-            <div>
-              <span>이번 달 지출</span>
-              <strong>{formatCurrency(monthlyExpense)}</strong>
-            </div>
-            <div>
-              <span>이번 달 수입</span>
-              <strong className={monthlyIncome > 0 ? 'hero-stat-income' : undefined}>
-                {formatCurrency(monthlyIncome)}
-              </strong>
-            </div>
-          </div>
-          <button type="button" className="primary-button" onClick={openChoice}>
-            + 기록 추가
-          </button>
-        </div>
-      </section>
+  const handleAiContext = (context: 'friends' | 'solo') => {
+    setAiContext(context)
+    updateForm('memo', context === 'friends' ? '친구와 함께' : '혼자 보낸 시간')
+  }
 
-      <nav className="view-tabs" aria-label="화면 전환">
+  return (
+    <main className={`app-shell${activeView === 'diary' ? ' timeline-app-shell' : ''}`}>
+      <header className="timeline-topbar">
         <button
           type="button"
-          className={activeView === 'diary' ? 'active' : ''}
-          aria-pressed={activeView === 'diary'}
-          onClick={() => setActiveView('diary')}
+          className="icon-button"
+          aria-label={showAccount ? '계정 메뉴 닫기' : '계정 메뉴 열기'}
+          onClick={() => setShowAccount((open) => !open)}
         >
-          가계부
+          {showAccount ? <X size={24} /> : <Menu size={25} />}
         </button>
+        <strong className="timeline-brand">Cashlog <Pencil size={18} aria-hidden /></strong>
         <button
           type="button"
-          className={activeView === 'pets' ? 'active' : ''}
-          aria-pressed={activeView === 'pets'}
-          onClick={() => setActiveView('pets')}
+          className="daily-story-button"
+          disabled={dayStorySlides.length === 0}
+          onClick={() => setStoryMode('day')}
         >
-          {selectedPetName}
+          <Sparkles size={16} aria-hidden /> 오늘 한줄
         </button>
-      </nav>
+      </header>
+
+      {showAccount && (
+        <section className="account-card account-drawer" aria-label="로그인과 동기화">
+          <div>
+            <p className="eyebrow">MY CASHLOG</p>
+            <h2>{session?.user?.email ?? '내 기록 지키기'}</h2>
+            {!session && <p>로그인하면 사진 기록과 캐릭터가 모든 기기에서 이어져요.</p>}
+          </div>
+          {authClient.isConfigured && (
+            session ? (
+              <div className="account-actions">
+                <button type="button" className="ghost-button" onClick={syncWithCloud}>지금 동기화</button>
+                <button type="button" className="ghost-button" onClick={handleSignOut}>로그아웃</button>
+              </div>
+            ) : (
+              <form className="account-form" onSubmit={handleAuthSubmit}>
+                <div className="account-mode-tabs" role="group" aria-label="로그인 방식">
+                  <button type="button" className={authMode === 'signIn' ? 'active' : ''} onClick={() => setAuthMode('signIn')}>로그인</button>
+                  <button type="button" className={authMode === 'signUp' ? 'active' : ''} onClick={() => setAuthMode('signUp')}>회원가입</button>
+                  <button type="button" className={authMode === 'magic' ? 'active' : ''} onClick={() => setAuthMode('magic')}>메일링크</button>
+                </div>
+                <input type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="email@example.com" aria-label="로그인 이메일" autoComplete="email" />
+                {authMode !== 'magic' && (
+                  <input type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder="비밀번호 6자 이상" aria-label="로그인 비밀번호" autoComplete={authMode === 'signUp' ? 'new-password' : 'current-password'} />
+                )}
+                <button type="submit">{authMode === 'signUp' ? '가입하고 시작' : authMode === 'magic' ? '메일 링크 받기' : '로그인'}</button>
+              </form>
+            )
+          )}
+          {authMessage && <small className="account-message">{authMessage}</small>}
+        </section>
+      )}
 
       {activeView === 'pets' ? (
         <PetCorner
@@ -947,8 +899,8 @@ function CashlogApp() {
           onOutfitChange={handleOutfitChange}
           onPaletteChange={handlePaletteChange}
         />
-      ) : (
-        <section className="dashboard-grid">
+      ) : activeView === 'calendar' ? (
+        <section className="calendar-view">
           <div className="calendar-card">
             <div className="section-heading section-heading-toolbar">
               <div>
@@ -971,7 +923,7 @@ function CashlogApp() {
                 onClick={() => setStoryMode('month')}
                 title="이번 달 기록 재생"
               >
-                📽 한 달 스토리
+                한 달 스토리
               </button>
             </div>
             <div className="weekday-row">
@@ -1010,112 +962,133 @@ function CashlogApp() {
               })}
             </div>
           </div>
-
-          <aside className="daily-card">
-            <div className="section-heading section-heading-toolbar">
-              <div>
-                <p className="eyebrow">Daily log</p>
-                <h2>{selectedDate}</h2>
-              </div>
-              <button
-                type="button"
-                className="ghost-button story-launch-btn"
-                disabled={dayStorySlides.length === 0}
-                onClick={() => setStoryMode('day')}
-                title="선택한 날의 기록 재생"
-              >
-                📷 하루 스토리
+        </section>
+      ) : (
+        <section className="timeline-home">
+          <header className="today-heading">
+            <div>
+              <p className="eyebrow">TODAY</p>
+              <button type="button" className="date-switcher" onClick={() => setActiveView('calendar')}>
+                {selectedDateLabel} <ChevronDown size={20} aria-hidden />
               </button>
             </div>
-            <div className="daily-companion-note">
-              <PetPortrait
-                kind={petState.selectedKind}
-                name={selectedPetName}
-                className="tiny-companion"
-              />
-              <span>{selectedPetName}가 오늘 로그를 살짝 지켜보는 중</span>
+            <div className="today-cuts" aria-label={`오늘 사진 ${selectedDayPhotos.length}장`}>
+              <strong>오늘 {selectedDayPhotos.length}컷</strong>
+              <div className="today-cut-strip">
+                {selectedDayPhotos.map((expense) => (
+                  <img key={expense.id} src={expense.imageUrl} alt="오늘 기록" />
+                ))}
+                {selectedDayPhotos.length === 0 && (
+                  <button type="button" onClick={openPhotoCapture} aria-label="오늘 첫 사진 촬영">
+                    <Camera size={18} aria-hidden />
+                  </button>
+                )}
+              </div>
             </div>
-            <p className="daily-summary">{dailyLog.summary}</p>
+          </header>
 
-            <div className="timeline">
-              {selectedExpenses.length === 0 ? (
-                <div className="empty-state">
-                  <PetPortrait
-                    kind={petState.selectedKind}
-                    name={selectedPetName}
-                    className="empty-mascot"
-                  />
-                  <p>아직 기록이 없어요. + 버튼으로 첫 로그를 남겨보세요.</p>
+          <div className="today-money-strip">
+            <span>오늘 쓴 돈 <strong>{formatCurrency(selectedDaySpent)}</strong></span>
+            {selectedDayEarned > 0 && <span className="today-income">수입 +{formatCurrency(selectedDayEarned)}</span>}
+            <span>이번 달 {formatCurrency(monthlyExpense)}</span>
+          </div>
+
+          <div className="timeline-companion">
+            <PetPortrait kind={petState.selectedKind} name={selectedPetName} className="timeline-pet" />
+            <p><strong>{selectedPetName}</strong>가 오늘의 장면을 같이 정리하고 있어요.</p>
+          </div>
+
+          <div className="photo-timeline">
+            {selectedExpenses.length === 0 ? (
+              <div className="timeline-empty-moment">
+                <div className="timeline-empty-photo">
+                  <img src="/cafe-receipt-moment.png" alt="아이스 아메리카노와 영수증 기록 예시" />
+                  <span><Sparkles size={14} aria-hidden /> AI 기록 예시</span>
                 </div>
-              ) : (
-                selectedExpenses.map((expense) => {
-                  const accent = ledgerAccentColor(expense)
-                  return (
-                    <article
-                      className={`expense-card ${expense.kind === 'income' ? 'is-income' : ''}`}
-                      key={expense.id}
-                    >
+                <div>
+                  <p className="empty-question">오늘 첫 장면, 나랑 찍어볼까?</p>
+                  <button type="button" className="empty-camera-link" onClick={openPhotoCapture}>
+                    <Camera size={18} aria-hidden /> 사진으로 시작
+                  </button>
+                </div>
+              </div>
+            ) : (
+              selectedExpenses.map((expense) => {
+                const accent = ledgerAccentColor(expense)
+                const isPhoto = Boolean(expense.imageUrl || expense.videoUrl)
+                return (
+                  <article className={`timeline-entry${isPhoto ? ' timeline-entry-photo' : ''}`} key={expense.id}>
+                    <time dateTime={expense.dateTime}>
+                      {new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(expense.dateTime))}
+                    </time>
+                    <span className="timeline-node" style={{ backgroundColor: accent }} aria-hidden>
+                      {isPhoto ? <Camera size={18} /> : expense.kind === 'income' ? <Sparkles size={18} /> : <Utensils size={18} />}
+                    </span>
+                    <div className="timeline-entry-body">
                       {expense.videoUrl ? (
-                        <video
-                          className="expense-image"
-                          src={expense.videoUrl}
-                          poster={expense.imageUrl}
-                          muted
-                          loop
-                          playsInline
-                          autoPlay
-                        />
+                        <video className="timeline-photo" src={expense.videoUrl} poster={expense.imageUrl} muted loop playsInline autoPlay />
                       ) : expense.imageUrl ? (
-                        <img src={expense.imageUrl} alt="" className="expense-image" />
+                        <img src={expense.imageUrl} alt={`${expense.title} 사진 기록`} className="timeline-photo" />
                       ) : null}
-                      <div>
-                        <time
-                          dateTime={expense.dateTime}
-                          className="timeline-relative"
-                        >
-                          {formatDayLogRelativeKo(new Date(expense.dateTime))}
-                        </time>
-                        <div className="expense-title-row">
-                          <h3>
-                            {expense.kind === 'income' && (
-                              <span className="ledger-kind-badge ledger-kind-badge-income">
-                                수입
-                              </span>
-                            )}
-                            {expense.title}
-                          </h3>
-                          <strong className={expense.kind === 'income' ? 'amount-income' : undefined}>
-                            {expense.kind === 'income' ? '+' : ''}
-                            {formatCurrency(expense.amount)}
-                          </strong>
-                        </div>
-                        <p>
-                          <span className="category-label" style={{ color: accent }}>
-                            {formatLedgerCategory(expense)}
-                          </span>
-                          {expense.memo && ` · ${expense.memo}`}
-                        </p>
+                      <span className="entry-category">{formatLedgerCategory(expense)}</span>
+                      <div className="entry-title-row">
+                        <h3>{expense.title}</h3>
+                        <strong className={expense.kind === 'income' ? 'amount-income' : undefined}>
+                          {expense.kind === 'income' ? '+' : ''}{formatCurrency(expense.amount)}
+                        </strong>
                       </div>
-                    </article>
-                  )
-                })
-              )}
-            </div>
-          </aside>
+                      {expense.memo && <p>{expense.memo}</p>}
+                      <Check className="entry-check" size={18} aria-label="기록 완료" />
+                    </div>
+                  </article>
+                )
+              })
+            )}
+          </div>
+
+          <div className="capture-prompt">찍으면 내가 정리해줄게!</div>
+          <div className="capture-dock" aria-label="빠른 기록">
+            <label className="dock-secondary" title="사진 보관함">
+              <ImageIcon size={23} aria-hidden />
+              <span>사진</span>
+              <input type="file" accept="image/*" onChange={handleGalleryPick} aria-label="갤러리에서 사진 선택" />
+            </label>
+            <button type="button" className="camera-shutter" onClick={openPhotoCapture} aria-label="카메라로 바로 촬영">
+              <Camera size={34} strokeWidth={2.2} aria-hidden />
+            </button>
+            <button type="button" className="dock-secondary" onClick={openManual} aria-label="음성 또는 직접 입력">
+              <Mic size={23} aria-hidden />
+              <span>말하기</span>
+            </button>
+          </div>
+          <button type="button" className="sr-only-action" onClick={openChoice}>+ 기록 추가</button>
         </section>
       )}
+
+      <nav className="bottom-nav" aria-label="주요 화면">
+        <button type="button" className={activeView === 'diary' ? 'active' : ''} aria-pressed={activeView === 'diary'} onClick={() => setActiveView('diary')}>
+          <BarChart3 size={22} aria-hidden /><span>하루 타임라인</span>
+        </button>
+        <button type="button" className={activeView === 'calendar' ? 'active' : ''} aria-pressed={activeView === 'calendar'} onClick={() => setActiveView('calendar')}>
+          <CalendarDays size={22} aria-hidden /><span>달력</span>
+        </button>
+        <button type="button" className={activeView === 'pets' ? 'active' : ''} aria-pressed={activeView === 'pets'} onClick={() => setActiveView('pets')}>
+          <PawPrint size={22} aria-hidden /><span>{selectedPetName}</span>
+        </button>
+      </nav>
 
       {addMode !== 'closed' && (
         <section className="sheet-backdrop" aria-label="기록 추가">
           <div className="add-sheet">
             <div className="sheet-header">
               <div>
-                <p className="eyebrow">Add record</p>
-                <h2>기록 추가</h2>
+                <p className="eyebrow">PHOTO LOG</p>
+                <h2>{addMode === 'photo' ? '찍은 장면 정리하기' : '직접 기록하기'}</h2>
               </div>
               <button
                 type="button"
-                className="ghost-button"
+                className="icon-button"
+                aria-label="기록 창 닫기"
                 onClick={() => {
                   const recorder = mediaRecorderRef.current
                   if (recorder && recorder.state !== 'inactive') {
@@ -1131,7 +1104,7 @@ function CashlogApp() {
                   setAddMode('closed')
                 }}
               >
-                닫기
+                <X size={22} aria-hidden />
               </button>
             </div>
 
@@ -1143,7 +1116,7 @@ function CashlogApp() {
                   aria-label="카메라로 촬영"
                   onClick={() => setAddMode('photo')}
                 >
-                  <span>사진</span>
+                  <Camera size={26} aria-hidden />
                   <strong>바로 카메라 촬영</strong>
                   <small>찍어서 저장하고, 로그에서는 스토리로 모아 보여요.</small>
                 </button>
@@ -1153,7 +1126,7 @@ function CashlogApp() {
                   aria-label="직접 입력"
                   onClick={openManual}
                 >
-                  <span>직접</span>
+                  <Pencil size={26} aria-hidden />
                   <strong>직접 입력</strong>
                   <small>기존 가계부처럼 빠르게 기록해요.</small>
                 </button>
@@ -1169,7 +1142,7 @@ function CashlogApp() {
                     aria-pressed={captureKind === 'photo'}
                     onClick={() => handleCaptureKindChange('photo')}
                   >
-                    📷 사진
+                    <Camera size={17} aria-hidden /> 사진
                   </button>
                   <button
                     type="button"
@@ -1177,15 +1150,16 @@ function CashlogApp() {
                     aria-pressed={captureKind === 'video'}
                     onClick={() => handleCaptureKindChange('video')}
                   >
-                    🎬 영상
+                    영상
                   </button>
                 </div>
                 <div className="photo-source-row" role="group" aria-label="미디어 가져오기">
                   <button type="button" className="camera-start-button" onClick={startCamera}>
-                    {captureKind === 'video' ? '🎥 카메라로 녹화' : '📷 카메라 촬영'}
+                    <Camera size={20} aria-hidden />
+                    {captureKind === 'video' ? '카메라로 녹화' : '카메라 촬영'}
                   </button>
                   <label className="file-picker file-picker-inline">
-                    🖼 갤러리에서 선택
+                    <ImageIcon size={20} aria-hidden /> 갤러리에서 선택
                     <input
                       type="file"
                       accept={captureKind === 'video' ? 'video/*' : 'image/*'}
@@ -1275,6 +1249,7 @@ function CashlogApp() {
                 )}
                 {analysis && (
                   <div className="analysis-note">
+                    <span className="analysis-status"><Sparkles size={15} aria-hidden /> AI 임시 기록</span>
                     <p>
                       {(analysis.model ?? (analysis.engine === 'openai' ? 'Vision' : '목(mock)'))}
                       {' '}분석 신뢰도 {Math.round(analysis.confidence * 100)}% ·{' '}
@@ -1292,6 +1267,16 @@ function CashlogApp() {
                     ) : analysis.detectedObjects?.length ? (
                       <small>단서: {analysis.detectedObjects.slice(0, 3).join(', ')}</small>
                     ) : null}
+                    <div className="pet-context-question">
+                      <PetPortrait kind={petState.selectedKind} name={selectedPetName} className="question-pet" />
+                      <div>
+                        <strong>친구랑 함께한 장면이야?</strong>
+                        <div role="group" aria-label="사진 속 상황">
+                          <button type="button" className={aiContext === 'friends' ? 'active' : ''} onClick={() => handleAiContext('friends')}>응</button>
+                          <button type="button" className={aiContext === 'solo' ? 'active' : ''} onClick={() => handleAiContext('solo')}>혼자</button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
                 <ExpenseEditor
@@ -1419,7 +1404,6 @@ function ExpenseEditor({
                   aria-label={`대분류: ${group.name}`}
                   onClick={() => onChange('category', group.leaves[0].id)}
                 >
-                  <span aria-hidden>{group.icon}</span>
                   {group.name}
                 </button>
               ))}
@@ -1458,7 +1442,6 @@ function ExpenseEditor({
                   aria-label={`수입 대분류: ${group.name}`}
                   onClick={() => onChange('category', group.leaves[0].id)}
                 >
-                  <span aria-hidden>{group.icon}</span>
                   {group.name}
                 </button>
               ))}

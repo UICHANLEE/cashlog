@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#fff9ee" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap" rel="stylesheet" />
+    <title>Cashlog 사전 예약</title>
+  </head>
+  <body>
+    <main>
+      <section class="reservation-hero" aria-labelledby="reservation-title">
+        <nav class="reservation-nav">
+          <a href="/" class="brand">Cashlog</a>
+          <a href="#reserve">사전 예약</a>
+        </nav>
+
+        <div class="moment-photo" aria-hidden="true">
+          <img src="/cafe-receipt-moment.png" alt="" />
+          <span>7월 14일 · 카페 5,000원</span>
+        </div>
+        <img class="reservation-pet" src="/pets/cat-3d.png" alt="Cashlog 고양이 나비" />
+
+        <div class="hero-copy-block">
+          <p class="eyebrow">PHOTO FIRST MONEY DIARY</p>
+          <h1 id="reservation-title">찍으면,<br />우리의 하루가 기록돼요.</h1>
+          <p>사진 한 장을 남기면 나비가 금액과 카테고리를 정리하고, 오늘의 소비 이야기를 함께 완성해요.</p>
+          <form id="reserve" class="reservation-form">
+            <label for="reservation-email">출시 소식 받을 이메일</label>
+            <div>
+              <input id="reservation-email" name="email" type="email" autocomplete="email" placeholder="hello@example.com" required />
+              <button type="submit">가장 먼저 만나기</button>
+            </div>
+            <p id="reservation-message" role="status" aria-live="polite"></p>
+          </form>
+        </div>
+        <a class="next-hint" href="#preview">나비와 기록하는 하루 보기</a>
+      </section>
+
+      <section id="preview" class="preview-band" aria-labelledby="preview-title">
+        <div class="preview-heading">
+          <p class="eyebrow">ONE PHOTO, ONE MEMORY</p>
+          <h2 id="preview-title">가계부가 아니라<br />나와 나비의 하루 타임라인</h2>
+        </div>
+        <ol class="preview-steps">
+          <li><strong>01</strong><span>한 번 눌러 오늘의 장면을 찍어요.</span></li>
+          <li><strong>02</strong><span>AI가 사진에서 소비 정보를 먼저 채워요.</span></li>
+          <li><strong>03</strong><span>나비의 짧은 질문에 답하면 기록 끝.</span></li>
+        </ol>
+      </section>
+    </main>
+    <script type="module" src="/src/reservation.ts"></script>
+  </body>
+</html>
