@@ -1775,7 +1775,7 @@ video.preview-image {
   position: relative;
   z-index: 20;
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   min-height: 48px;
@@ -1793,6 +1793,18 @@ video.preview-image {
   color: var(--ink);
   cursor: pointer;
   box-shadow: 2px 2px 0 var(--line);
+}
+
+.account-trigger:not(.is-open) {
+  display: inline-flex;
+  width: auto;
+  min-width: 72px;
+  gap: 6px;
+  padding: 0 9px;
+  font-family: var(--font-hand);
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .timeline-brand {

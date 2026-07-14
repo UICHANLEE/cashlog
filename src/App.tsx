@@ -14,12 +14,12 @@ import {
   Check,
   ChevronDown,
   Image as ImageIcon,
-  Menu,
   Mic,
   PawPrint,
   Pencil,
   Sparkles,
   Utensils,
+  UserRound,
   X,
 } from 'lucide-react'
 import './App.css'
@@ -461,6 +461,10 @@ function CashlogApp() {
 
   const handleAuthSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (!authClient.isConfigured) {
+      setAuthMessage('로그인 서비스 연결이 아직 완료되지 않았어요.')
+      return
+    }
     const email = authEmail.trim()
     if (!email) return
     const password = authPassword.trim()
@@ -930,11 +934,18 @@ function CashlogApp() {
       <header className="timeline-topbar">
         <button
           type="button"
-          className="icon-button"
+          className={`icon-button account-trigger${showAccount ? ' is-open' : ''}`}
           aria-label={showAccount ? '계정 메뉴 닫기' : '계정 메뉴 열기'}
           onClick={() => setShowAccount((open) => !open)}
         >
-          {showAccount ? <X size={24} /> : <Menu size={25} />}
+          {showAccount ? (
+            <X size={22} />
+          ) : (
+            <>
+              <UserRound size={19} aria-hidden />
+              <span>{session ? '내 계정' : '로그인'}</span>
+            </>
+          )}
         </button>
         <strong className="timeline-brand">Cashlog <Pencil size={18} aria-hidden /></strong>
         <button
@@ -954,8 +965,7 @@ function CashlogApp() {
             <h2>{session?.user?.email ?? '내 기록 지키기'}</h2>
             {!session && <p>로그인하면 사진 기록과 캐릭터가 모든 기기에서 이어져요.</p>}
           </div>
-          {authClient.isConfigured && (
-            session ? (
+          {session ? (
               <div className="account-actions">
                 <button type="button" className="ghost-button" onClick={syncWithCloud}>지금 동기화</button>
                 <button type="button" className="ghost-button" onClick={handleSignOut}>로그아웃</button>
@@ -1019,8 +1029,7 @@ function CashlogApp() {
                 )}
                 <button type="submit">{authMode === 'signUp' ? '가입하고 시작' : authMode === 'magic' ? '메일 링크 받기' : '로그인'}</button>
               </form>
-            )
-          )}
+            )}
           {authMessage && <small className="account-message">{authMessage}</small>}
         </section>
       )}

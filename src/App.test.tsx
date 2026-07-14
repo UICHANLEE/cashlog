@@ -25,6 +25,21 @@ describe('Cashlog photo MVP', () => {
     render(<App />)
 
     expect(screen.getByRole('button', { name: /오늘 한줄/i })).toBeDisabled()
+    expect(screen.getByText('로그인')).toBeInTheDocument()
+  })
+
+  it('keeps the login form discoverable before the backend is configured', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '계정 메뉴 열기' }))
+    const account = screen.getByRole('region', { name: '로그인과 동기화' })
+    expect(within(account).getByLabelText('로그인 이메일')).toBeInTheDocument()
+    expect(within(account).getByLabelText('로그인 비밀번호')).toBeInTheDocument()
+
+    const loginButtons = within(account).getAllByRole('button', { name: '로그인' })
+    await user.click(loginButtons[loginButtons.length - 1])
+    expect(within(account).getByText('로그인 서비스 연결이 아직 완료되지 않았어요.')).toBeInTheDocument()
   })
 
   it('keeps the pet playground behind a dedicated tab', async () => {
