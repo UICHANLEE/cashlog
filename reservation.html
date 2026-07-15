@@ -30,18 +30,22 @@
           <h1 id="reservation-title">찍으면,<br />우리의 하루가 기록돼요.</h1>
           <p>사진 한 장을 남기면 나비가 금액과 카테고리를 정리하고, 오늘의 소비 이야기를 함께 완성해요.</p>
           <form id="reserve" class="reservation-form">
+            <p class="secret-benefit"><strong>SECRET 50</strong> 출시 후 가장 먼저 시작한 50명에게만 드리는 시크릿 혜택이 기다리고 있어요.</p>
             <label for="reservation-email">출시 소식 받을 이메일</label>
-            <div>
+            <div class="reservation-submit-row">
               <input id="reservation-email" name="email" type="email" autocomplete="email" placeholder="hello@example.com" required />
               <button type="submit">가장 먼저 만나기</button>
             </div>
+            <label class="developer-message-label" for="developer-message">개발자에게 한마디 <span>선택</span></label>
+            <textarea id="developer-message" name="developer-message" maxlength="500" rows="3" placeholder="이런 가계부가 되면 좋겠어요, 응원의 한마디도 좋아요!"></textarea>
+            <small class="message-counter"><span id="developer-message-count">0</span>/500</small>
             <label class="reservation-consent">
               <input name="marketing-consent" type="checkbox" required />
               <span><strong>[필수]</strong> 출시 소식 발송을 위한 이메일 수집·이용에 동의합니다.</span>
             </label>
             <details class="reservation-privacy">
               <summary>수집 및 이용 내용</summary>
-              <p>이메일을 Cashlog 출시 안내 목적으로 수집하며, 안내 종료 또는 동의 철회 시 지체 없이 삭제합니다.</p>
+              <p>이메일과 선택 작성한 메시지를 출시 안내 및 서비스 개선 목적으로 수집하며, 안내 종료 또는 동의 철회 시 지체 없이 삭제합니다.</p>
             </details>
             <p id="reservation-message" role="status" aria-live="polite"></p>
           </form>

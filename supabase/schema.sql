@@ -141,8 +141,18 @@ create table if not exists public.cashlog_reservations (
   consent_version text not null,
   consented_at timestamptz not null,
   source text not null default 'reservation' check (source = 'reservation'),
+  developer_message text check (developer_message is null or char_length(developer_message) <= 500),
   created_at timestamptz not null default now()
 );
+
+alter table public.cashlog_reservations
+  add column if not exists developer_message text;
+
+alter table public.cashlog_reservations
+  drop constraint if exists cashlog_reservations_developer_message_check;
+alter table public.cashlog_reservations
+  add constraint cashlog_reservations_developer_message_check
+  check (developer_message is null or char_length(developer_message) <= 500);
 
 create unique index if not exists cashlog_reservations_email_unique
   on public.cashlog_reservations (lower(email));

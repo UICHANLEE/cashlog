@@ -3,8 +3,14 @@ import { createReservation } from './services/reservationRepository'
 
 const form = document.querySelector<HTMLFormElement>('#reserve')
 const emailInput = document.querySelector<HTMLInputElement>('#reservation-email')
+const developerMessageInput = document.querySelector<HTMLTextAreaElement>('#developer-message')
+const developerMessageCount = document.querySelector<HTMLSpanElement>('#developer-message-count')
 const message = document.querySelector<HTMLParagraphElement>('#reservation-message')
 const submitButton = form?.querySelector<HTMLButtonElement>('button[type="submit"]')
+
+developerMessageInput?.addEventListener('input', () => {
+  if (developerMessageCount) developerMessageCount.textContent = String(developerMessageInput.value.length)
+})
 
 form?.addEventListener('submit', async (event) => {
   event.preventDefault()
@@ -15,7 +21,7 @@ form?.addEventListener('submit', async (event) => {
   message.classList.remove('is-error')
   message.textContent = '예약을 챙겨두는 중...'
   try {
-    const result = await createReservation(email)
+    const result = await createReservation(email, developerMessageInput?.value ?? '')
     form.classList.add('is-complete')
     message.textContent = result === 'duplicate'
       ? '이미 예약되어 있어요. 출시 소식은 나비가 잘 챙겨둘게요.'

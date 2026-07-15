@@ -15,7 +15,7 @@
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 body { margin: 0; min-width: 320px; background: var(--paper); }
-button, input { font: inherit; }
+button, input, textarea { font: inherit; }
 
 .reservation-hero {
   position: relative;
@@ -97,6 +97,27 @@ h1 {
   margin-top: 34px;
 }
 
+.secret-benefit {
+  max-width: 560px;
+  margin: 0 0 16px;
+  padding: 10px 13px;
+  border: 2px dashed var(--line);
+  border-radius: 10px 4px 10px 4px;
+  background: var(--sun);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+  transform: rotate(-0.4deg);
+}
+
+.secret-benefit strong {
+  display: inline-block;
+  margin-right: 6px;
+  color: #943524;
+  font-family: 'Gaegu', cursive;
+  font-size: 17px;
+}
+
 .reservation-form label {
   display: block;
   margin-bottom: 8px;
@@ -105,20 +126,22 @@ h1 {
   font-weight: 700;
 }
 
-.reservation-form > div {
+.reservation-submit-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
 }
 
 .reservation-form input,
+.reservation-form textarea,
 .reservation-form button {
   min-height: 54px;
   border: 2px solid var(--line);
   color: var(--ink);
 }
 
-.reservation-form input {
+.reservation-form input,
+.reservation-form textarea {
   min-width: 0;
   padding: 0 16px;
   border-radius: 15px 6px 15px 6px;
@@ -126,7 +149,42 @@ h1 {
   outline: none;
 }
 
-.reservation-form input:focus { box-shadow: 0 0 0 4px rgba(142, 226, 195, 0.6); }
+.reservation-form textarea {
+  display: block;
+  width: 100%;
+  min-height: 82px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.reservation-form input:focus,
+.reservation-form textarea:focus { box-shadow: 0 0 0 4px rgba(142, 226, 195, 0.6); }
+
+.reservation-form .developer-message-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 16px;
+}
+
+.developer-message-label span {
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px 3px 8px 3px;
+  background: var(--mint);
+  font-family: 'Gowun Dodum', sans-serif;
+  font-size: 10px;
+}
+
+.message-counter {
+  display: block;
+  margin: 4px 3px 0 0;
+  color: var(--ink-soft);
+  font-size: 11px;
+  text-align: right;
+}
 
 .reservation-form button {
   padding: 0 21px;
@@ -292,10 +350,11 @@ h1 {
   }
   .hero-copy-block > p:not(.eyebrow) { max-width: 90%; font-size: 17px; }
   .reservation-form { margin-top: 26px; }
-  .reservation-form > div { grid-template-columns: 1fr; }
+  .reservation-submit-row { grid-template-columns: 1fr; }
+  .reservation-hero { min-height: 1290px; }
   .moment-photo { top: auto; right: -10px; bottom: 10px; width: 190px; }
   .reservation-pet { right: -82px; bottom: -58px; width: 250px; }
-  .next-hint { left: 20px; transform: none; white-space: nowrap; }
+  .next-hint { left: 20px; bottom: 250px; transform: none; white-space: nowrap; }
   .preview-band { grid-template-columns: 1fr; gap: 46px; padding: 72px 24px; }
 }
 

@@ -16,7 +16,7 @@ describe('reservation repository', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(createReservation(' Hello@Example.com ')).resolves.toBe('created')
+    await expect(createReservation(' Hello@Example.com ', '  사진 기록이 기대돼요!  ')).resolves.toBe('created')
 
     const [url, init] = fetchMock.mock.calls[0]
     expect(String(url)).toBe('https://cashlog.supabase.co/rest/v1/cashlog_reservations')
@@ -25,6 +25,7 @@ describe('reservation repository', () => {
       marketing_consent: true,
       consent_version: '2026-07-14',
       source: 'reservation',
+      developer_message: '사진 기록이 기대돼요!',
     })
   })
 

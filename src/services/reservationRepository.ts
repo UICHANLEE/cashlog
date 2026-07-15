@@ -16,7 +16,7 @@ const readSupabaseError = async (response: Response): Promise<SupabaseError> => 
   }
 }
 
-export const createReservation = async (email: string): Promise<ReservationResult> => {
+export const createReservation = async (email: string, developerMessage = ''): Promise<ReservationResult> => {
   const config = getSupabaseConfig()
   if (!config) throw new Error('예약 서비스를 준비하고 있어요. 잠시 후 다시 시도해 주세요.')
 
@@ -34,6 +34,7 @@ export const createReservation = async (email: string): Promise<ReservationResul
       consent_version: '2026-07-14',
       consented_at: new Date().toISOString(),
       source: 'reservation',
+      developer_message: developerMessage.trim() || null,
     }),
   })
 
