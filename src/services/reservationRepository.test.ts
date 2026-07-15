@@ -31,8 +31,22 @@ describe('reservation repository', () => {
   it('treats an existing email as an already completed reservation', async () => {
     vi.stubEnv('VITE_SUPABASE_URL', 'https://cashlog.supabase.co')
     vi.stubEnv('VITE_SUPABASE_PUBLISHABLE_KEY', 'publishable-key')
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 409 })))
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: '23505' }), {
+      status: 409,
+      headers: { 'Content-Type': 'application/json' },
+    })))
 
     await expect(createReservation('hello@example.com')).resolves.toBe('duplicate')
+  })
+
+  it('does not mislabel a non-duplicate conflict as an existing reservation', async () => {
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://cashlog.supabase.co')
+    vi.stubEnv('VITE_SUPABASE_PUBLISHABLE_KEY', 'publishable-key')
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: 'PGRST205' }), {
+      status: 409,
+      headers: { 'Content-Type': 'application/json' },
+    })))
+
+    await expect(createReservation('new@example.com')).rejects.toThrow('예약 저장 공간을 찾지 못했어요')
   })
 })
