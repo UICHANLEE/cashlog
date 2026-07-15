@@ -80,6 +80,7 @@ import { createCashlogRepository, mergeExpenses } from './services/cashlogReposi
 import { createCashlogStorage } from './services/supabaseStorage'
 import { prepareImageForStorage } from './media/prepareImageForStorage'
 import { assertValidImageFile } from './media/imageSignature'
+import { getMe as getSecureAccount, logout as secureLogout } from './account/accountApi'
 
 type AddMode = 'closed' | 'choice' | 'photo' | 'manual'
 type StoryMode = null | 'day' | 'month'
@@ -327,7 +328,22 @@ function CashlogApp() {
     const loadSession = async () => {
       try {
         const fromUrl = await authClient.consumeSessionFromUrl()
-        const stored = fromUrl ?? authClient.loadStoredSession()
+        let secureSession: CashlogSession | null = null
+        if (!fromUrl) {
+          try {
+            const secure = await getSecureAccount()
+            if (secure.accessToken) {
+              secureSession = {
+                accessToken: secure.accessToken,
+                ...(secure.expiresIn ? { expiresAt: Date.now() + secure.expiresIn * 1000 } : {}),
+                user: { id: secure.user.id, email: secure.user.email },
+              }
+            }
+          } catch {
+            secureSession = null
+          }
+        }
+        const stored = fromUrl ?? secureSession ?? authClient.loadStoredSession()
         if (!stored) {
           setSyncStatus('로그인 대기 · 로컬 저장 중')
           return
@@ -337,7 +353,7 @@ function CashlogApp() {
           ? await authClient.persistPendingOAuthConsent(hydrated)
           : false
         if (!alive) return
-        authClient.saveSession(hydrated)
+        if (!secureSession) authClient.saveSession(hydrated)
         setSession(hydrated)
         if (fromUrl) {
           setShowAccount(true)
@@ -562,6 +578,7 @@ function CashlogApp() {
   }
 
   const handleSignOut = () => {
+    void secureLogout().catch(() => undefined)
     authClient.signOut()
     setSession(null)
     initialSyncedSessionRef.current = null
@@ -1017,6 +1034,7 @@ function CashlogApp() {
           {session ? (
               <div className="account-actions">
                 <button type="button" className="ghost-button" onClick={syncWithCloud}>지금 동기화</button>
+                <a className="ghost-button" href="/profile.html">프로필 관리</a>
                 <button type="button" className="ghost-button" onClick={handleSignOut}>로그아웃</button>
               </div>
             ) : (

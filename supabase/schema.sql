@@ -303,3 +303,157 @@ alter table public.cashlog_media add column if not exists size_bytes bigint;
 alter table public.cashlog_media add column if not exists width integer;
 alter table public.cashlog_media add column if not exists height integer;
 alter table public.cashlog_media add column if not exists captured_at timestamptz;
+
+-- Account profiles. Password hashes remain exclusively in Supabase Auth's protected auth schema.
+create table if not exists public.cashlog_profiles (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  email text not null,
+  nickname text not null check (char_length(nickname) between 2 and 30),
+  profile_image_url text check (profile_image_url is null or profile_image_url like 'storage://cashlog-profiles/%'),
+  profile_image_path text,
+  status text not null default 'ACTIVE' check (status in ('ACTIVE', 'SUSPENDED', 'DELETED')),
+  email_verified_at timestamptz,
+  last_login_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+
+create unique index if not exists cashlog_profiles_email_unique
+  on public.cashlog_profiles (lower(email));
+
+alter table public.cashlog_profiles enable row level security;
+
+drop policy if exists "cashlog users read own profile" on public.cashlog_profiles;
+create policy "cashlog users read own profile"
+  on public.cashlog_profiles for select
+  using (auth.uid() = user_id);
+
+drop policy if exists "cashlog users update own profile" on public.cashlog_profiles;
+create policy "cashlog users update own profile"
+  on public.cashlog_profiles for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+-- OAuth users also receive a profile. Password signups are later enriched by the server API.
+create or replace function public.capture_cashlog_profile()
+returns trigger
+language plpgsql
+security definer set search_path = ''
+as $$
+begin
+  if new.raw_user_meta_data ->> 'app_id' = 'cashlog' then
+    insert into public.cashlog_profiles (
+      user_id, email, nickname, status, email_verified_at, created_at, updated_at
+    ) values (
+      new.id,
+      lower(coalesce(new.email, '')),
+      left(coalesce(nullif(trim(new.raw_user_meta_data ->> 'nickname'), ''), 'Cashlogger'), 30),
+      'ACTIVE',
+      new.email_confirmed_at,
+      new.created_at,
+      now()
+    )
+    on conflict (user_id) do update set
+      email = excluded.email,
+      email_verified_at = excluded.email_verified_at,
+      updated_at = now();
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_cashlog_profile_created on auth.users;
+create trigger on_cashlog_profile_created
+  after insert or update of email, email_confirmed_at on auth.users
+  for each row execute procedure public.capture_cashlog_profile();
+
+-- Private, server-processed profile avatars. Clients only receive expiring signed URLs.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('cashlog-profiles', 'cashlog-profiles', false, 1048576, array['image/webp'])
+on conflict (id) do update set
+  public = false,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "cashlog users read own profile images" on storage.objects;
+create policy "cashlog users read own profile images"
+  on storage.objects for select to authenticated
+  using (bucket_id = 'cashlog-profiles' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- Fixed-window API limiter. Only the service role can execute this function.
+create table if not exists public.cashlog_auth_rate_limits (
+  rate_key text not null,
+  action text not null,
+  window_started_at timestamptz not null,
+  request_count integer not null default 1,
+  primary key (rate_key, action)
+);
+
+alter table public.cashlog_auth_rate_limits enable row level security;
+
+create or replace function public.cashlog_check_rate_limit(
+  p_key text,
+  p_action text,
+  p_limit integer,
+  p_window_seconds integer
+)
+returns boolean
+language plpgsql
+security definer set search_path = ''
+as $$
+declare
+  current_count integer;
+begin
+  insert into public.cashlog_auth_rate_limits (rate_key, action, window_started_at, request_count)
+  values (p_key, p_action, now(), 1)
+  on conflict (rate_key, action) do update set
+    window_started_at = case
+      when public.cashlog_auth_rate_limits.window_started_at <= now() - make_interval(secs => p_window_seconds)
+        then now()
+      else public.cashlog_auth_rate_limits.window_started_at
+    end,
+    request_count = case
+      when public.cashlog_auth_rate_limits.window_started_at <= now() - make_interval(secs => p_window_seconds)
+        then 1
+      else public.cashlog_auth_rate_limits.request_count + 1
+    end
+  returning request_count into current_count;
+  return current_count <= p_limit;
+end;
+$$;
+
+revoke all on function public.cashlog_check_rate_limit(text, text, integer, integer) from public;
+revoke all on function public.cashlog_check_rate_limit(text, text, integer, integer) from anon;
+revoke all on function public.cashlog_check_rate_limit(text, text, integer, integer) from authenticated;
+grant execute on function public.cashlog_check_rate_limit(text, text, integer, integer) to service_role;
+
+-- Remove only Cashlog-owned data. The Auth identity may be shared by another app in this Supabase project.
+create or replace function public.cashlog_delete_account_data(p_user_id uuid)
+returns void
+language plpgsql
+security definer set search_path = ''
+as $$
+begin
+  delete from public.cashlog_category_feedback where user_id = p_user_id;
+  delete from public.cashlog_user_category_rules where user_id = p_user_id;
+  delete from public.cashlog_pet_profiles where user_id = p_user_id;
+  delete from public.cashlog_entries where user_id = p_user_id;
+  delete from public.cashlog_media where user_id = p_user_id;
+  delete from public.cashlog_user_consents where user_id = p_user_id;
+  update public.cashlog_profiles set
+    email = p_user_id::text || '@deleted.cashlog.invalid',
+    nickname = '탈퇴한 사용자',
+    profile_image_url = null,
+    profile_image_path = null,
+    status = 'DELETED',
+    deleted_at = now(),
+    updated_at = now()
+  where user_id = p_user_id;
+end;
+$$;
+
+revoke all on function public.cashlog_delete_account_data(uuid) from public;
+revoke all on function public.cashlog_delete_account_data(uuid) from anon;
+revoke all on function public.cashlog_delete_account_data(uuid) from authenticated;
+grant execute on function public.cashlog_delete_account_data(uuid) to service_role;

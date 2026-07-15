@@ -12,6 +12,7 @@
 - **펫 놀이터**: 기록을 남길수록 고양이·강아지가 함께 레벨업, 레벨에 따라 코디(옷) 해금·갈아입히기
 - **일별 로그 & 스토리**: 선택한 날짜의 타임라인·일기형 요약, 하루/한 달을 인스타 스토리처럼 재생
 - **로그인·계정 동기화**: Supabase Auth 기반 Google·카카오 간편 로그인, 이메일 가입·로그인, 기록·펫 프로필 동기화
+- **계정 관리**: 전용 회원가입·로그인·프로필 화면, HttpOnly 쿠키 세션, 닉네임·프로필 사진·비밀번호 변경, 로그아웃·회원탈퇴
 - **비공개 사진 보관**: 촬영 원본의 구도를 유지한 최대 2560px JPEG 보관본을 개인 Storage 폴더에 저장하고, 만료되는 서명 URL로만 표시
 - **손그림 다이어리 UI**: 손글씨 폰트·종이 질감·삐뚤 손그림 테두리의 1020 취향 디자인
 - **로컬 우선 저장**: 브라우저 `localStorage`에 먼저 저장하고, 로그인 시 계정 데이터와 병합
@@ -115,9 +116,15 @@ CATAI_CORS_ALLOWED_ORIGINS=https://your-cashlog-domain.example
 ```env
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_xxx
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_xxx
+SUPABASE_SERVICE_ROLE_KEY=server-only-service-role-key
+AUTH_RATE_LIMIT_SALT=long-random-secret
 ```
 
 기존 프로젝트의 legacy `anon` 키를 사용한다면 `VITE_SUPABASE_ANON_KEY`도 계속 지원합니다. Vercel 환경 변수는 빌드 시 주입되므로 값을 추가하거나 수정한 뒤 반드시 새로 배포해야 합니다.
+
+서버 전용 `SUPABASE_SERVICE_ROLE_KEY`와 `AUTH_RATE_LIMIT_SALT`에는 `VITE_`를 붙이지 말고 브라우저 코드나 Git에 넣지 않습니다. 계정 API, 이미지 영속화, 실행·테스트 방법은 [`docs/account-auth.md`](docs/account-auth.md)에 정리되어 있습니다.
 
 Supabase Dashboard의 **Authentication → URL Configuration**도 설정해야 이메일 인증 링크가 Cashlog로 돌아옵니다.
 

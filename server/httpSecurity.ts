@@ -28,7 +28,7 @@ export const guardApiOrigin = (req: VercelRequest, res: VercelResponse) => {
   const origin = rawOrigin ? normalizeOrigin(rawOrigin) : null
 
   res.setHeader('Vary', 'Origin')
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
   res.setHeader('Access-Control-Max-Age', '600')
 

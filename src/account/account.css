@@ -1,0 +1,72 @@
+@import url('https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Noto+Sans+KR:wght@400;500;700;800&display=swap');
+
+:root { font-family: 'Noto Sans KR', sans-serif; color: #27231f; background: #fffaf0; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; min-height: 100vh; background-color: #fffaf0; background-image: radial-gradient(#dacfc0 0.7px, transparent 0.7px); background-size: 13px 13px; }
+button, input { font: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
+a { color: inherit; }
+.account-page { min-height: 100vh; padding-bottom: 56px; }
+.account-topbar { height: 62px; max-width: 760px; margin: 0 auto; padding: 0 18px; display: grid; grid-template-columns: 40px 1fr 40px; align-items: center; }
+.account-topbar > a:first-child { width: 38px; height: 38px; display: grid; place-items: center; border: 2px solid #2d2925; border-radius: 50%; background: #fffdf8; box-shadow: 2px 3px 0 #2d2925; }
+.account-logo { justify-self: center; display: flex; align-items: center; gap: 5px; font-family: 'Gaegu', cursive; font-size: 25px; font-weight: 700; text-decoration: none; }
+.account-stage { width: min(100% - 28px, 560px); margin: 20px auto 0; }
+.account-intro { text-align: center; margin-bottom: 25px; }
+.account-intro p { margin: 0 0 4px; color: #ee5e4f; font-size: 12px; font-weight: 800; letter-spacing: 1.3px; }
+.account-intro h1 { margin: 0; font-family: 'Gaegu', cursive; font-size: clamp(32px, 8vw, 44px); line-height: 1.12; letter-spacing: 0; }
+.scribble { width: 124px; height: 8px; margin: 8px auto 0; border-top: 3px solid #f5bd37; border-radius: 50%; transform: rotate(-2deg); }
+.account-panel { padding: 30px clamp(20px, 6vw, 40px) 34px; background: rgba(255,255,255,.9); border: 2px solid #2d2925; border-radius: 7px 5px 8px 6px; box-shadow: 7px 8px 0 rgba(45,41,37,.12); }
+.account-form-page { display: grid; gap: 17px; }
+.avatar-picker { display: grid; justify-items: center; gap: 8px; margin-bottom: 3px; }
+.avatar-preview { position: relative; width: 96px; height: 96px; padding: 0; display: grid; place-items: center; overflow: visible; color: #6c6258; background: #dff5e9; border: 2px solid #2d2925; border-radius: 48% 52% 46% 54%; cursor: pointer; transform: rotate(-1deg); }
+.avatar-preview img { width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
+.avatar-preview span { position: absolute; right: -6px; bottom: 2px; width: 32px; height: 32px; display: grid; place-items: center; color: #fff; background: #ee5e4f; border: 2px solid #2d2925; border-radius: 50%; box-shadow: 2px 2px 0 #2d2925; }
+.avatar-actions { display: flex; gap: 8px; }
+.avatar-actions button { padding: 5px 10px; border: 0; background: transparent; color: #5b5148; font-size: 12px; font-weight: 700; text-decoration: underline; cursor: pointer; }
+.avatar-picker p { margin: -4px 0 0; color: #8b8176; font-size: 11px; }
+.form-field { display: grid; gap: 7px; }
+.form-field > span { font-size: 13px; font-weight: 800; }
+.form-field input { width: 100%; height: 48px; padding: 0 13px; color: #27231f; background: #fffdf8; border: 1.5px solid #a69b90; border-radius: 5px; outline: 0; transition: border-color .18s, box-shadow .18s, transform .18s; }
+.form-field input:focus { border-color: #27775a; box-shadow: 0 0 0 3px rgba(68,178,135,.17); transform: translateY(-1px); }
+.form-field input[aria-invalid="true"] { border-color: #d8453a; }
+.password-field { position: relative; }
+.password-field input { padding-right: 49px; }
+.password-field button { position: absolute; top: 5px; right: 5px; width: 38px; height: 38px; display: grid; place-items: center; border: 0; background: transparent; color: #766c62; cursor: pointer; }
+.field-error { display: block; color: #c9362f; font-size: 11px; line-height: 1.45; }
+.password-rules { display: flex; flex-wrap: wrap; gap: 7px; margin-top: -7px; }
+.password-rules span { display: flex; align-items: center; gap: 3px; color: #8a8177; font-size: 10px; }
+.password-rules span.pass { color: #187553; font-weight: 700; }
+.consent-list { display: grid; gap: 9px; padding: 14px; background: #fff7dc; border: 1.5px dashed #8d7f6d; border-radius: 5px; }
+.consent-list label, .remember-row { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.55; cursor: pointer; }
+.consent-list input, .remember-row input { width: 17px; height: 17px; margin: 1px 0 0; accent-color: #ee5e4f; flex: none; }
+.consent-list strong { color: #d8453a; }
+.consent-list a { font-weight: 800; }
+.primary-submit, .secondary-submit { min-height: 49px; display: flex; justify-content: center; align-items: center; gap: 7px; color: #fff; background: #ee5e4f; border: 2px solid #2d2925; border-radius: 5px; box-shadow: 3px 4px 0 #2d2925; font-weight: 800; cursor: pointer; transition: transform .14s, box-shadow .14s; }
+.primary-submit:hover, .secondary-submit:hover { transform: translate(-1px,-1px); box-shadow: 4px 5px 0 #2d2925; }
+.primary-submit:active, .secondary-submit:active { transform: translate(2px,2px); box-shadow: 1px 1px 0 #2d2925; }
+.primary-submit:disabled { opacity: .65; cursor: wait; }
+.form-switch { margin: 0; text-align: center; color: #72685f; font-size: 12px; }
+.form-switch a { color: #27775a; font-weight: 800; }
+.form-message { margin: 0; padding: 11px 12px; display: flex; align-items: center; gap: 7px; border-radius: 4px; font-size: 12px; line-height: 1.5; }
+.form-message.error { color: #a82e28; background: #fff0ed; border: 1px solid #f3aaa4; }
+.form-message.success { color: #176143; background: #e8f8ef; border: 1px solid #99d1b6; }
+.login-form { padding-top: 8px; }
+.remember-row { align-items: center; }
+.profile-summary { display: flex; align-items: center; gap: 14px; margin-bottom: 27px; padding-bottom: 22px; border-bottom: 2px dashed #c7bcaf; }
+.profile-avatar { width: 72px; height: 72px; display: grid; place-items: center; flex: none; overflow: hidden; background: #dff5e9; border: 2px solid #2d2925; border-radius: 48%; }
+.profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.profile-summary > div:last-child { min-width: 0; display: grid; gap: 2px; }
+.profile-summary strong { font-family: 'Gaegu', cursive; font-size: 25px; }
+.profile-summary span, .profile-summary small { overflow-wrap: anywhere; color: #746a61; font-size: 12px; }
+.profile-form { padding-bottom: 28px; border-bottom: 2px dashed #c7bcaf; }
+.password-change { display: grid; gap: 15px; padding: 25px 0; border-bottom: 2px dashed #c7bcaf; }
+.password-change h2 { margin: 0 0 2px; font-family: 'Gaegu', cursive; font-size: 25px; }
+.secondary-submit { min-height: 44px; color: #27231f; background: #f5c84c; }
+.danger-actions { display: flex; justify-content: space-between; gap: 12px; padding-top: 22px; }
+.danger-actions button { display: flex; align-items: center; gap: 5px; padding: 8px 5px; border: 0; background: transparent; color: #665d54; font-size: 12px; cursor: pointer; }
+.danger-actions button:last-child { color: #b43a32; }
+.page-loader { min-height: 240px; display: grid; place-items: center; color: #ee5e4f; }
+.spin { animation: spin .85s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (max-width: 520px) { .account-stage { width: min(100% - 18px, 560px); margin-top: 10px; } .account-panel { padding: 25px 18px 30px; } .account-intro { margin-bottom: 18px; } .account-topbar { padding: 0 12px; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }

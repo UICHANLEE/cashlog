@@ -220,6 +220,7 @@ describe('Cashlog photo MVP', () => {
     await user.click(within(account).getByRole('button', { name: '회원가입' }))
     await user.type(within(account).getByLabelText('로그인 이메일'), 'new@example.com')
     await user.type(within(account).getByLabelText('로그인 비밀번호'), 'secret1')
+    fetchMock.mockClear()
     await user.click(within(account).getByRole('button', { name: '가입하고 시작' }))
 
     expect(await within(account).findByText('필수 동의 항목을 모두 확인해 주세요.')).toBeInTheDocument()
