@@ -14,11 +14,15 @@ import {
   Check,
   ChevronDown,
   Image as ImageIcon,
+  CloudRain,
+  Heart,
   Mic,
   PawPrint,
   Pencil,
+  Smile,
   Sparkles,
   Utensils,
+  Users,
   UserRound,
   X,
 } from 'lucide-react'
@@ -43,7 +47,6 @@ import {
   getExpensesForDate,
   getCategoryMeta,
   getIncomeCategoryMeta,
-  getMonthlyExpenseTotal,
   type IncomeCategoryId,
   incomeCategoryTree,
   type LedgerCategoryId,
@@ -423,11 +426,20 @@ function CashlogApp() {
     () => `${visibleMonth.year}-${String(visibleMonth.month + 1).padStart(2, '0')}`,
     [visibleMonth.year, visibleMonth.month],
   )
-  const monthlyExpense = getMonthlyExpenseTotal(expenses, yearMonth)
   const selectedPetName = petState.selectedKind === 'cat' ? petState.catName : petState.dogName
   const selectedDaySpent = dayExpenseTotal(selectedExpenses)
   const selectedDayEarned = dayIncomeTotal(selectedExpenses)
   const selectedDayPhotos = selectedExpenses.filter((expense) => expense.imageUrl).slice(0, 3)
+  const selectedDayExpenseMoments = selectedExpenses.filter((expense) => expense.kind === 'expense')
+  const dominantDayCategory = (() => {
+    const counts = new Map<string, { count: number; label: string }>()
+    selectedDayExpenseMoments.forEach((expense) => {
+      const key = String(expense.category)
+      const current = counts.get(key)
+      counts.set(key, { count: (current?.count ?? 0) + 1, label: formatLedgerCategory(expense) })
+    })
+    return [...counts.values()].sort((a, b) => b.count - a.count)[0]?.label
+  })()
   const selectedDateLabel = new Intl.DateTimeFormat('ko-KR', {
     month: 'long',
     day: 'numeric',
@@ -1231,14 +1243,20 @@ function CashlogApp() {
           </header>
 
           <div className="today-money-strip">
-            <span>오늘 쓴 돈 <strong>{formatCurrency(selectedDaySpent)}</strong></span>
+            <span>오늘 남긴 장면 <strong>{selectedExpenses.length}개</strong></span>
+            {dominantDayCategory && <span>자주 등장한 순간 <strong>{dominantDayCategory}</strong></span>}
+            <span className="today-total-money">총 지출 {formatCurrency(selectedDaySpent)}</span>
             {selectedDayEarned > 0 && <span className="today-income">수입 +{formatCurrency(selectedDayEarned)}</span>}
-            <span>이번 달 {formatCurrency(monthlyExpense)}</span>
           </div>
 
           <div className="timeline-companion">
             <PetPortrait kind={petState.selectedKind} name={selectedPetName} className="timeline-pet" />
-            <p><strong>{selectedPetName}</strong>가 오늘의 장면을 같이 정리하고 있어요.</p>
+            <p>
+              <strong>{selectedPetName}</strong>가{' '}
+              {selectedExpenses.length > 0
+                ? `${selectedExpenses.length}개의 장면을 한 편의 하루로 묶고 있어요.`
+                : '오늘의 첫 장면을 기다리고 있어요.'}
+            </p>
           </div>
 
           <div className="photo-timeline">
@@ -1500,12 +1518,18 @@ function CashlogApp() {
                       {analysis.needUserCheck ? ' · 확인 필요' : ''}
                     </p>
                     {analysis.detectedItems?.length ? (
-                      <div className="detected-item-list" aria-label="탐지 상품 목록">
-                        {analysis.detectedItems.slice(0, 4).map((item) => (
-                          <span key={`${item.name}-${item.category}`}>
-                            {item.displayName} · {Math.round(item.confidence * 100)}%
-                          </span>
-                        ))}
+                      <div className="shopping-moment-summary">
+                        <strong>{analysis.detectedItems.length}개 상품을 한 장면으로 묶었어요</strong>
+                        <p>하나씩 적지 않아도 괜찮아요. 총 결제와 대표 분위기만 확인해 주세요.</p>
+                        <details>
+                          <summary>AI가 발견한 항목 보기</summary>
+                          <div className="detected-item-list" aria-label="탐지 상품 목록">
+                            {analysis.detectedItems.slice(0, 8).map((item) => (
+                              <span key={`${item.name}-${item.category}`}>{item.displayName}</span>
+                            ))}
+                            {analysis.detectedItems.length > 8 && <span>+{analysis.detectedItems.length - 8}개</span>}
+                          </div>
+                        </details>
                       </div>
                     ) : analysis.detectedObjects?.length ? (
                       <small>단서: {analysis.detectedObjects.slice(0, 3).join(', ')}</small>
@@ -1528,6 +1552,9 @@ function CashlogApp() {
                   onLedgerKindChange={handleLedgerKindChange}
                   onSubmit={handleSave}
                   isSaving={isSaving}
+                  assistantMode
+                  detectedItemCount={analysis?.detectedItems?.length ?? 0}
+                  petName={selectedPetName}
                 />
               </div>
             )}
@@ -1576,12 +1603,18 @@ function ExpenseEditor({
   onLedgerKindChange,
   onSubmit,
   isSaving,
+  assistantMode = false,
+  detectedItemCount = 0,
+  petName,
 }: {
   form: ExpenseForm
   onChange: (field: keyof ExpenseForm, value: string | LedgerKind) => void
   onLedgerKindChange: (kind: LedgerKind) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   isSaving: boolean
+  assistantMode?: boolean
+  detectedItemCount?: number
+  petName?: string
 }) {
   const expenseMeta = getCategoryMeta(form.category as CategoryId)
   const expenseActiveGroup = expenseMeta.group
@@ -1597,7 +1630,16 @@ function ExpenseEditor({
       : '수입은 지출과 다른 카테고리 트리로 정리합니다. 같은 방식으로 골라 주세요.'
 
   return (
-    <form className="expense-form" onSubmit={onSubmit}>
+    <form className={`expense-form${assistantMode ? ' assistant-expense-form' : ''}`} onSubmit={onSubmit}>
+      {assistantMode && (
+        <div className="memory-first-intro">
+          <Sparkles size={18} aria-hidden />
+          <div>
+            <strong>{detectedItemCount > 1 ? `${detectedItemCount}개 항목, 한 번만 확인하면 끝!` : `${petName ?? '친구'}가 먼저 채워뒀어요`}</strong>
+            <p>틀린 부분만 고치고 이 장면으로 저장해도 충분해요.</p>
+          </div>
+        </div>
+      )}
       <fieldset className="ledger-kind-fieldset">
         <legend>종류</legend>
         <div className="ledger-kind-toggle" role="group" aria-label="지출 또는 수입">
@@ -1620,7 +1662,7 @@ function ExpenseEditor({
         </div>
       </fieldset>
       <label>
-        제목
+        {assistantMode ? '이 장면의 이름' : '제목'}
         <input
           value={form.title}
           onChange={(event) => onChange('title', event.target.value)}
@@ -1630,7 +1672,7 @@ function ExpenseEditor({
         />
       </label>
       <label>
-        금액
+        {assistantMode ? '총 결제금액' : '금액'}
         <input
           inputMode="numeric"
           value={form.amount}
@@ -1638,7 +1680,54 @@ function ExpenseEditor({
           placeholder="0"
         />
       </label>
-      <fieldset className="category-fieldset">
+      <fieldset className="feeling-fieldset">
+        <legend>이 소비는 어떤 기분으로 남길까?</legend>
+        <div className="feeling-options" role="group" aria-label="소비 기분">
+          <button type="button" className={form.memo === '기분 좋은 소비' ? 'active' : ''} onClick={() => onChange('memo', '기분 좋은 소비')}><Smile size={17} />기분 좋아</button>
+          <button type="button" className={form.memo === '나를 위한 소비' ? 'active' : ''} onClick={() => onChange('memo', '나를 위한 소비')}><Heart size={17} />나를 위해</button>
+          <button type="button" className={form.memo === '같이 즐긴 소비' ? 'active' : ''} onClick={() => onChange('memo', '같이 즐긴 소비')}><Users size={17} />같이 즐김</button>
+          <button type="button" className={form.memo === '조금 아쉬운 소비' ? 'active' : ''} onClick={() => onChange('memo', '조금 아쉬운 소비')}><CloudRain size={17} />조금 아쉬워</button>
+        </div>
+      </fieldset>
+      {assistantMode ? (
+        <details className="expense-more-details">
+          <summary>카테고리와 메모 직접 고치기</summary>
+          <div className="expense-more-fields">
+            <CategoryEditor form={form} onChange={onChange} categoryLegend={categoryLegend} categoryHint={categoryHint} expenseActiveGroup={expenseActiveGroup} incomeActiveGroup={incomeActiveGroup} />
+            <MemoEditor form={form} onChange={onChange} />
+          </div>
+        </details>
+      ) : (
+        <>
+          <details className="expense-more-details category-quick-details">
+            <summary>
+              카테고리 · {form.kind === 'expense'
+                ? formatCategoryLabel(form.category as CategoryId)
+                : formatIncomeCategoryLabel(form.category as IncomeCategoryId)}
+            </summary>
+            <div className="expense-more-fields">
+              <CategoryEditor form={form} onChange={onChange} categoryLegend={categoryLegend} categoryHint={categoryHint} expenseActiveGroup={expenseActiveGroup} incomeActiveGroup={incomeActiveGroup} />
+            </div>
+          </details>
+          <MemoEditor form={form} onChange={onChange} />
+        </>
+      )}
+      <button type="submit" className="primary-button" disabled={isSaving}>
+        {isSaving ? '사진 보관 중...' : assistantMode ? '이 장면으로 저장' : '저장하기'}
+      </button>
+    </form>
+  )
+}
+
+function CategoryEditor({ form, onChange, categoryLegend, categoryHint, expenseActiveGroup, incomeActiveGroup }: {
+  form: ExpenseForm
+  onChange: (field: keyof ExpenseForm, value: string | LedgerKind) => void
+  categoryLegend: string
+  categoryHint: string
+  expenseActiveGroup: ReturnType<typeof getCategoryMeta>['group']
+  incomeActiveGroup: ReturnType<typeof getIncomeCategoryMeta>['group']
+}) {
+  return <fieldset className="category-fieldset">
         <legend>{categoryLegend}</legend>
         <p className="category-hint">{categoryHint}</p>
         {form.kind === 'expense' ? (
@@ -1722,6 +1811,13 @@ function ExpenseEditor({
           </>
         )}
       </fieldset>
+}
+
+function MemoEditor({ form, onChange }: {
+  form: ExpenseForm
+  onChange: (field: keyof ExpenseForm, value: string | LedgerKind) => void
+}) {
+  return (
       <label>
         메모
         <textarea
@@ -1730,10 +1826,6 @@ function ExpenseEditor({
           placeholder="기억하고 싶은 내용을 남겨보세요."
         />
       </label>
-      <button type="submit" className="primary-button" disabled={isSaving}>
-        {isSaving ? '사진 보관 중...' : '저장하기'}
-      </button>
-    </form>
   )
 }
 

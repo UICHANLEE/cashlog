@@ -2428,6 +2428,137 @@ video.preview-image {
   gap: 7px;
 }
 
+/* Keep multi-item purchases feeling like one memory, with details available on demand. */
+.shopping-moment-summary {
+  display: grid;
+  gap: 5px;
+  padding: 10px 0 2px;
+  border-top: 2px dashed var(--line-soft);
+}
+
+.shopping-moment-summary > strong {
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.shopping-moment-summary > p {
+  color: var(--ink-soft);
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.shopping-moment-summary details { margin-top: 3px; }
+
+.shopping-moment-summary summary,
+.expense-more-details summary {
+  width: max-content;
+  max-width: 100%;
+  color: var(--ink-soft);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.shopping-moment-summary .detected-item-list { margin-top: 8px; }
+
+.memory-first-intro {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-top: 2px solid var(--line);
+  border-bottom: 2px solid var(--line);
+  background: var(--crayon-mint);
+  color: var(--ink);
+}
+
+.memory-first-intro > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.memory-first-intro strong {
+  font-family: var(--font-hand);
+  font-size: 19px;
+}
+
+.memory-first-intro p {
+  margin: 2px 0 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.feeling-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.feeling-fieldset legend {
+  margin-bottom: 8px;
+  color: var(--ink);
+  font-family: var(--font-hand);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.feeling-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.feeling-options button {
+  min-width: 0;
+  min-height: 48px;
+  padding: 8px 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 2px solid var(--line);
+  border-radius: 12px 5px 12px 5px;
+  background: var(--paper-card);
+  color: var(--ink);
+  font-family: var(--font-hand);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.feeling-options button:nth-child(2) { background: #ffe5e2; }
+.feeling-options button:nth-child(3) { background: var(--crayon-sky); }
+.feeling-options button:nth-child(4) { background: #e8e3f6; }
+
+.feeling-options button.active {
+  background: var(--crayon-sun);
+  box-shadow: 2px 3px 0 var(--line);
+  transform: translate(-1px, -1px);
+}
+
+.expense-more-details {
+  padding: 11px 13px;
+  border: 2px dashed var(--line-soft);
+  border-radius: 12px 5px 12px 5px;
+  background: rgba(255, 253, 248, 0.64);
+}
+
+.expense-more-fields {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.today-money-strip .today-total-money {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
 @media (max-width: 480px) {
   .timeline-app-shell {
     padding-inline: 15px;
@@ -2441,6 +2572,7 @@ video.preview-image {
   .timeline-node { width: 38px; height: 38px; }
   .capture-dock { grid-template-columns: 1fr 88px 1fr; gap: 8px; padding-inline: 4px; }
   .camera-shutter { width: 82px; height: 82px; }
+  .feeling-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (prefers-reduced-motion: reduce) {
