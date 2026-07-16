@@ -10,6 +10,8 @@ type StatusResponse = {
     supabaseConfigured?: boolean
     productAnalyzerConfigured?: boolean
     productAnalyzerOrigin?: string | null
+    productAnalyzerSecured?: boolean
+    productAnalyzerAuthMode?: 'none' | 'api_key' | 'cloudflare_access' | 'api_key+cloudflare_access'
     openAiConfigured?: boolean
     visionConfigured?: boolean
   }
@@ -152,6 +154,11 @@ export function UichanAdmin() {
             label="상품 분석 서버"
             value={status?.cashlog?.productAnalyzerOrigin ?? '미설정'}
             ok={Boolean(status?.cashlog?.productAnalyzerConfigured)}
+          />
+          <AdminRow
+            label="서버 간 인증"
+            value={status?.cashlog?.productAnalyzerAuthMode ?? '미설정'}
+            ok={Boolean(status?.cashlog?.productAnalyzerSecured)}
           />
           <AdminRow
             label="Vision fallback"

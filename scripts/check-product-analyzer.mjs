@@ -11,6 +11,24 @@ const baseUrl = (
 const analyzeUrl = baseUrl.endsWith('/analyze-image') ? baseUrl : `${baseUrl}/analyze-image`
 const healthUrl = process.env.PRODUCT_ANALYZER_HEALTH_URL || new URL('/health', analyzeUrl).toString()
 const samplePath = process.argv[2] || process.env.PRODUCT_ANALYZER_SAMPLE_IMAGE
+const apiKey = process.env.PRODUCT_ANALYZER_API_KEY?.trim()
+const accessClientId = process.env.CLOUDFLARE_ACCESS_CLIENT_ID?.trim()
+const accessClientSecret = process.env.CLOUDFLARE_ACCESS_CLIENT_SECRET?.trim()
+
+if (Boolean(accessClientId) !== Boolean(accessClientSecret)) {
+  console.error('CLOUDFLARE_ACCESS_CLIENT_ID와 CLOUDFLARE_ACCESS_CLIENT_SECRET은 함께 설정해야 합니다.')
+  process.exit(1)
+}
+
+const authHeaders = {
+  ...(apiKey ? { 'X-API-Key': apiKey } : {}),
+  ...(accessClientId && accessClientSecret
+    ? {
+        'CF-Access-Client-Id': accessClientId,
+        'CF-Access-Client-Secret': accessClientSecret,
+      }
+    : {}),
+}
 
 async function readJson(response) {
   const text = await response.text()
@@ -21,7 +39,7 @@ async function readJson(response) {
   }
 }
 
-const healthResponse = await fetch(healthUrl)
+const healthResponse = await fetch(healthUrl, { headers: authHeaders })
 const health = await readJson(healthResponse)
 
 if (!healthResponse.ok) {
@@ -41,6 +59,7 @@ if (samplePath) {
 
   const analyzeResponse = await fetch(analyzeUrl, {
     method: 'POST',
+    headers: authHeaders,
     body: form,
   })
   const analyze = await readJson(analyzeResponse)

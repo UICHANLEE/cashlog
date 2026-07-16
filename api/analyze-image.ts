@@ -10,6 +10,7 @@
 import type { IncomingMessage } from 'node:http'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { guardApiOrigin } from '../server/httpSecurity'
+import { assertProductAnalyzerConfig, getProductAnalyzerConfig } from '../server/productAnalyzerGateway'
 import { assertValidImageBytes } from '../src/media/imageSignature'
 
 const ALLOWED_LEAF_IDS = [
@@ -267,21 +268,24 @@ const normalizeAnalysis = (raw: Record<string, unknown>): ProductAnalysis => {
   }
 }
 
-const getCataiProductEndpoint = (): string | null => {
-  const raw = process.env.PRODUCT_ANALYZER_API_URL?.trim() || process.env.CATAI_PRODUCT_API_URL?.trim()
-  if (!raw) return null
-  const normalized = raw.replace(/\/$/, '')
-  return normalized.endsWith('/analyze-image') ? normalized : `${normalized}/analyze-image`
-}
-
 async function analyzeWithLocalCatai(input: ImageInput): Promise<ProductAnalysis | null> {
-  const endpoint = getCataiProductEndpoint()
-  if (!endpoint) return null
+  const config = getProductAnalyzerConfig()
+  if (!config.endpoint) return null
+  assertProductAnalyzerConfig(config)
 
-  const response = await fetch(endpoint, {
+  const extension = input.mimeType === 'image/png' ? 'png' : input.mimeType === 'image/webp' ? 'webp' : 'jpg'
+  const form = new FormData()
+  form.append(
+    'image',
+    new Blob([new Uint8Array(Buffer.from(input.imageBase64, 'base64'))], { type: input.mimeType }),
+    input.filename || `cashlog-upload.${extension}`,
+  )
+
+  const response = await fetch(config.endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
+    headers: config.headers,
+    body: form,
+    signal: AbortSignal.timeout(config.timeoutMs),
   })
   const raw = await response.text()
   if (!response.ok) throw new Error(raw.slice(0, 500) || `Catai HTTP ${response.status}`)
@@ -395,7 +399,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const analysis = await analyzeProductImage(input)
-    const modelVersion = getCataiProductEndpoint()
+    const modelVersion = getProductAnalyzerConfig().endpoint
       ? process.env.CATAI_MODEL_VERSION?.trim() || 'catai-cashlog'
       : process.env.VISION_MODEL?.trim() || process.env.OPENAI_VISION_MODEL?.trim() || 'gpt-4o-mini'
     res.status(200).json(toV1Response(analysis, createRequestId(), modelVersion))

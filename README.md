@@ -83,6 +83,13 @@ PRODUCT_ANALYZER_API_URL=http://127.0.0.1:8010/analyze-image
 OpenAI/VLM fallback 전에 FastAPI 모델 서버를 먼저 호출합니다. 기존
 `CATAI_DEV_PROXY_TARGET`, `CATAI_PRODUCT_API_URL`도 legacy alias로 지원합니다.
 
+배포 환경의 상품 분석 서버는 서버 간 인증 정보가 없으면 fail-closed로 호출을
+거부합니다. `PRODUCT_ANALYZER_API_KEY`는 Vercel 또는 Home Backend에만 두고,
+Cloudflare Access를 거치는 과도기 구성에서는
+`CLOUDFLARE_ACCESS_CLIENT_ID`, `CLOUDFLARE_ACCESS_CLIENT_SECRET`도 서버
+환경변수로 함께 설정합니다. 전체 네트워크 경계와 단계별 배포 순서는
+[`docs/secure-ai-gateway-250716.md`](docs/secure-ai-gateway-250716.md)를 따릅니다.
+
 서버 연결 확인:
 
 ```bash
@@ -99,7 +106,6 @@ Catai FastAPI 서버의 실제 엔드포인트 계약:
 | --- | --- | --- |
 | `GET` | `/health` | `npm run check:product-analyzer`에서 서버/checkpoint 확인 |
 | `POST` | `/analyze-image` | 앱의 상품 사진 파일을 `multipart/form-data`의 `image`로 전송 |
-| `POST` | `/analyze-image` | 서버리스 fallback에서는 `{ imageBase64, mimeType }` JSON 전송 |
 
 배포된 Catai 서버에서는 Cashlog 프로덕션 주소만 CORS 허용 목록에 넣습니다.
 
