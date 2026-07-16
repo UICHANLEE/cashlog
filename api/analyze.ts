@@ -7,8 +7,8 @@
  * 카테고리 id는 프론트 `src/domain/cashlog.ts` 의 소분류 id와 반드시 동기화할 것.
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { guardApiOrigin } from '../server/httpSecurity'
-import { assertValidImageBytes } from '../src/media/imageSignature'
+import { guardApiOrigin } from '../server/httpSecurity.js'
+import { assertValidImageBytes } from '../src/media/imageSignature.js'
 
 const ALLOWED_LEAF_IDS = [
   'meal_grocery',

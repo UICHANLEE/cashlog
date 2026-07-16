@@ -9,9 +9,9 @@
  */
 import type { IncomingMessage } from 'node:http'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { guardApiOrigin } from '../server/httpSecurity'
-import { assertProductAnalyzerConfig, getProductAnalyzerConfig } from '../server/productAnalyzerGateway'
-import { assertValidImageBytes } from '../src/media/imageSignature'
+import { guardApiOrigin } from '../server/httpSecurity.js'
+import { assertProductAnalyzerConfig, getProductAnalyzerConfig } from '../server/productAnalyzerGateway.js'
+import { assertValidImageBytes } from '../src/media/imageSignature.js'
 
 const ALLOWED_LEAF_IDS = [
   'meal_grocery',

@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { guardApiOrigin } from '../../server/httpSecurity'
-import { getProductAnalyzerConfig, type ProductAnalyzerConfig } from '../../server/productAnalyzerGateway'
+import { guardApiOrigin } from '../../server/httpSecurity.js'
+import { getProductAnalyzerConfig, type ProductAnalyzerConfig } from '../../server/productAnalyzerGateway.js'
 
 type AnalyzerStatus =
   | {
