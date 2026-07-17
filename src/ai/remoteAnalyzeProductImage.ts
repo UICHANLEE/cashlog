@@ -1,6 +1,10 @@
 import { migrateCategoryId, type PhotoAnalysis } from '../domain/cashlog'
 import { normalizeProductImageAnalysis } from '../domain/productImage'
 
+const CLIENT_MAX_IMAGE_EDGE = 1280
+const CLIENT_JPEG_QUALITY = 0.82
+const CLIENT_REENCODE_THRESHOLD_BYTES = 512 * 1024
+
 const errorMessageFromResponseBody = (
   body: Record<string, unknown>,
   fallback: string,
@@ -11,12 +15,44 @@ const errorMessageFromResponseBody = (
   return fallback
 }
 
+export async function optimizeProductImageUpload(file: File): Promise<File> {
+  if (file.size <= CLIENT_REENCODE_THRESHOLD_BYTES && file.type === 'image/jpeg') return file
+  if (typeof createImageBitmap !== 'function') return file
+
+  let bitmap: ImageBitmap | undefined
+  try {
+    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
+    const scale = Math.min(1, CLIENT_MAX_IMAGE_EDGE / Math.max(bitmap.width, bitmap.height))
+    const width = Math.max(1, Math.round(bitmap.width * scale))
+    const height = Math.max(1, Math.round(bitmap.height * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const context = canvas.getContext('2d')
+    if (!context) return file
+    context.drawImage(bitmap, 0, 0, width, height)
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, 'image/jpeg', CLIENT_JPEG_QUALITY)
+    })
+    if (!blob || blob.size >= file.size) return file
+    const stem = file.name.replace(/\.[^.]+$/, '') || 'cashlog-upload'
+    return new File([blob], `${stem}.jpg`, {
+      type: 'image/jpeg',
+      lastModified: file.lastModified,
+    })
+  } catch {
+    return file
+  } finally {
+    bitmap?.close()
+  }
+}
+
 export async function remoteAnalyzeProductImage(
   file: File,
   endpoint: string,
 ): Promise<PhotoAnalysis> {
   const form = new FormData()
-  form.append('image', file)
+  form.append('image', await optimizeProductImageUpload(file))
 
   const response = await fetch(endpoint, {
     method: 'POST',

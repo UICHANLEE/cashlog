@@ -1,9 +1,42 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { remoteAnalyzeProductImage } from './remoteAnalyzeProductImage'
+import { optimizeProductImageUpload, remoteAnalyzeProductImage } from './remoteAnalyzeProductImage'
 
 describe('remoteAnalyzeProductImage', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('shrinks a large browser image before upload', async () => {
+    const drawImage = vi.fn()
+    const close = vi.fn()
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => ({ drawImage })),
+      toBlob: vi.fn((callback: BlobCallback) => {
+        callback(new Blob([new Uint8Array(200_000)], { type: 'image/jpeg' }))
+      }),
+    }
+    vi.stubGlobal(
+      'createImageBitmap',
+      vi.fn(async () => ({ width: 2400, height: 1800, close })),
+    )
+    vi.spyOn(document, 'createElement').mockReturnValue(canvas as unknown as HTMLCanvasElement)
+
+    const source = new File([new Uint8Array(800_000)], 'receipt.png', {
+      type: 'image/png',
+      lastModified: 123,
+    })
+    const optimized = await optimizeProductImageUpload(source)
+
+    expect(optimized.name).toBe('receipt.jpg')
+    expect(optimized.type).toBe('image/jpeg')
+    expect(optimized.size).toBe(200_000)
+    expect(canvas.width).toBe(1280)
+    expect(canvas.height).toBe(960)
+    expect(drawImage).toHaveBeenCalledOnce()
+    expect(close).toHaveBeenCalledOnce()
   })
 
   it('converts product analysis API output into PhotoAnalysis', async () => {
