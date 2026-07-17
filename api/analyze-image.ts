@@ -407,13 +407,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const timings: Record<string, number> = {}
   res.setHeader('X-Request-ID', requestId)
 
-  const setTimingHeaders = () => {
+  const setTimingHeaders = (statusCode: number, errorType?: string) => {
     timings.total = performance.now() - startedAt
     res.setHeader(
       'Server-Timing',
       Object.entries(timings)
         .map(([name, duration]) => `${name};dur=${duration.toFixed(1)}`)
         .join(', '),
+    )
+    for (const [name, duration] of Object.entries(timings)) {
+      res.setHeader(`X-Cashlog-${name}-Time-Ms`, duration.toFixed(1))
+    }
+    console.info(
+      JSON.stringify({
+        event: 'image_analysis_completed',
+        request_id: requestId,
+        status_code: statusCode,
+        timings_ms: timings,
+        ...(errorType ? { error_type: errorType } : {}),
+      }),
     )
   }
 
@@ -471,11 +483,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       : process.env.VISION_MODEL?.trim() || process.env.OPENAI_VISION_MODEL?.trim() || 'gpt-4o-mini'
     res.setHeader('X-Upload-Bytes-In', String(byteLength))
     res.setHeader('X-Analyzer-Bytes-Out', String(analyzerByteLength))
-    setTimingHeaders()
+    setTimingHeaders(200)
     res.status(200).json(toV1Response(analysis, requestId, modelVersion))
   } catch (e) {
     const message = e instanceof Error ? e.message : 'SERVER_ERROR'
-    setTimingHeaders()
+    setTimingHeaders(502, e instanceof Error ? e.name : 'UnknownError')
     res.status(502).json({
       success: false,
       recommended_category: 'misc_uncat',
