@@ -1,7 +1,8 @@
-"""Loopback/tailnet-only gateway between Cashlog and a private model worker."""
+from __future__ import annotations
 
 from collections.abc import AsyncIterator
 import os
+import re
 import secrets
 
 import httpx
@@ -9,11 +10,23 @@ from fastapi import FastAPI, Header, HTTPException, Request, status
 from fastapi.responses import Response
 
 
-MODEL_BASE_URL = os.getenv("MODEL_BASE_URL", "http://127.0.0.1:18010").rstrip("/")
-API_KEY = os.getenv("PUBLIC_API_KEY")
-MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(11 * 1024 * 1024)))
-MAX_RESPONSE_BYTES = 2 * 1024 * 1024
-ALLOW_PUBLIC_HEALTH = os.getenv("ALLOW_PUBLIC_HEALTH", "false").lower() == "true"
+MODEL_BASE_URL = os.getenv("MODEL_BASE_URL", "http://127.0.0.1:18010")
+GATEWAY_API_KEY = os.getenv("GATEWAY_API_KEY") or os.getenv("PUBLIC_API_KEY")
+MODEL_API_KEY = os.getenv("MODEL_API_KEY")
+MAX_REQUEST_BYTES = int(
+    os.getenv(
+        "MAX_REQUEST_BYTES",
+        os.getenv("MAX_UPLOAD_BYTES", str(14 * 1024 * 1024)),
+    )
+)
+MAX_RESPONSE_BYTES = int(os.getenv("MAX_RESPONSE_BYTES", str(2 * 1024 * 1024)))
+EXPOSE_HEALTH = os.getenv("EXPOSE_HEALTH", "false").lower() in {"1", "true", "yes"}
+REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+
+ALLOWED_CONTENT_TYPES = (
+    "multipart/form-data",
+    "application/json",
+)
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -23,44 +36,44 @@ class UploadTooLarge(Exception):
 
 
 def verify_api_key(value: str | None) -> None:
-    if not API_KEY:
-        raise RuntimeError("PUBLIC_API_KEY is not configured")
-    if value is None or not secrets.compare_digest(value, API_KEY):
+    if not GATEWAY_API_KEY:
+        raise RuntimeError("GATEWAY_API_KEY is not configured")
+    if value is None or not secrets.compare_digest(value, GATEWAY_API_KEY):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Unauthorized",
         )
 
 
-def validate_content_length(request: Request) -> None:
-    raw = request.headers.get("content-length")
-    if raw is None:
+def validate_content_type(value: str | None) -> str:
+    if not value:
+        raise HTTPException(status_code=400, detail="Content-Type is required")
+    normalized = value.split(";", 1)[0].strip().lower()
+    if normalized not in ALLOWED_CONTENT_TYPES:
+        raise HTTPException(status_code=415, detail="Unsupported Content-Type")
+    if normalized == "multipart/form-data" and "boundary=" not in value.lower():
+        raise HTTPException(status_code=400, detail="Multipart boundary is required")
+    return value
+
+
+def validate_content_length(value: str | None) -> None:
+    if not value:
         return
     try:
-        declared_size = int(raw)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail="Invalid Content-Length") from error
+        declared_size = int(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid Content-Length") from exc
     if declared_size < 0:
         raise HTTPException(status_code=400, detail="Invalid Content-Length")
-    if declared_size > MAX_UPLOAD_BYTES:
+    if declared_size > MAX_REQUEST_BYTES:
         raise HTTPException(status_code=413, detail="Upload too large")
-
-
-def forwarded_content_type(request: Request) -> str:
-    content_type = request.headers.get("content-type", "")
-    if not (
-        content_type.startswith("multipart/form-data;")
-        or content_type == "application/json"
-    ):
-        raise HTTPException(status_code=415, detail="Unsupported media type")
-    return content_type
 
 
 async def limited_body(request: Request) -> AsyncIterator[bytes]:
     received = 0
     async for chunk in request.stream():
         received += len(chunk)
-        if received > MAX_UPLOAD_BYTES:
+        if received > MAX_REQUEST_BYTES:
             raise UploadTooLarge
         yield chunk
 
@@ -71,10 +84,15 @@ async def upstream_request(
     *,
     content: AsyncIterator[bytes] | None = None,
     content_type: str | None = None,
+    request_id: str | None = None,
 ) -> Response:
     headers = {"accept": "application/json"}
     if content_type:
         headers["content-type"] = content_type
+    if MODEL_API_KEY:
+        headers["x-internal-api-key"] = MODEL_API_KEY
+    if request_id and REQUEST_ID_PATTERN.fullmatch(request_id):
+        headers["x-request-id"] = request_id
 
     try:
         async with httpx.AsyncClient(
@@ -83,7 +101,7 @@ async def upstream_request(
         ) as client:
             async with client.stream(
                 method,
-                f"{MODEL_BASE_URL}{path}",
+                f"{MODEL_BASE_URL.rstrip('/')}{path}",
                 content=content,
                 headers=headers,
             ) as upstream:
@@ -91,15 +109,17 @@ async def upstream_request(
                 if len(payload) > MAX_RESPONSE_BYTES:
                     raise HTTPException(status_code=502, detail="Model response too large")
                 upstream_status = upstream.status_code
-                upstream_content_type = upstream.headers.get("content-type", "application/json")
-    except UploadTooLarge as error:
-        raise HTTPException(status_code=413, detail="Upload too large") from error
-    except httpx.ConnectError as error:
-        raise HTTPException(status_code=503, detail="Model worker unavailable") from error
-    except httpx.TimeoutException as error:
-        raise HTTPException(status_code=504, detail="Model worker timed out") from error
-    except httpx.RequestError as error:
-        raise HTTPException(status_code=502, detail="Model worker request failed") from error
+                upstream_content_type = upstream.headers.get(
+                    "content-type", "application/json"
+                )
+    except UploadTooLarge as exc:
+        raise HTTPException(status_code=413, detail="Upload too large") from exc
+    except httpx.ConnectError as exc:
+        raise HTTPException(status_code=503, detail="Model worker unavailable") from exc
+    except httpx.TimeoutException as exc:
+        raise HTTPException(status_code=504, detail="Model worker timed out") from exc
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail="Model worker request failed") from exc
 
     safe_content_type = (
         upstream_content_type
@@ -109,28 +129,38 @@ async def upstream_request(
     return Response(
         content=payload,
         status_code=upstream_status,
-        headers={"Content-Type": safe_content_type},
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Type": safe_content_type,
+        },
     )
 
 
 @app.get("/health")
-async def health(x_api_key: str | None = Header(default=None)) -> Response:
-    if not ALLOW_PUBLIC_HEALTH:
+async def health(
+    x_api_key: str | None = Header(default=None),
+    x_request_id: str | None = Header(default=None),
+) -> Response:
+    if not EXPOSE_HEALTH:
         verify_api_key(x_api_key)
-    return await upstream_request("GET", "/health")
+    return await upstream_request("GET", "/health", request_id=x_request_id)
 
 
 @app.post("/analyze-image")
 async def analyze_image(
     request: Request,
     x_api_key: str | None = Header(default=None),
+    x_request_id: str | None = Header(default=None),
 ) -> Response:
     verify_api_key(x_api_key)
-    validate_content_length(request)
-    content_type = forwarded_content_type(request)
+    content_type = validate_content_type(request.headers.get("content-type"))
+    validate_content_length(request.headers.get("content-length"))
+    if not MODEL_API_KEY:
+        raise HTTPException(status_code=503, detail="Model authentication is not configured")
     return await upstream_request(
         "POST",
         "/analyze-image",
         content=limited_body(request),
         content_type=content_type,
+        request_id=x_request_id,
     )

@@ -8,7 +8,9 @@
  * Until then this endpoint uses an OpenAI-compatible VLM to return the same contract.
  */
 import type { IncomingMessage } from 'node:http'
+import { performance } from 'node:perf_hooks'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import sharp from 'sharp'
 import { guardApiOrigin } from '../server/httpSecurity.js'
 import { assertProductAnalyzerConfig, getProductAnalyzerConfig } from '../server/productAnalyzerGateway.js'
 import { assertValidImageBytes } from '../src/media/imageSignature.js'
@@ -79,6 +81,9 @@ type ImageInput = {
 const ALLOWED = new Set<string>(ALLOWED_LEAF_IDS)
 const LOW_CONFIDENCE_THRESHOLD = 0.65
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
+const ANALYZER_MAX_EDGE = 1280
+const ANALYZER_JPEG_QUALITY = 82
+const REENCODE_THRESHOLD_BYTES = 512 * 1024
 
 export const config = {
   api: {
@@ -114,6 +119,39 @@ const parseJsonInput = (raw: Buffer): ImageInput | null => {
 }
 
 const createRequestId = () => `req_${crypto.randomUUID()}`
+
+export const optimizeAnalyzerInput = async (input: ImageInput): Promise<ImageInput> => {
+  const source = Buffer.from(input.imageBase64, 'base64')
+  if (source.length <= REENCODE_THRESHOLD_BYTES && input.mimeType === 'image/jpeg') return input
+
+  try {
+    const optimized = await sharp(source, {
+      failOn: 'error',
+      limitInputPixels: 30_000_000,
+    })
+      .rotate()
+      .resize({
+        width: ANALYZER_MAX_EDGE,
+        height: ANALYZER_MAX_EDGE,
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      .jpeg({ quality: ANALYZER_JPEG_QUALITY, mozjpeg: true })
+      .toBuffer()
+
+    if (optimized.length >= source.length) return input
+    const stem = input.filename?.replace(/\.[^.]+$/, '') || 'cashlog-upload'
+    return {
+      imageBase64: optimized.toString('base64'),
+      mimeType: 'image/jpeg',
+      filename: `${stem}.jpg`,
+    }
+  } catch {
+    // The model API still validates the original payload. Optimization must never
+    // turn a supported client image into an otherwise avoidable request failure.
+    return input
+  }
+}
 
 const groupIdForLeaf = (leaf: LeafId) => leaf.split('_')[0]
 
@@ -268,7 +306,10 @@ const normalizeAnalysis = (raw: Record<string, unknown>): ProductAnalysis => {
   }
 }
 
-async function analyzeWithLocalCatai(input: ImageInput): Promise<ProductAnalysis | null> {
+async function analyzeWithLocalCatai(
+  input: ImageInput,
+  requestId: string,
+): Promise<ProductAnalysis | null> {
   const config = getProductAnalyzerConfig()
   if (!config.endpoint) return null
   assertProductAnalyzerConfig(config)
@@ -283,7 +324,7 @@ async function analyzeWithLocalCatai(input: ImageInput): Promise<ProductAnalysis
 
   const response = await fetch(config.endpoint, {
     method: 'POST',
-    headers: config.headers,
+    headers: { ...config.headers, 'X-Request-ID': requestId },
     body: form,
     signal: AbortSignal.timeout(config.timeoutMs),
   })
@@ -292,8 +333,8 @@ async function analyzeWithLocalCatai(input: ImageInput): Promise<ProductAnalysis
   return normalizeAnalysis(JSON.parse(raw) as Record<string, unknown>)
 }
 
-async function analyzeProductImage(input: ImageInput): Promise<ProductAnalysis> {
-  const localResult = await analyzeWithLocalCatai(input)
+async function analyzeProductImage(input: ImageInput, requestId: string): Promise<ProductAnalysis> {
+  const localResult = await analyzeWithLocalCatai(input, requestId)
   if (localResult) return localResult
 
   const apiBase = (process.env.VISION_API_BASE_URL?.trim() || 'https://api.openai.com/v1').replace(/\/$/, '')
@@ -361,6 +402,21 @@ async function analyzeProductImage(input: ImageInput): Promise<ProductAnalysis> 
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const startedAt = performance.now()
+  const requestId = createRequestId()
+  const timings: Record<string, number> = {}
+  res.setHeader('X-Request-ID', requestId)
+
+  const setTimingHeaders = () => {
+    timings.total = performance.now() - startedAt
+    res.setHeader(
+      'Server-Timing',
+      Object.entries(timings)
+        .map(([name, duration]) => `${name};dur=${duration.toFixed(1)}`)
+        .join(', '),
+    )
+  }
+
   if (!guardApiOrigin(req, res)) return
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method Not Allowed' })
@@ -368,8 +424,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    const readStartedAt = performance.now()
     const contentType = getHeader(req, 'content-type') ?? ''
     const raw = await readRequestBody(req)
+    timings.read = performance.now() - readStartedAt
     const input = contentType.includes('multipart/form-data')
       ? parseMultipartInput(raw, contentType)
       : parseJsonInput(raw)
@@ -384,6 +442,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.status(413).json({ code: 'PAYLOAD_TOO_LARGE', error: '이미지는 최대 10MB까지 업로드할 수 있습니다.' })
       return
     }
+    const validationStartedAt = performance.now()
     try {
       assertValidImageBytes(
         new Uint8Array(Buffer.from(input.imageBase64, 'base64')),
@@ -397,14 +456,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
       return
     }
+    timings.validate = performance.now() - validationStartedAt
 
-    const analysis = await analyzeProductImage(input)
+    const optimizeStartedAt = performance.now()
+    const analyzerInput = await optimizeAnalyzerInput(input)
+    timings.optimize = performance.now() - optimizeStartedAt
+    const analyzerByteLength = Buffer.byteLength(analyzerInput.imageBase64, 'base64')
+
+    const analyzerStartedAt = performance.now()
+    const analysis = await analyzeProductImage(analyzerInput, requestId)
+    timings.analyzer = performance.now() - analyzerStartedAt
     const modelVersion = getProductAnalyzerConfig().endpoint
       ? process.env.CATAI_MODEL_VERSION?.trim() || 'catai-cashlog'
       : process.env.VISION_MODEL?.trim() || process.env.OPENAI_VISION_MODEL?.trim() || 'gpt-4o-mini'
-    res.status(200).json(toV1Response(analysis, createRequestId(), modelVersion))
+    res.setHeader('X-Upload-Bytes-In', String(byteLength))
+    res.setHeader('X-Analyzer-Bytes-Out', String(analyzerByteLength))
+    setTimingHeaders()
+    res.status(200).json(toV1Response(analysis, requestId, modelVersion))
   } catch (e) {
     const message = e instanceof Error ? e.message : 'SERVER_ERROR'
+    setTimingHeaders()
     res.status(502).json({
       success: false,
       recommended_category: 'misc_uncat',
