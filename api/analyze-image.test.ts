@@ -27,7 +27,7 @@ describe('optimizeAnalyzerInput', () => {
     expect(optimized.mimeType).toBe('image/jpeg')
     expect(optimized.filename).toBe('receipt.jpg')
     expect(output.length).toBeLessThan(source.length)
-    expect(Math.max(metadata.width ?? 0, metadata.height ?? 0)).toBeLessThanOrEqual(1280)
+    expect(Math.max(metadata.width ?? 0, metadata.height ?? 0)).toBeLessThanOrEqual(960)
   })
 
   it('keeps an already compact JPEG unchanged', async () => {

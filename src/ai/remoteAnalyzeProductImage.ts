@@ -1,7 +1,7 @@
 import { migrateCategoryId, type PhotoAnalysis } from '../domain/cashlog'
 import { normalizeProductImageAnalysis } from '../domain/productImage'
 
-const CLIENT_MAX_IMAGE_EDGE = 1280
+const CLIENT_MAX_IMAGE_EDGE = 960
 const CLIENT_JPEG_QUALITY = 0.82
 const CLIENT_REENCODE_THRESHOLD_BYTES = 512 * 1024
 
