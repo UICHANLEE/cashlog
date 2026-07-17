@@ -1559,13 +1559,13 @@ function CashlogApp() {
                         onChange={(event) => setTrainingImageConsent(event.target.checked)}
                       />
                       <span>
-                        <strong>[선택]</strong> 이 사진과 확정 카테고리를 모델 개선용으로
+                        <strong>[선택]</strong> 이 사진을 모델 학습·평가 후보로 추가
                         보관하는 데 동의합니다.
                       </span>
                     </label>
                     <small className="training-consent-note">
-                      동의하지 않아도 기록할 수 있으며, 동의 철회 또는 삭제를 요청할 수
-                      있습니다.
+                      동의하지 않으면 사진은 학습 후보가 되지 않으며, 확정 카테고리만
+                      추천 품질 통계로 기록됩니다.
                     </small>
                   </div>
                 )}

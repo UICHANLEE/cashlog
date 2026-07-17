@@ -138,10 +138,10 @@ describe('Cashlog photo MVP', () => {
     await user.upload(screen.getByLabelText('갤러리에서 사진 선택'), photo)
 
     const consent = await screen.findByRole('checkbox', {
-      name: /이 사진과 확정 카테고리를 모델 개선용으로 보관/,
+      name: /이 사진을 모델 학습·평가 후보로 추가 보관/,
     })
     expect(consent).not.toBeChecked()
-    expect(screen.getByText(/동의하지 않아도 기록할 수 있으며/)).toBeInTheDocument()
+    expect(screen.getByText(/확정 카테고리만 추천 품질 통계로 기록/)).toBeInTheDocument()
     await user.click(consent)
     expect(consent).toBeChecked()
   })
