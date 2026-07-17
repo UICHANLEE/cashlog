@@ -1,0 +1,64 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createCashlogRepository } from './cashlogRepository'
+
+describe('cashlog category feedback repository', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('writes an idempotent pending feedback event without client review fields', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void input
+      void init
+      return new Response(null, { status: 201 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const repository = createCashlogRepository(
+      { url: 'https://project.supabase.co', anonKey: 'anon' },
+      { accessToken: 'jwt', user: { id: 'user-1' } },
+    )
+
+    await repository?.saveCategoryFeedback({
+      schemaVersion: 2,
+      eventId: '00000000-0000-4000-8000-000000000001',
+      sampleId: '00000000-0000-4000-8000-000000000002',
+      expenseId: 'expense-1',
+      requestId: 'request-1',
+      modelVersion: 'cashlog33-hybrid-v1.1-fast',
+      taxonomyVersion: '13.33.1',
+      modelCategory: 'meal_cafe',
+      userCategory: 'meal_dining',
+      confidence: 0.72,
+      predictedTop3: [
+        { category: 'meal_cafe', confidence: 0.72 },
+        { category: 'meal_dining', confidence: 0.2 },
+      ],
+      selectedLeafId: 'meal_dining',
+      occurredAt: '2026-07-17T00:00:00.000Z',
+      source: 'top3_selection',
+      imageRetentionConsent: true,
+      imageObjectKey: 'user-1/expense-1.jpg',
+    })
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    const [url, request] = fetchMock.mock.calls[0]!
+    expect(url).toBe(
+      'https://project.supabase.co/rest/v1/cashlog_category_feedback?on_conflict=event_id',
+    )
+    const body = JSON.parse(String((request as RequestInit).body))
+    expect(body).toMatchObject({
+      user_id: 'user-1',
+      schema_version: 2,
+      event_id: '00000000-0000-4000-8000-000000000001',
+      selected_leaf_id: 'meal_dining',
+      source: 'top3_selection',
+      image_retention_consent: true,
+      image_object_key: 'user-1/expense-1.jpg',
+    })
+    expect(body.review_status).toBeUndefined()
+    expect((request as RequestInit).headers).toMatchObject({
+      Prefer: 'resolution=ignore-duplicates,return=minimal',
+    })
+  })
+})

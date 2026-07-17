@@ -1,4 +1,10 @@
-import { getCategoryMeta, migrateCategoryId, type CategoryGroupId, type CategoryId } from './cashlog'
+import {
+  getCategoryMeta,
+  migrateCategoryId,
+  type CategoryGroupId,
+  type CategoryId,
+  type PhotoAnalysis,
+} from './cashlog'
 
 export type ProductDetectionErrorCode =
   | 'NO_OBJECT_DETECTED'
@@ -63,12 +69,28 @@ export type ProductAnalysisRevision = ProductImageAnalysisResult & {
   reason?: string
 }
 
+export type CategoryFeedbackSource =
+  | 'accepted_prediction'
+  | 'top3_selection'
+  | 'manual_edit'
+
 export type CategoryFeedbackPayload = {
+  schemaVersion: 2
+  eventId: string
+  sampleId: string
   expenseId: string
+  requestId?: string
+  modelVersion: string
+  taxonomyVersion: string
   modelCategory: CategoryId
   userCategory: CategoryId
-  confidence?: number
-  itemKeyword?: string
+  confidence: number
+  predictedTop3: ProductCategoryCandidate[]
+  selectedLeafId: CategoryId
+  occurredAt: string
+  source: CategoryFeedbackSource
+  imageRetentionConsent: boolean
+  imageObjectKey?: string | null
 }
 
 export type ProductCategoryRule = {
@@ -77,6 +99,77 @@ export type ProductCategoryRule = {
 }
 
 export const LOW_CONFIDENCE_THRESHOLD = 0.65
+
+const randomUuid = (): string => {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
+  const bytes = new Uint8Array(16)
+  if (globalThis.crypto?.getRandomValues) {
+    globalThis.crypto.getRandomValues(bytes)
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256)
+    }
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = [...bytes].map((value) => value.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
+export const createCategoryFeedbackPayload = ({
+  expenseId,
+  analysis,
+  selectedLeafId,
+  imageRetentionConsent,
+  imageObjectKey,
+  occurredAt = new Date().toISOString(),
+  eventId = randomUuid(),
+  sampleId = randomUuid(),
+}: {
+  expenseId: string
+  analysis: PhotoAnalysis
+  selectedLeafId: CategoryId
+  imageRetentionConsent: boolean
+  imageObjectKey?: string | null
+  occurredAt?: string
+  eventId?: string
+  sampleId?: string
+}): CategoryFeedbackPayload => {
+  const candidates = analysis.topCategories ?? []
+  const predictedTop3 = [
+    ...new Map(
+      [
+        { category: analysis.suggestedCategory, confidence: analysis.confidence },
+        ...candidates,
+      ].map((candidate) => [candidate.category, candidate]),
+    ).values(),
+  ].slice(0, 3)
+  const source: CategoryFeedbackSource =
+    selectedLeafId === analysis.suggestedCategory
+      ? 'accepted_prediction'
+      : predictedTop3.some((candidate) => candidate.category === selectedLeafId)
+        ? 'top3_selection'
+        : 'manual_edit'
+
+  return {
+    schemaVersion: 2,
+    eventId,
+    sampleId,
+    expenseId,
+    ...(analysis.requestId ? { requestId: analysis.requestId } : {}),
+    modelVersion: analysis.model ?? 'unknown',
+    taxonomyVersion: analysis.taxonomyVersion ?? '13.33.1',
+    modelCategory: analysis.suggestedCategory,
+    userCategory: selectedLeafId,
+    confidence: analysis.confidence,
+    predictedTop3,
+    selectedLeafId,
+    occurredAt,
+    source,
+    imageRetentionConsent,
+    imageObjectKey: imageRetentionConsent ? imageObjectKey ?? null : null,
+  }
+}
 
 export const productCategoryRules: ProductCategoryRule[] = [
   {
@@ -242,6 +335,12 @@ export const normalizeProductImageAnalysis = (raw: unknown): ProductImageAnalysi
       : typeof input.errorCode === 'string'
         ? (input.errorCode as ProductDetectionErrorCode)
         : undefined
+  const modelVersions = {
+    ...((input.model_versions ?? input.modelVersions ?? {}) as Record<string, string>),
+  }
+  if (typeof input.model === 'string' && input.model && !modelVersions.classifier) {
+    modelVersions.classifier = input.model
+  }
 
   return {
     requestId: String(input.request_id ?? input.requestId ?? '').trim() || undefined,
@@ -258,7 +357,7 @@ export const normalizeProductImageAnalysis = (raw: unknown): ProductImageAnalysi
     verification: {
       state: String(rawVerification.state ?? (status === 'provisional' ? 'queued' : 'completed')) as ProductVerificationState,
     },
-    modelVersions: (input.model_versions ?? input.modelVersions ?? {}) as Record<string, string>,
+    modelVersions,
     taxonomyVersion: String(input.taxonomy_version ?? input.taxonomyVersion ?? '13.33.1'),
   }
 }

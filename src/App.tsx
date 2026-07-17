@@ -84,6 +84,7 @@ import { createCashlogStorage } from './services/supabaseStorage'
 import { prepareImageForStorage } from './media/prepareImageForStorage'
 import { assertValidImageFile } from './media/imageSignature'
 import { getMe as getSecureAccount, logout as secureLogout } from './account/accountApi'
+import { createCategoryFeedbackPayload } from './domain/productImage'
 
 type AddMode = 'closed' | 'choice' | 'photo' | 'manual'
 type StoryMode = null | 'day' | 'month'
@@ -159,6 +160,7 @@ function CashlogApp() {
   const [photoPreview, setPhotoPreview] = useState('')
   const photoFileRef = useRef<File | null>(null)
   const [analysis, setAnalysis] = useState<PhotoAnalysis | null>(null)
+  const [trainingImageConsent, setTrainingImageConsent] = useState(false)
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -236,6 +238,7 @@ function CashlogApp() {
       return ''
     })
     setAnalysis(null)
+    setTrainingImageConsent(false)
     clearRecordTimer()
     setIsRecording(false)
     setRecordSeconds(0)
@@ -247,6 +250,7 @@ function CashlogApp() {
 
   const applyPhotoFile = useCallback(async (file: File) => {
     setCameraError(null)
+    setTrainingImageConsent(false)
     try {
       await assertValidImageFile(file)
     } catch (error) {
@@ -920,12 +924,18 @@ function CashlogApp() {
 
     setExpenses((current) => [expense, ...current])
     if (repository) {
-      const shouldSaveFeedback =
+      const feedback =
         hasMedia &&
         analysis &&
         form.kind === 'expense' &&
-        categoryNormalized !== analysis.suggestedCategory
-      const firstDetectedItem = analysis?.detectedItems?.[0]
+        createCategoryFeedbackPayload({
+          expenseId: expense.id,
+          analysis,
+          selectedLeafId: migrateCategoryId(String(categoryNormalized)),
+          imageRetentionConsent:
+            trainingImageConsent && Boolean(expense.imageStoragePath),
+          imageObjectKey: expense.imageStoragePath,
+        })
       repository
         .upsertExpense(expense)
         .then(() =>
@@ -944,19 +954,16 @@ function CashlogApp() {
               })
             : undefined,
         )
-        .then(() => repository.saveDetectedItems(expense.id, analysis?.detectedItems ?? []))
         .then(() =>
-          shouldSaveFeedback
-            ? repository.saveCategoryFeedback({
-                expenseId: expense.id,
-                modelCategory: analysis!.suggestedCategory,
-                userCategory: migrateCategoryId(String(categoryNormalized)),
-                confidence: analysis!.confidence,
-                itemKeyword:
-                  firstDetectedItem?.name ??
-                  firstDetectedItem?.displayName ??
-                  analysis!.detectedObjects?.[0],
-              })
+          repository.saveDetectedItems(
+            expense.id,
+            analysis?.detectedItems ?? [],
+            analysis?.model,
+          ),
+        )
+        .then(() =>
+          feedback
+            ? repository.saveCategoryFeedback(feedback)
             : undefined,
         )
         .then(() => setSyncStatus('새 기록 클라우드 저장 완료'))
@@ -970,6 +977,7 @@ function CashlogApp() {
     photoFileRef.current = null
     setVideoPreview('')
     setAnalysis(null)
+    setTrainingImageConsent(false)
     setAddMode('closed')
     setIsSaving(false)
   }
@@ -1544,6 +1552,21 @@ function CashlogApp() {
                         </div>
                       </div>
                     </div>
+                    <label className="training-consent">
+                      <input
+                        type="checkbox"
+                        checked={trainingImageConsent}
+                        onChange={(event) => setTrainingImageConsent(event.target.checked)}
+                      />
+                      <span>
+                        <strong>[선택]</strong> 이 사진과 확정 카테고리를 모델 개선용으로
+                        보관하는 데 동의합니다.
+                      </span>
+                    </label>
+                    <small className="training-consent-note">
+                      동의하지 않아도 기록할 수 있으며, 동의 철회 또는 삭제를 요청할 수
+                      있습니다.
+                    </small>
                   </div>
                 )}
                 <ExpenseEditor

@@ -159,25 +159,43 @@ export const createCashlogRepository = (
   }
 
   const saveCategoryFeedback = async (feedback: CategoryFeedbackPayload) => {
-    const response = await fetch(categoryFeedbackBase, {
+    const response = await fetch(`${categoryFeedbackBase}?on_conflict=event_id`, {
       method: 'POST',
       headers: {
         ...headers(config, session),
-        Prefer: 'return=minimal',
+        Prefer: 'resolution=ignore-duplicates,return=minimal',
       },
       body: JSON.stringify({
         ...(userId ? { user_id: userId } : {}),
+        schema_version: feedback.schemaVersion,
+        event_id: feedback.eventId,
+        sample_id: feedback.sampleId,
         expense_id: feedback.expenseId,
+        request_id: feedback.requestId ?? null,
+        model_version: feedback.modelVersion,
+        taxonomy_version: feedback.taxonomyVersion,
         model_category: feedback.modelCategory,
         user_category: feedback.userCategory,
-        confidence: feedback.confidence ?? null,
-        item_keyword: feedback.itemKeyword ?? null,
+        confidence: feedback.confidence,
+        predicted_top3: feedback.predictedTop3.map((candidate) => ({
+          category: candidate.category,
+          confidence: candidate.confidence,
+        })),
+        selected_leaf_id: feedback.selectedLeafId,
+        occurred_at: feedback.occurredAt,
+        source: feedback.source,
+        image_retention_consent: feedback.imageRetentionConsent,
+        image_object_key: feedback.imageObjectKey ?? null,
       }),
     })
     if (!response.ok) throw new Error(await response.text())
   }
 
-  const saveDetectedItems = async (expenseId: string, items: DetectedProductItem[]) => {
+  const saveDetectedItems = async (
+    expenseId: string,
+    items: DetectedProductItem[],
+    modelVersion?: string,
+  ) => {
     if (items.length === 0) return
     const response = await fetch(detectedItemsBase, {
       method: 'POST',
@@ -196,7 +214,7 @@ export const createCashlogRepository = (
           bbox: item.bbox ?? null,
           top3: item.topCategories ?? [],
           evidence: item.evidence ?? {},
-          model_version: null,
+          model_version: modelVersion ?? null,
         })),
       ),
     })

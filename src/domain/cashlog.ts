@@ -425,6 +425,7 @@ export type MediaAnalysisSnapshot = {
   revision?: number
   engine?: AnalysisEngine
   model?: string
+  taxonomyVersion?: string
   ocrText?: string
   detectedObjects?: string[]
   detectedItems?: DetectedProductItem[]
@@ -449,6 +450,8 @@ export type PhotoAnalysis = {
   engine?: AnalysisEngine
   /** 실제 사용 모델명. 예: gpt-4o-mini, Qwen2.5-VL-3B-Instruct */
   model?: string
+  /** 학습 라벨 계약 버전. 모델 교체와 분리해 기록한다. */
+  taxonomyVersion?: string
   /** OCR 전용 원문. rawText는 UI용 요약으로 유지 */
   ocrText?: string
   /** 피사체/장소/브랜드 등 카테고리 추론에 쓴 단서 */
@@ -517,6 +520,7 @@ export const createExpenseFromAnalysis = ({
       revision: analysis.revision,
       engine: analysis.engine,
       model: analysis.model,
+      taxonomyVersion: analysis.taxonomyVersion,
       ocrText: analysis.ocrText ?? analysis.rawText,
       detectedObjects: analysis.detectedObjects ?? [],
       detectedItems: analysis.detectedItems ?? [],

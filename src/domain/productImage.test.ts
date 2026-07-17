@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyProductAnalysisRevision,
+  createCategoryFeedbackPayload,
   mapProductKeywordToCategory,
   normalizeProductImageAnalysis,
 } from './productImage'
@@ -76,5 +77,61 @@ describe('product image category pipeline', () => {
     expect(provisional.items[0]?.topCategories).toHaveLength(3)
     expect(applied.recommendedCategory).toBe('life_goods')
     expect(applied.revision).toBe(1)
+  })
+
+  it('creates versioned confirmation events without retaining an unconsented image', () => {
+    const analysis = {
+      requestId: 'request-1',
+      suggestedAmount: 0,
+      suggestedCategory: 'meal_cafe' as const,
+      suggestedTitle: '커피 기록',
+      suggestedMemo: '카페로 추천',
+      confidence: 0.72,
+      rawText: '커피',
+      model: 'cashlog33-hybrid-v1.1-fast',
+      taxonomyVersion: '13.33.1',
+      topCategories: [
+        { category: 'meal_cafe' as const, confidence: 0.72 },
+        { category: 'meal_dining' as const, confidence: 0.2 },
+        { category: 'meal_grocery' as const, confidence: 0.08 },
+      ],
+    }
+
+    const accepted = createCategoryFeedbackPayload({
+      expenseId: 'expense-1',
+      analysis,
+      selectedLeafId: 'meal_cafe',
+      imageRetentionConsent: false,
+      imageObjectKey: 'user-1/expense-1.jpg',
+      eventId: '00000000-0000-4000-8000-000000000001',
+      sampleId: '00000000-0000-4000-8000-000000000002',
+      occurredAt: '2026-07-17T00:00:00.000Z',
+    })
+    const top3Correction = createCategoryFeedbackPayload({
+      expenseId: 'expense-2',
+      analysis,
+      selectedLeafId: 'meal_dining',
+      imageRetentionConsent: true,
+      imageObjectKey: 'user-1/expense-2.jpg',
+    })
+    const manualCorrection = createCategoryFeedbackPayload({
+      expenseId: 'expense-3',
+      analysis,
+      selectedLeafId: 'health_med',
+      imageRetentionConsent: false,
+    })
+
+    expect(accepted).toMatchObject({
+      schemaVersion: 2,
+      source: 'accepted_prediction',
+      modelVersion: 'cashlog33-hybrid-v1.1-fast',
+      selectedLeafId: 'meal_cafe',
+      imageRetentionConsent: false,
+      imageObjectKey: null,
+    })
+    expect(accepted.predictedTop3).toHaveLength(3)
+    expect(top3Correction.source).toBe('top3_selection')
+    expect(top3Correction.imageObjectKey).toBe('user-1/expense-2.jpg')
+    expect(manualCorrection.source).toBe('manual_edit')
   })
 })

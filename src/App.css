@@ -1112,6 +1112,35 @@
   margin: 0;
 }
 
+.training-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding-top: 10px;
+  border-top: 2px dashed var(--line-soft);
+  color: var(--ink);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.55;
+}
+
+.training-consent input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--crayon-leaf);
+}
+
+.training-consent-note {
+  color: var(--ink-soft);
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .detected-item-list {
   display: flex;
   flex-wrap: wrap;

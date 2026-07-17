@@ -128,6 +128,24 @@ describe('Cashlog photo MVP', () => {
     expect(screen.getByText('나를 위한 소비')).toBeInTheDocument()
   })
 
+  it('keeps model-improvement image retention as a separate opt-in', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    const photo = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0])], 'cafe.jpg', {
+      type: 'image/jpeg',
+    })
+
+    await user.upload(screen.getByLabelText('갤러리에서 사진 선택'), photo)
+
+    const consent = await screen.findByRole('checkbox', {
+      name: /이 사진과 확정 카테고리를 모델 개선용으로 보관/,
+    })
+    expect(consent).not.toBeChecked()
+    expect(screen.getByText(/동의하지 않아도 기록할 수 있으며/)).toBeInTheDocument()
+    await user.click(consent)
+    expect(consent).toBeChecked()
+  })
+
   it('enables 하루 스토리 after a manual expense (no photo)', async () => {
     const user = userEvent.setup()
     const todaySlice = new Date().toISOString().slice(0, 10)

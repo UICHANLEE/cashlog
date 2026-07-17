@@ -62,6 +62,8 @@ describe('remoteAnalyzeProductImage', () => {
               },
             ],
             need_user_check: false,
+            model: 'cashlog33-hybrid-v1.1-fast',
+            taxonomy_version: '13.33.1',
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         ),
@@ -78,6 +80,8 @@ describe('remoteAnalyzeProductImage', () => {
     expect(result.topCategories?.[0]).toMatchObject({ category: 'meal_dining', confidence: 0.84 })
     expect(result.needUserCheck).toBe(false)
     expect(result.status).toBe('final')
+    expect(result.model).toBe('cashlog33-hybrid-v1.1-fast')
+    expect(result.taxonomyVersion).toBe('13.33.1')
   })
 
   it('uses FastAPI detail messages for failed product analysis requests', async () => {

@@ -36,7 +36,7 @@ describe('Cashlog signup consent', () => {
     expect(signupUrl.searchParams.get('redirect_to')).toBe(window.location.origin + '/')
     expect(body.data).toMatchObject({
       app_id: 'cashlog',
-      consent_version: '2026-07-14',
+      consent_version: '2026-07-17',
       age_14_or_older: true,
       privacy_consent: true,
       photo_time_consent: true,
