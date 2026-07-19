@@ -81,6 +81,28 @@ describe('Cashlog photo MVP', () => {
     expect(screen.getAllByRole('button', { name: /초코 쓰다듬기\. 드래그하면/ })).toHaveLength(1)
   })
 
+  it('applies and remembers Nabi wardrobe and color choices', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '나비' }))
+    const hoodie = screen.getByRole('button', { name: '나비 말랑 후디 옷' })
+    await user.click(hoodie)
+    expect(hoodie).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByLabelText('나비 현재 스타일')).toHaveTextContent('말랑 후디')
+
+    await user.click(screen.getByRole('tab', { name: '컬러' }))
+    await user.click(screen.getByRole('button', { name: '나비 딸기우유 색칠' }))
+    expect(screen.getByLabelText('나비 현재 스타일')).toHaveTextContent('딸기우유')
+
+    await waitFor(() => {
+      expect(JSON.parse(localStorage.getItem('cashlog.pet') ?? '{}')).toMatchObject({
+        catOutfit: 'hoodie',
+        catPalette: 'strawberry',
+      })
+    })
+  })
+
   it('opens the day photo story reel when 스토리 is enabled', async () => {
     const user = userEvent.setup()
     const todaySlice = new Date().toISOString().slice(0, 10)

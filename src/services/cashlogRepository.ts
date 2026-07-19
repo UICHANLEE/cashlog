@@ -89,7 +89,16 @@ export const mergeExpenses = (local: Expense[], remote: Expense[]): Expense[] =>
   for (const item of remote) {
     const previous = byId.get(item.id)
     if (!previous || item.updatedAt.localeCompare(previous.updatedAt) >= 0) {
-      byId.set(item.id, item)
+      byId.set(
+        item.id,
+        previous?.imageLocalKey && !item.imageStoragePath
+          ? {
+              ...item,
+              imageLocalKey: previous.imageLocalKey,
+              ...(previous.imageUrl ? { imageUrl: previous.imageUrl } : {}),
+            }
+          : item,
+      )
     }
   }
   return [...byId.values()].sort((a, b) => b.dateTime.localeCompare(a.dateTime))

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createCashlogRepository } from './cashlogRepository'
+import { createManualExpense } from '../domain/cashlog'
+import { createCashlogRepository, mergeExpenses } from './cashlogRepository'
 
 describe('cashlog category feedback repository', () => {
   afterEach(() => {
@@ -59,6 +60,28 @@ describe('cashlog category feedback repository', () => {
     expect(body.review_status).toBeUndefined()
     expect((request as RequestInit).headers).toMatchObject({
       Prefer: 'resolution=ignore-duplicates,return=minimal',
+    })
+  })
+
+  it('keeps a device photo key when the cloud row has not received the image yet', () => {
+    const local = {
+      ...createManualExpense({
+        title: '카페',
+        amount: 5000,
+        category: 'meal_cafe',
+        memo: '',
+        dateTime: '2026-07-18T12:00:00.000Z',
+      }),
+      id: 'expense-photo',
+      source: 'photo' as const,
+      imageLocalKey: 'local-image:expense-photo',
+      imageUrl: 'blob:device-photo',
+    }
+    const remote = { ...local, imageLocalKey: undefined, imageUrl: undefined }
+
+    expect(mergeExpenses([local], [remote])[0]).toMatchObject({
+      imageLocalKey: 'local-image:expense-photo',
+      imageUrl: 'blob:device-photo',
     })
   })
 })

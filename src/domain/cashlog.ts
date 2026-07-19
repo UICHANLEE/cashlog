@@ -402,6 +402,8 @@ export type Expense = {
   imageUrl?: string
   /** 비공개 Storage의 영구 경로. imageUrl은 만료 가능한 표시용 URL이다. */
   imageStoragePath?: string
+  /** 로그인 전에도 새로고침 후 사진을 복원하기 위한 기기 내 IndexedDB 키 */
+  imageLocalKey?: string
   /** 영상 기록의 재생 URL (imageUrl은 포스터 프레임으로 함께 저장) */
   videoUrl?: string
   analysis?: MediaAnalysisSnapshot

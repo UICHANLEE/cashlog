@@ -85,6 +85,7 @@ import { prepareImageForStorage } from './media/prepareImageForStorage'
 import { assertValidImageFile } from './media/imageSignature'
 import { getMe as getSecureAccount, logout as secureLogout } from './account/accountApi'
 import { createCategoryFeedbackPayload } from './domain/productImage'
+import { createLocalMediaStore } from './services/localMediaStore'
 
 type AddMode = 'closed' | 'choice' | 'photo' | 'manual'
 type StoryMode = null | 'day' | 'month'
@@ -125,8 +126,12 @@ const loadExpenses = (): Expense[] => {
         kind === 'income'
           ? migrateIncomeCategoryId(String(expense.category))
           : migrateCategoryId(String(expense.category))
+      const durableImageUrl = expense.imageUrl && !expense.imageUrl.startsWith('blob:')
+        ? expense.imageUrl
+        : undefined
       return {
         ...expense,
+        imageUrl: durableImageUrl,
         kind,
         category,
         createdAt: expense.createdAt ?? expense.updatedAt ?? expense.dateTime,
@@ -193,6 +198,7 @@ function CashlogApp() {
   })
   const [, setSyncStatus] = useState('Supabase 미연결 · 로컬 저장 중')
   const authClient = useMemo(() => createCashlogAuthClient(), [])
+  const localMedia = useMemo(() => createLocalMediaStore(), [])
   const repository = useMemo(
     () => createCashlogRepository(authClient.config, session),
     [authClient.config, session],
@@ -203,6 +209,8 @@ function CashlogApp() {
   )
   const initialSyncedSessionRef = useRef<string | null>(null)
   const petCloudReadyRef = useRef(false)
+  const localImageUrlsRef = useRef(new Map<string, string>())
+  const promotingLocalImagesRef = useRef(new Set<string>())
 
   useEffect(() => {
     const id = window.setInterval(() => setRelativeMinuteTick((x) => x + 1), 60_000)
@@ -285,20 +293,59 @@ function CashlogApp() {
 
   const hydrateExpenseImages = useCallback(
     async (items: Expense[]) => {
-      if (!storage) return items
       return Promise.all(
         items.map(async (item) => {
-          if (!item.imageStoragePath) return item
-          try {
-            return { ...item, imageUrl: await storage.createSignedUrl(item.imageStoragePath) }
-          } catch {
-            return { ...item, imageUrl: undefined }
+          if (item.imageStoragePath && storage) {
+            try {
+              return { ...item, imageUrl: await storage.createSignedUrl(item.imageStoragePath) }
+            } catch {
+              // The device copy below is a fallback while cloud access recovers.
+            }
           }
+          if (item.imageLocalKey) {
+            try {
+              const existingUrl = localImageUrlsRef.current.get(item.id)
+              if (existingUrl) return { ...item, imageUrl: existingUrl }
+              const image = await localMedia.getImage(item.imageLocalKey)
+              if (image) {
+                const localUrl = URL.createObjectURL(image)
+                localImageUrlsRef.current.set(item.id, localUrl)
+                return { ...item, imageUrl: localUrl }
+              }
+            } catch {
+              return { ...item, imageUrl: undefined }
+            }
+          }
+          return item.imageUrl?.startsWith('blob:') ? { ...item, imageUrl: undefined } : item
         }),
       )
     },
-    [storage],
+    [localMedia, storage],
   )
+
+  useEffect(() => {
+    let alive = true
+    const restoreLocalPhotos = async () => {
+      const hydrated = await hydrateExpenseImages(loadExpenses())
+      if (!alive) return
+      const byId = new Map(hydrated.map((item) => [item.id, item]))
+      setExpenses((current) =>
+        current.map((item) => {
+          const restored = byId.get(item.id)
+          return restored?.imageUrl ? { ...item, imageUrl: restored.imageUrl } : item
+        }),
+      )
+    }
+    void restoreLocalPhotos()
+    return () => {
+      alive = false
+    }
+  }, [hydrateExpenseImages])
+
+  useEffect(() => () => {
+    localImageUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
+    localImageUrlsRef.current.clear()
+  }, [])
 
   useEffect(() => {
     const video = videoRef.current
@@ -511,6 +558,64 @@ function CashlogApp() {
         setSyncStatus(e instanceof Error ? `펫 동기화 실패: ${e.message.slice(0, 80)}` : '펫 동기화 실패')
       })
   }, [petState, repository, selectedPetName])
+
+  useEffect(() => {
+    if (!repository || !storage) return
+    const pending = expenses.filter(
+      (expense) => expense.imageLocalKey && !expense.imageStoragePath,
+    )
+    if (pending.length === 0) return
+
+    pending.forEach((expense) => {
+      if (!expense.imageLocalKey || promotingLocalImagesRef.current.has(expense.id)) return
+      promotingLocalImagesRef.current.add(expense.id)
+      void (async () => {
+        try {
+          const image = await localMedia.getImage(expense.imageLocalKey!)
+          if (!image) return
+          const file = new File([image], 'cashlog-photo.jpg', {
+            type: image.type || 'image/jpeg',
+            lastModified: Date.now(),
+          })
+          const uploaded = await storage.uploadImage(file, expense.id)
+          const cloudExpense: Expense = {
+            ...expense,
+            imageStoragePath: uploaded.path,
+            imageUrl: uploaded.signedUrl,
+          }
+          await repository.upsertExpense(cloudExpense)
+          await repository.saveImageMetadata({
+            expenseId: expense.id,
+            storagePath: uploaded.path,
+            originalFilename: file.name,
+            mimeType: file.type,
+            sizeBytes: file.size,
+            capturedAt: expense.dateTime,
+          })
+          await localMedia.deleteImage(expense.imageLocalKey!)
+          const localUrl = localImageUrlsRef.current.get(expense.id)
+          if (localUrl) URL.revokeObjectURL(localUrl)
+          localImageUrlsRef.current.delete(expense.id)
+          setExpenses((current) =>
+            current.map((item) =>
+              item.id === expense.id
+                ? { ...cloudExpense, imageLocalKey: undefined }
+                : item,
+            ),
+          )
+          setSyncStatus('기기 사진을 계정에 안전하게 보관했어요.')
+        } catch (error) {
+          setSyncStatus(
+            error instanceof Error
+              ? `사진 동기화 실패: ${error.message.slice(0, 80)}`
+              : '사진 동기화에 실패했어요.',
+          )
+        } finally {
+          promotingLocalImagesRef.current.delete(expense.id)
+        }
+      })()
+    })
+  }, [expenses, localMedia, repository, storage])
 
   const completeAuth = async (nextSession: CashlogSession, message: string) => {
     const hydrated = await authClient.hydrateSession(nextSession)
@@ -847,12 +952,6 @@ function CashlogApp() {
     const amount = Number(form.amount)
     if (!form.title.trim() || Number.isNaN(amount) || amount <= 0) return
 
-    if (photoFileRef.current && authClient.isConfigured && !storage) {
-      setShowAccount(true)
-      setAuthMessage('사진 보관본을 계정에 저장하려면 먼저 로그인해 주세요.')
-      return
-    }
-
     setIsSaving(true)
 
     const dateTime = new Date(`${selectedDate}T12:00:00`).toISOString()
@@ -903,26 +1002,47 @@ function CashlogApp() {
 
     const photoFile = photoFileRef.current
     let preparedImage: Awaited<ReturnType<typeof prepareImageForStorage>> | null = null
-    if (photoFile && storage) {
+    if (photoFile) {
       try {
         preparedImage = await prepareImageForStorage(photoFile)
-        const uploaded = await storage.uploadImage(preparedImage.file, expense.id)
+        const imageLocalKey = await localMedia.saveImage(expense.id, preparedImage.file)
         expense = {
           ...expense,
-          imageStoragePath: uploaded.path,
-          imageUrl: uploaded.signedUrl,
+          imageLocalKey,
+          imageUrl: photoPreview,
+        }
+        if (photoPreview.startsWith('blob:')) {
+          localImageUrlsRef.current.set(expense.id, photoPreview)
+        }
+        if (storage) {
+          try {
+            const uploaded = await storage.uploadImage(preparedImage.file, expense.id)
+            expense = {
+              ...expense,
+              imageStoragePath: uploaded.path,
+              imageUrl: uploaded.signedUrl,
+            }
+          } catch (error) {
+            setSyncStatus(
+              error instanceof Error
+                ? `사진은 이 기기에 저장했어요. 계정 보관 재시도 대기: ${error.message.slice(0, 60)}`
+                : '사진은 이 기기에 저장했고 계정 보관은 다시 시도할게요.',
+            )
+          }
+        } else if (authClient.isConfigured) {
+          setSyncStatus('사진은 이 기기에 저장했어요. 로그인하면 계정에도 보관됩니다.')
         }
         setCameraError(null)
       } catch (e) {
         setCameraError(
-          e instanceof Error ? `사진 보관에 실패했어요: ${e.message.slice(0, 80)}` : '사진 보관에 실패했어요.',
+          e instanceof Error ? `사진을 저장하지 못했어요: ${e.message.slice(0, 80)}` : '사진을 저장하지 못했어요.',
         )
         setIsSaving(false)
         return
       }
     }
 
-    setExpenses((current) => [expense, ...current])
+    let cloudEntrySaved = false
     if (repository) {
       const feedback =
         hasMedia &&
@@ -936,43 +1056,61 @@ function CashlogApp() {
             trainingImageConsent && Boolean(expense.imageStoragePath),
           imageObjectKey: expense.imageStoragePath,
         })
-      repository
-        .upsertExpense(expense)
-        .then(() =>
-          preparedImage && expense.imageStoragePath
-            ? repository.saveImageMetadata({
-                expenseId: expense.id,
-                storagePath: expense.imageStoragePath,
-                originalFilename: photoFile?.name ?? preparedImage.file.name,
-                mimeType: preparedImage.file.type,
-                sizeBytes: preparedImage.file.size,
-                width: preparedImage.width,
-                height: preparedImage.height,
-                capturedAt: photoFile?.lastModified
-                  ? new Date(photoFile.lastModified).toISOString()
-                  : expense.dateTime,
-              })
-            : undefined,
-        )
-        .then(() =>
+      try {
+        await repository.upsertExpense(expense)
+        cloudEntrySaved = true
+        const relatedWrites: Promise<unknown>[] = [
           repository.saveDetectedItems(
             expense.id,
             analysis?.detectedItems ?? [],
             analysis?.model,
           ),
+        ]
+        if (preparedImage && expense.imageStoragePath) {
+          relatedWrites.push(repository.saveImageMetadata({
+            expenseId: expense.id,
+            storagePath: expense.imageStoragePath,
+            originalFilename: photoFile?.name ?? preparedImage.file.name,
+            mimeType: preparedImage.file.type,
+            sizeBytes: preparedImage.file.size,
+            width: preparedImage.width,
+            height: preparedImage.height,
+            capturedAt: photoFile?.lastModified
+              ? new Date(photoFile.lastModified).toISOString()
+              : expense.dateTime,
+          }))
+        }
+        if (feedback) relatedWrites.push(repository.saveCategoryFeedback(feedback))
+        const relatedResults = await Promise.allSettled(relatedWrites)
+        const relatedFailed = relatedResults.some((result) => result.status === 'rejected')
+        setSyncStatus(
+          relatedFailed
+            ? '기록과 사진은 저장했지만 일부 분석 정보는 다음 동기화에서 보완할게요.'
+            : '새 기록 클라우드 저장 완료',
         )
-        .then(() =>
-          feedback
-            ? repository.saveCategoryFeedback(feedback)
-            : undefined,
+      } catch (error) {
+        setSyncStatus(
+          error instanceof Error
+            ? `기기에는 저장했어요. 클라우드 저장 실패: ${error.message.slice(0, 70)}`
+            : '기기에는 저장했지만 클라우드 저장에 실패했어요.',
         )
-        .then(() => setSyncStatus('새 기록 클라우드 저장 완료'))
-        .catch((e: unknown) => {
-          setSyncStatus(e instanceof Error ? `클라우드 저장 실패: ${e.message.slice(0, 80)}` : '클라우드 저장 실패')
-        })
+      }
     }
+
+    if (cloudEntrySaved && expense.imageStoragePath && expense.imageLocalKey) {
+      try {
+        await localMedia.deleteImage(expense.imageLocalKey)
+        const localUrl = localImageUrlsRef.current.get(expense.id)
+        if (localUrl) URL.revokeObjectURL(localUrl)
+        localImageUrlsRef.current.delete(expense.id)
+        expense = { ...expense, imageLocalKey: undefined }
+      } catch {
+        // A stale device copy is harmless and can be cleaned up on a later sync.
+      }
+    }
+
+    setExpenses((current) => [expense, ...current])
     stopCamera()
-    // 미리보기 URL의 소유권을 저장된 기록으로 넘김 (여기서 revoke 하지 않음)
     setPhotoPreview('')
     photoFileRef.current = null
     setVideoPreview('')

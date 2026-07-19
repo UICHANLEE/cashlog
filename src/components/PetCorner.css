@@ -214,6 +214,27 @@
   line-height: 1.35;
 }
 
+.pet-look-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1.5px dashed var(--line-soft);
+  font-family: var(--font-hand);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.pet-look-swatch {
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--line);
+  border-radius: 50%;
+}
+
 .pet-stage.is-cheering .pet-doodle-cat {
   animation: pet-hop 0.55s ease;
 }
@@ -328,6 +349,46 @@
   gap: 12px;
 }
 
+.pet-wardrobe-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  padding: 5px;
+  border: 2px solid var(--line);
+  border-radius: 16px 7px 16px 7px;
+  background: var(--paper-soft);
+  box-shadow: var(--sticker-shadow-sm);
+}
+
+.pet-wardrobe-tabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 10px 4px 10px 4px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: var(--font-hand);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pet-wardrobe-tabs button[aria-selected='true'] {
+  border: 2px solid var(--line);
+  background: var(--crayon-sun);
+  color: var(--ink);
+  box-shadow: 1px 1px 0 var(--line);
+}
+
+.pet-wardrobe-panel {
+  min-height: 112px;
+  padding: 4px 1px;
+}
+
 .pet-breed-section {
   display: grid;
   gap: 8px;
@@ -390,17 +451,22 @@
 
 .outfit-chips,
 .palette-chips {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
 .outfit-chip,
 .palette-chip {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    'icon name'
+    'icon state';
   align-items: center;
-  gap: 5px;
-  padding: 8px 13px;
+  column-gap: 8px;
+  min-height: 64px;
+  padding: 9px 10px;
   border: 2px solid var(--line);
   border-radius: 14px 6px 14px 6px;
   background: var(--paper-card);
@@ -415,9 +481,40 @@
     box-shadow 0.12s ease;
 }
 
-.outfit-chip > span {
-  display: inline-flex;
+.outfit-chip > span,
+.palette-chip > span {
+  grid-area: icon;
+  display: grid;
+  place-items: center;
   align-items: center;
+}
+
+.outfit-chip strong,
+.palette-chip strong {
+  grid-area: name;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font: inherit;
+  line-height: 1.1;
+}
+
+.outfit-chip small,
+.palette-chip small {
+  grid-area: state;
+  color: var(--ink-soft);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.outfit-chip-icon {
+  width: 34px;
+  height: 34px;
+  border: 1.5px dashed var(--line-soft);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.62);
+  color: var(--accent-ink);
 }
 
 .palette-chip {
@@ -425,8 +522,8 @@
 }
 
 .palette-chip span {
-  width: 20px;
-  height: 20px;
+  width: 34px;
+  height: 34px;
   flex: 0 0 auto;
   border: 2px solid var(--line);
   border-radius: 999px;
@@ -446,6 +543,10 @@
   color: #b6a98e;
   box-shadow: none;
   cursor: not-allowed;
+}
+
+.outfit-chip.locked small {
+  color: #9b8e78;
 }
 
 .outfit-chip:not(:disabled):active,
@@ -511,6 +612,16 @@
 
   .breed-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .outfit-chips,
+  .palette-chips {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pet-wardrobe-tabs button {
+    padding-inline: 6px;
+    font-size: 15px;
   }
 
   .pet-stage.pet-stage-3d,

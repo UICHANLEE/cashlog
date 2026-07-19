@@ -86,6 +86,7 @@ const addOutfit = (
   outfit: OutfitId,
   accent: THREE.Material,
   ink: THREE.Material,
+  light: THREE.Material,
 ) => {
   if (outfit === 'bow') {
     addEllipsoid(parent, accent, [-0.34, -0.08, 1.22], [0.38, 0.25, 0.16], 28).rotation.z = 0.45
@@ -99,6 +100,31 @@ const addOutfit = (
     hat.rotation.z = -0.16
     parent.add(hat)
     addEllipsoid(parent, ink, [0.35, 2.9, 0.2], [0.14, 0.14, 0.14], 20)
+  }
+
+  if (outfit === 'hoodie') {
+    addEllipsoid(parent, accent, [0, -0.92, 0.16], [1.18, 1.02, 0.92], 36)
+    const hood = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.2, 18, 48), accent)
+    hood.position.set(0, -0.22, 0.08)
+    hood.scale.y = 0.7
+    parent.add(hood)
+    addEllipsoid(parent, light, [0, -1.15, 1.03], [0.52, 0.28, 0.11], 24)
+    ;[-0.18, 0.18].forEach((x) => {
+      const string = new THREE.Mesh(new THREE.CapsuleGeometry(0.035, 0.42, 5, 10), light)
+      string.position.set(x, -0.58, 1.15)
+      parent.add(string)
+    })
+  }
+
+  if (outfit === 'sailor') {
+    addEllipsoid(parent, light, [0, -0.98, 0.12], [1.17, 1.01, 0.9], 36)
+    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.86, 0.16, 16, 48), accent)
+    collar.position.set(0, -0.3, 0.13)
+    collar.scale.y = 0.7
+    parent.add(collar)
+    addEllipsoid(parent, accent, [-0.28, -0.54, 1.18], [0.3, 0.2, 0.12], 24).rotation.z = 0.42
+    addEllipsoid(parent, accent, [0.28, -0.54, 1.18], [0.3, 0.2, 0.12], 24).rotation.z = -0.42
+    addEllipsoid(parent, accent, [0, -0.54, 1.26], [0.13, 0.13, 0.09], 20)
   }
 
   if (outfit === 'glasses') {
@@ -194,7 +220,7 @@ export function InteractivePet3D({
 
     const scene = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera(compact ? 35 : 31, 1, 0.1, 100)
-    camera.position.set(0, 0.25, compact ? 8.8 : 8.2)
+    camera.position.set(0, 0.25, compact ? 9.35 : 9.1)
     camera.lookAt(0, 0.25, 0)
 
     scene.add(new THREE.HemisphereLight(0xfff8e7, 0x8ccfb9, 2.8))
@@ -221,47 +247,46 @@ export function InteractivePet3D({
     const ink = new THREE.MeshPhysicalMaterial({ color: 0x261e1a, roughness: 0.2, clearcoat: 0.75 })
     const white = new THREE.MeshBasicMaterial({ color: 0xffffff })
     const pink = new THREE.MeshPhysicalMaterial({ color: kind === 'cat' ? 0xff8b79 : 0x6c3f2e, roughness: 0.42 })
+    const stripeMaterial = new THREE.MeshPhysicalMaterial({ color: colors.shadow, roughness: 0.75 })
 
     const root = new THREE.Group()
     root.position.y = compact ? -0.34 : -0.1
     root.scale.setScalar(compact ? 0.92 : 1)
     scene.add(root)
 
-    const portraitTexture = new THREE.TextureLoader().load(portraitPath(kind), (texture) => {
-      texture.colorSpace = THREE.SRGBColorSpace
-      root.visible = false
-    })
-    portraitTexture.colorSpace = THREE.SRGBColorSpace
-    const portraitMaterial = new THREE.MeshBasicMaterial({
-      map: portraitTexture,
-      transparent: true,
-      alphaTest: 0.02,
-      depthWrite: false,
-      toneMapped: false,
-    })
-    const portrait = new THREE.Mesh(new THREE.PlaneGeometry(4.72, 4.72), portraitMaterial)
-    portrait.position.set(0, -0.02, 1.16)
-    scene.add(portrait)
-
-    addEllipsoid(root, fur, [0, -0.82, 0], [1.2, 1.38, 0.98])
+    const body = addEllipsoid(root, fur, [0, -0.82, 0], [1.2, 1.38, 0.98])
+    if (kind === 'dog' && breed === 'dachshund') body.scale.x = 1.5
     const head = addEllipsoid(root, fur, [0, 0.72, 0.15], [1.58, 1.38, 1.14])
     head.name = 'head'
 
     if (kind === 'cat') {
       ;[-1, 1].forEach((side) => {
-        const ear = new THREE.Mesh(new THREE.ConeGeometry(0.52, 1.18, 32), fur)
-        ear.position.set(side * 0.98, 1.92, -0.02)
-        ear.rotation.z = side * -0.18
-        root.add(ear)
-        const inner = new THREE.Mesh(new THREE.ConeGeometry(0.31, 0.72, 28), blush)
-        inner.position.set(side * 0.98, 1.93, 0.36)
-        inner.rotation.z = side * -0.18
-        root.add(inner)
+        if (breed === 'persian') {
+          addEllipsoid(root, fur, [side * 1.03, 1.64, 0.03], [0.48, 0.5, 0.28], 28)
+        } else {
+          const earMaterial = breed === 'siamese' ? stripeMaterial : fur
+          const ear = new THREE.Mesh(new THREE.ConeGeometry(0.52, 1.18, 32), earMaterial)
+          ear.position.set(side * 0.98, 1.92, -0.02)
+          ear.rotation.z = side * -0.18
+          root.add(ear)
+          const inner = new THREE.Mesh(new THREE.ConeGeometry(0.31, 0.72, 28), blush)
+          inner.position.set(side * 0.98, 1.93, 0.36)
+          inner.rotation.z = side * -0.18
+          root.add(inner)
+        }
       })
     } else {
       ;[-1, 1].forEach((side) => {
-        const ear = addEllipsoid(root, fur, [side * 1.38, 1.06, -0.06], [0.5, 1.02, 0.32])
-        ear.rotation.z = side * 0.34
+        const pointed = ['shiba', 'pomeranian', 'border_collie', 'corgi'].includes(String(breed))
+        if (pointed) {
+          const ear = new THREE.Mesh(new THREE.ConeGeometry(0.5, breed === 'corgi' ? 1.42 : 1.16, 32), fur)
+          ear.position.set(side * 1.02, 1.83, -0.05)
+          ear.rotation.z = side * -0.16
+          root.add(ear)
+        } else {
+          const ear = addEllipsoid(root, fur, [side * 1.38, 1.06, -0.06], [0.5, breed === 'retriever' ? 1.18 : 1.02, 0.32])
+          ear.rotation.z = side * 0.34
+        }
       })
     }
 
@@ -284,8 +309,9 @@ export function InteractivePet3D({
     addEllipsoid(root, furLight, [-0.22, 0.08, 1.34], [0.28, 0.22, 0.16], 24)
     addEllipsoid(root, furLight, [0.22, 0.08, 1.34], [0.28, 0.22, 0.16], 24)
 
-    const leftPaw = addEllipsoid(root, furLight, [-0.7, -1.74, 0.74], [0.52, 0.38, 0.52], 30)
-    addEllipsoid(root, furLight, [0.7, -1.74, 0.74], [0.52, 0.38, 0.52], 30)
+    const pawY = kind === 'dog' && breed === 'corgi' ? -1.87 : -1.74
+    const leftPaw = addEllipsoid(root, furLight, [-0.7, pawY, 0.74], [0.52, 0.38, 0.52], 30)
+    addEllipsoid(root, furLight, [0.7, pawY, 0.74], [0.52, 0.38, 0.52], 30)
     addEllipsoid(root, fur, [-1.05, -0.52, 0.68], [0.42, 0.74, 0.42], 30).rotation.z = -0.28
     const wavingPaw = addEllipsoid(root, fur, [1.08, -0.36, 0.7], [0.42, 0.78, 0.42], 30)
     wavingPaw.rotation.z = 0.44
@@ -297,14 +323,41 @@ export function InteractivePet3D({
     collar.scale.y = 0.72
     root.add(collar)
     addEllipsoid(root, accent, [0, -0.52, 1.02], [0.2, 0.24, 0.11], 24)
-    addOutfit(root, outfit, accent, ink)
+    addOutfit(root, outfit, accent, ink, furLight)
 
-    const stripeMaterial = new THREE.MeshPhysicalMaterial({ color: colors.shadow, roughness: 0.75 })
     if (kind === 'cat' && ['cheese_tabby', 'korean_short', 'calico'].includes(String(breed))) {
       ;[-0.28, 0, 0.28].forEach((x, index) => {
         const stripe = addEllipsoid(root, stripeMaterial, [x, 1.69 - Math.abs(index - 1) * 0.07, 1.02], [0.1, 0.34, 0.05], 18)
         stripe.rotation.z = x * -0.8
       })
+    }
+    if (kind === 'cat' && breed === 'tuxedo') {
+      addEllipsoid(root, furLight, [0, 1.34, 1.05], [0.2, 0.52, 0.06], 20)
+      addEllipsoid(root, furLight, [0, -0.72, 0.96], [0.58, 0.72, 0.12], 24)
+    }
+    if (kind === 'cat' && breed === 'calico') {
+      addEllipsoid(root, accent, [-0.86, 1.22, 0.96], [0.5, 0.4, 0.07], 24).rotation.z = -0.28
+      addEllipsoid(root, stripeMaterial, [0.76, -0.72, 0.9], [0.45, 0.62, 0.08], 24).rotation.z = 0.22
+    }
+    if (kind === 'cat' && breed === 'siamese') {
+      addEllipsoid(root, stripeMaterial, [0, 0.24, 1.12], [0.7, 0.48, 0.13], 28)
+    }
+    if (kind === 'dog' && breed === 'border_collie') {
+      addEllipsoid(root, furLight, [0, 1.25, 1.06], [0.2, 0.66, 0.06], 20)
+      addEllipsoid(root, furLight, [0, -0.76, 0.96], [0.55, 0.72, 0.1], 24)
+    }
+    if (kind === 'dog' && ['toy_poodle', 'pomeranian'].includes(String(breed))) {
+      const puffCount = breed === 'pomeranian' ? 11 : 7
+      for (let index = 0; index < puffCount; index += 1) {
+        const angle = (Math.PI * 2 * index) / puffCount
+        addEllipsoid(
+          root,
+          furLight,
+          [Math.cos(angle) * 1.3, 0.6 + Math.sin(angle) * 1.1, -0.02],
+          [0.34, 0.34, 0.25],
+          20,
+        )
+      }
     }
 
     const shadow = new THREE.Mesh(
@@ -400,12 +453,6 @@ export function InteractivePet3D({
       root.position.y = (compact ? -0.34 : -0.1) + (happy ? Math.abs(Math.sin(t * 9)) * 0.17 : 0)
       root.rotation.y += (THREE.MathUtils.clamp(targetRotation.y + pointer.x * 0.16, -0.65, 0.65) - root.rotation.y) * 0.075
       root.rotation.x += (targetRotation.x - pointer.y * 0.035 - root.rotation.x) * 0.07
-      portrait.rotation.y += (THREE.MathUtils.clamp(targetRotation.y * 0.22 + pointer.x * 0.065, -0.16, 0.16) - portrait.rotation.y) * 0.08
-      portrait.rotation.x += (pointer.y * -0.025 - portrait.rotation.x) * 0.08
-      portrait.rotation.z += ((happy ? Math.sin(t * 7) * 0.018 : pointer.x * -0.012) - portrait.rotation.z) * 0.08
-      const portraitScale = (compact ? 0.98 : 1.04) * breathe * (happy ? 1.025 : 1)
-      portrait.scale.setScalar(portraitScale)
-      portrait.position.y = -0.02 + (happy ? Math.abs(Math.sin(t * 8.5)) * 0.14 : Math.sin(t * 1.8) * 0.025)
       head.rotation.y += ((toy.position.x * 0.045 + pointer.x * 0.08) - head.rotation.y) * 0.08
       head.rotation.x += ((toy.position.y + 1.5) * -0.018 - pointer.y * 0.035 - head.rotation.x) * 0.08
       tail.rotation.z = reducedMotion ? 0 : Math.sin(t * (happy ? 8 : 3.3)) * (happy ? 0.22 : 0.1)

@@ -1,8 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createCashlogStorage } from './supabaseStorage'
+import { createCashlogStorage, resolveSupabaseSignedUrl } from './supabaseStorage'
 
 describe('Supabase private media storage', () => {
   afterEach(() => vi.unstubAllGlobals())
+
+  it('normalizes both Supabase signed URL response formats', () => {
+    expect(
+      resolveSupabaseSignedUrl('https://cashlog.supabase.co', '/object/sign/cashlog-media/a?token=x'),
+    ).toBe('https://cashlog.supabase.co/storage/v1/object/sign/cashlog-media/a?token=x')
+    expect(
+      resolveSupabaseSignedUrl('https://cashlog.supabase.co', '/storage/v1/object/sign/cashlog-media/a?token=x'),
+    ).toBe('https://cashlog.supabase.co/storage/v1/object/sign/cashlog-media/a?token=x')
+  })
 
   it('uploads to the signed-in user folder and returns a signed URL', async () => {
     const fetchMock = vi

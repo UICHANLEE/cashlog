@@ -63,6 +63,8 @@ export function getPetBreed(kind: PetKind, id: CatBreedId | DogBreedId): PetBree
 export type OutfitId =
   | 'none'
   | 'bow'
+  | 'hoodie'
+  | 'sailor'
   | 'party'
   | 'glasses'
   | 'scarf'
@@ -135,6 +137,8 @@ export function getPetPalette(id: PetPaletteId): PetPalette {
 export const outfits: Outfit[] = [
   { id: 'none', name: '기본', icon: '🐾', minLevel: 1 },
   { id: 'bow', name: '리본', icon: '🎀', minLevel: 1 },
+  { id: 'hoodie', name: '말랑 후디', icon: '🧥', minLevel: 1 },
+  { id: 'sailor', name: '세일러복', icon: '👕', minLevel: 2 },
   { id: 'party', name: '파티모자', icon: '🎉', minLevel: 2 },
   { id: 'glasses', name: '선글라스', icon: '🕶️', minLevel: 3 },
   { id: 'scarf', name: '목도리', icon: '🧣', minLevel: 4 },
