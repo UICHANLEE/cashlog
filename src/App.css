@@ -478,14 +478,19 @@
   cursor: pointer;
   box-shadow: var(--sticker-shadow-sm);
   transition:
-    transform 0.12s ease,
-    box-shadow 0.12s ease,
-    background 0.12s ease;
+    transform var(--motion-press) var(--ease-out),
+    box-shadow var(--motion-press) var(--ease-out),
+    background-color var(--motion-control) var(--ease-out);
 }
 
 .view-tabs button.active {
   background: var(--crayon-sun);
   transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--line);
+}
+
+.view-tabs button:not(:disabled):active {
+  transform: translate3d(2px, 2px, 0) scale(0.97);
   box-shadow: 1px 1px 0 var(--line);
 }
 
@@ -590,8 +595,8 @@
   cursor: pointer;
   box-shadow: var(--sticker-shadow-sm);
   transition:
-    transform 0.12s ease,
-    box-shadow 0.12s ease;
+    transform var(--motion-press) var(--ease-out),
+    box-shadow var(--motion-press) var(--ease-out);
 }
 
 .ledger-kind-toggle button.active {
@@ -604,6 +609,10 @@
 .ledger-kind-toggle button.kind-income.active {
   background: var(--income-wash);
   color: var(--income);
+}
+
+.ledger-kind-toggle button:not(:disabled):active {
+  transform: translate3d(2px, 2px, 0) scale(0.97);
 }
 
 .primary-button,
@@ -633,12 +642,12 @@
   font-weight: 700;
   box-shadow: var(--sticker-shadow);
   transition:
-    transform 0.12s ease,
-    box-shadow 0.12s ease;
+    transform var(--motion-press) var(--ease-out),
+    box-shadow var(--motion-press) var(--ease-out);
 }
 
 .primary-button:not(:disabled):active {
-  transform: translate(4px, 4px);
+  transform: translate3d(4px, 4px, 0) scale(0.97);
   box-shadow: 0 0 0 var(--line);
 }
 
@@ -653,12 +662,12 @@
   font-weight: 700;
   box-shadow: var(--sticker-shadow-sm);
   transition:
-    transform 0.12s ease,
-    box-shadow 0.12s ease;
+    transform var(--motion-press) var(--ease-out),
+    box-shadow var(--motion-press) var(--ease-out);
 }
 
 .ghost-button:not(:disabled):active {
-  transform: translate(3px, 3px);
+  transform: translate3d(3px, 3px, 0) scale(0.97);
   box-shadow: 0 0 0 var(--line);
 }
 
@@ -754,9 +763,9 @@
   font-family: var(--font-hand);
   text-align: left;
   transition:
-    transform 0.15s ease,
-    background 0.15s ease,
-    box-shadow 0.15s ease;
+    transform var(--motion-control) var(--ease-out),
+    background-color var(--motion-control) var(--ease-out),
+    box-shadow var(--motion-control) var(--ease-out);
 }
 
 .calendar-day span:first-of-type {
@@ -764,12 +773,20 @@
   font-weight: 700;
 }
 
-.calendar-day:hover,
 .calendar-day.selected {
   border-color: var(--line);
   background: var(--crayon-sun);
   transform: translateY(-2px) rotate(-1deg);
   box-shadow: var(--sticker-shadow-sm);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .calendar-day:hover {
+    border-color: var(--line);
+    background: var(--crayon-sun);
+    transform: translateY(-2px) rotate(-1deg);
+    box-shadow: var(--sticker-shadow-sm);
+  }
 }
 
 @media (hover: none) {
@@ -982,8 +999,14 @@
   padding: env(safe-area-inset-top) max(24px, env(safe-area-inset-right))
     max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
   background: rgba(47, 42, 36, 0.42);
+  -webkit-backdrop-filter: blur(10px) saturate(0.92);
+  backdrop-filter: blur(10px) saturate(0.92);
   box-sizing: border-box;
   overflow-x: clip;
+}
+
+.sheet-backdrop:not(.is-open) {
+  pointer-events: none;
 }
 
 .add-sheet {
@@ -1002,6 +1025,8 @@
   -webkit-overflow-scrolling: touch;
   padding: 26px;
   border-radius: 26px 10px 26px 10px;
+  transform-origin: center bottom;
+  will-change: transform, opacity;
 }
 
 .sheet-header {
@@ -1058,8 +1083,8 @@
   min-width: 0;
   box-shadow: var(--sticker-shadow-sm);
   transition:
-    transform 0.12s ease,
-    box-shadow 0.12s ease;
+    transform var(--motion-press) var(--ease-out),
+    box-shadow var(--motion-press) var(--ease-out);
 }
 
 .choice-card:first-child {
@@ -1071,7 +1096,7 @@
 }
 
 .choice-card:active {
-  transform: translate(3px, 3px) rotate(0deg);
+  transform: translate3d(3px, 3px, 0) rotate(0deg) scale(0.97);
   box-shadow: 0 0 0 var(--line);
 }
 
@@ -1186,12 +1211,12 @@
   cursor: pointer;
   box-shadow: var(--sticker-shadow-sm);
   transition:
-    transform 0.12s ease,
-    box-shadow 0.12s ease;
+    transform var(--motion-press) var(--ease-out),
+    box-shadow var(--motion-press) var(--ease-out);
 }
 
 .camera-start-button:active {
-  transform: translate(3px, 3px);
+  transform: translate3d(3px, 3px, 0) scale(0.97);
   box-shadow: 0 0 0 var(--line);
 }
 
@@ -1255,14 +1280,18 @@
   cursor: pointer;
   box-shadow: var(--sticker-shadow-sm);
   transition:
-    transform 0.12s ease,
-    box-shadow 0.12s ease;
+    transform var(--motion-press) var(--ease-out),
+    box-shadow var(--motion-press) var(--ease-out);
 }
 
 .capture-kind-toggle button.active {
   background: var(--crayon-sun);
   transform: translate(2px, 2px);
   box-shadow: 1px 1px 0 var(--line);
+}
+
+.capture-kind-toggle button:not(:disabled):active {
+  transform: translate3d(2px, 2px, 0) scale(0.97);
 }
 
 .record-indicator {
@@ -1356,16 +1385,16 @@ video.preview-image {
   line-height: 1.35;
   box-shadow: var(--sticker-shadow-sm);
   transition:
-    transform 0.12s ease,
-    box-shadow 0.12s ease;
+    transform var(--motion-press) var(--ease-out),
+    box-shadow var(--motion-press) var(--ease-out);
 }
 
 .file-picker.file-picker-inline:active {
-  transform: translate(3px, 3px);
+  transform: translate3d(3px, 3px, 0) scale(0.97);
   box-shadow: 0 0 0 var(--line);
 }
 
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   .file-picker.file-picker-inline:hover {
     transform: translate(-1px, -1px);
     box-shadow: 5px 5px 0 var(--line);
@@ -1898,6 +1927,15 @@ video.preview-image {
   color: var(--ink);
   cursor: pointer;
   box-shadow: 2px 2px 0 var(--line);
+  transition:
+    transform var(--motion-press) var(--ease-out),
+    box-shadow var(--motion-press) var(--ease-out),
+    background-color var(--motion-control) var(--ease-out);
+}
+
+.icon-button:not(:disabled):active {
+  transform: translate3d(2px, 2px, 0) scale(0.97);
+  box-shadow: 0 0 0 var(--line);
 }
 
 .account-trigger:not(.is-open) {
@@ -1951,12 +1989,8 @@ video.preview-image {
   position: relative;
   z-index: 15;
   margin: 12px 0 4px;
-  animation: drawer-in 180ms ease-out both;
-}
-
-@keyframes drawer-in {
-  from { opacity: 0; transform: translateY(-8px) rotate(0.8deg); }
-  to { opacity: 1; transform: translateY(0) rotate(0.8deg); }
+  transform-origin: left top;
+  will-change: transform, opacity;
 }
 
 .timeline-home {
@@ -2308,11 +2342,13 @@ video.preview-image {
   color: white;
   cursor: pointer;
   box-shadow: 4px 5px 0 var(--line);
-  transition: transform 120ms ease, box-shadow 120ms ease;
+  transition:
+    transform var(--motion-press) var(--ease-out),
+    box-shadow var(--motion-press) var(--ease-out);
 }
 
 .camera-shutter:active {
-  transform: translate(3px, 4px) scale(0.97);
+  transform: translate3d(3px, 4px, 0) scale(0.97);
   box-shadow: 1px 1px 0 var(--line);
 }
 
@@ -2329,6 +2365,13 @@ video.preview-image {
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
+  transition:
+    transform var(--motion-press) var(--ease-out),
+    color var(--motion-control) var(--ease-out);
+}
+
+.dock-secondary:active {
+  transform: scale(0.97);
 }
 
 .dock-secondary input {
@@ -2375,9 +2418,16 @@ video.preview-image {
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
+  transition:
+    transform var(--motion-press) var(--ease-out),
+    color var(--motion-control) var(--ease-out);
 }
 
 .bottom-nav button.active { color: var(--accent); }
+
+.bottom-nav button:not(:disabled):active {
+  transform: scale(0.97);
+}
 
 .calendar-view {
   width: min(100%, 900px);
@@ -2570,6 +2620,24 @@ video.preview-image {
   transform: translate(-1px, -1px);
 }
 
+.daily-story-button,
+.empty-camera-link,
+.pet-context-question button,
+.feeling-options button {
+  transition:
+    transform var(--motion-press) var(--ease-out),
+    color var(--motion-control) var(--ease-out),
+    background-color var(--motion-control) var(--ease-out),
+    box-shadow var(--motion-press) var(--ease-out);
+}
+
+.daily-story-button:not(:disabled):active,
+.empty-camera-link:active,
+.pet-context-question button:active,
+.feeling-options button:active {
+  transform: scale(0.97);
+}
+
 .expense-more-details {
   padding: 11px 13px;
   border: 2px dashed var(--line-soft);
@@ -2605,8 +2673,7 @@ video.preview-image {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .timeline-pet,
-  .account-drawer { animation: none; }
+  .timeline-pet { animation: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2620,5 +2687,35 @@ video.preview-image {
 
   .empty-mascot {
     animation: none;
+  }
+
+  .sheet-backdrop {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .add-sheet,
+  .account-drawer {
+    will-change: opacity;
+  }
+
+  .primary-button:not(:disabled):active,
+  .ghost-button:not(:disabled):active,
+  .choice-card:active,
+  .view-tabs button:not(:disabled):active,
+  .ledger-kind-toggle button:not(:disabled):active,
+  .calendar-day:active,
+  .camera-start-button:active,
+  .capture-kind-toggle button:not(:disabled):active,
+  .file-picker.file-picker-inline:active,
+  .icon-button:not(:disabled):active,
+  .camera-shutter:active,
+  .dock-secondary:active,
+  .bottom-nav button:not(:disabled):active,
+  .daily-story-button:not(:disabled):active,
+  .empty-camera-link:active,
+  .pet-context-question button:active,
+  .feeling-options button:active {
+    transform: none;
   }
 }

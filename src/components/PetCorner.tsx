@@ -30,6 +30,7 @@ import {
   type PetPaletteId,
   type PetState,
 } from '../domain/pet'
+import { signalSoftImpact } from '../motion/haptics'
 import { InteractivePet3D, PetPortrait } from './InteractivePet3D'
 import './PetCorner.css'
 
@@ -81,6 +82,7 @@ export function PetCorner({
   }, [])
 
   const play = useCallback(() => {
+    signalSoftImpact()
     setCheer(true)
     setCheerRequest((request) => request + 1)
   }, [])
@@ -299,7 +301,10 @@ export function PetCorner({
           aria-valuemax={100}
           aria-label="레벨 진행도"
         >
-          <div className="pet-level-fill" style={{ width: `${atMax ? 100 : pct}%` }} />
+          <div
+            className="pet-level-fill"
+            style={{ transform: `scaleX(${atMax ? 1 : level.progress})` }}
+          />
         </div>
         <small>
           지금까지 기록 {level.totalRecords}개 · 기록을 남길수록 {activeName}가 성장하고 새 옷이 열려요.

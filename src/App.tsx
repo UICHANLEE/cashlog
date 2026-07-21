@@ -26,6 +26,7 @@ import {
   UserRound,
   X,
 } from 'lucide-react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import './App.css'
 import { analyzePhoto } from './ai/analyzePhoto'
 import { captureFrameFromVideo } from './camera/captureFromVideo'
@@ -157,6 +158,7 @@ const emptyForm = (): ExpenseForm => ({
 
 function CashlogApp() {
   const now = new Date()
+  const prefersReducedMotion = useReducedMotion()
   const [expenses, setExpenses] = useState<Expense[]>(loadExpenses)
   const [selectedDate, setSelectedDate] = useState(todayIsoDate)
   const [visibleMonth] = useState({ year: now.getFullYear(), month: now.getMonth() })
@@ -761,6 +763,30 @@ function CashlogApp() {
     setAddMode('manual')
   }
 
+  const closeAddSheet = useCallback(() => {
+    const recorder = mediaRecorderRef.current
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.onstop = null
+      try {
+        recorder.stop()
+      } catch {
+        void 0
+      }
+    }
+    stopCamera()
+    revokeAndClearPreview()
+    setAddMode('closed')
+  }, [revokeAndClearPreview, stopCamera])
+
+  useEffect(() => {
+    if (addMode === 'closed') return undefined
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeAddSheet()
+    }
+    window.addEventListener('keydown', handleEscape)
+    return () => window.removeEventListener('keydown', handleEscape)
+  }, [addMode, closeAddSheet])
+
   const startCamera = async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
       setCameraError('이 브라우저에서는 카메라를 사용할 수 없어요.')
@@ -1182,8 +1208,28 @@ function CashlogApp() {
         </button>
       </header>
 
-      {showAccount && (
-        <section className="account-card account-drawer" aria-label="로그인과 동기화">
+      <AnimatePresence initial={false}>
+        {showAccount && (
+        <motion.section
+          className="account-card account-drawer"
+          aria-label="로그인과 동기화"
+          initial={
+            prefersReducedMotion
+              ? { opacity: 0 }
+              : { opacity: 0, transform: 'translate3d(0, -8px, 0) rotate(0.8deg)' }
+          }
+          animate={{ opacity: 1, transform: 'translate3d(0, 0, 0) rotate(0.8deg)' }}
+          exit={
+            prefersReducedMotion
+              ? { opacity: 0 }
+              : { opacity: 0, transform: 'translate3d(0, -6px, 0) rotate(0.8deg)' }
+          }
+          transition={
+            prefersReducedMotion
+              ? { duration: 0.16, ease: [0.23, 1, 0.32, 1] }
+              : { type: 'spring', duration: 0.3, bounce: 0 }
+          }
+        >
           <div>
             <p className="eyebrow">MY CASHLOG</p>
             <h2>{session?.user?.email ?? '내 기록 지키기'}</h2>
@@ -1288,8 +1334,9 @@ function CashlogApp() {
               </form>
             )}
           {authMessage && <small className="account-message">{authMessage}</small>}
-        </section>
-      )}
+        </motion.section>
+        )}
+      </AnimatePresence>
 
       {activeView === 'pets' ? (
         <PetCorner
@@ -1484,9 +1531,37 @@ function CashlogApp() {
         </button>
       </nav>
 
-      {addMode !== 'closed' && (
-        <section className="sheet-backdrop" aria-label="기록 추가">
-          <div className="add-sheet">
+      <motion.section
+          className={`sheet-backdrop${addMode !== 'closed' ? ' is-open' : ''}`}
+          role={addMode !== 'closed' ? 'dialog' : undefined}
+          aria-modal={addMode !== 'closed' ? 'true' : undefined}
+          aria-label={addMode !== 'closed' ? '기록 추가' : undefined}
+          aria-hidden={addMode === 'closed'}
+          initial={false}
+          animate={{ opacity: addMode !== 'closed' ? 1 : 0 }}
+          transition={{ duration: prefersReducedMotion ? 0.16 : 0.2, ease: [0.23, 1, 0.32, 1] }}
+          onPointerDown={(event) => {
+            if (addMode !== 'closed' && event.target === event.currentTarget) closeAddSheet()
+          }}
+        >
+          <motion.div
+            className="add-sheet"
+            initial={false}
+            animate={
+              addMode !== 'closed'
+                ? { opacity: 1, transform: 'translate3d(0, 0, 0) scale(1)' }
+                : prefersReducedMotion
+                  ? { opacity: 0, transform: 'none' }
+                  : { opacity: 0, transform: 'translate3d(0, 28px, 0) scale(0.98)' }
+            }
+            transition={
+              prefersReducedMotion
+                ? { duration: 0.16, ease: [0.23, 1, 0.32, 1] }
+                : { type: 'spring', duration: 0.4, bounce: 0.12 }
+            }
+          >
+            {addMode !== 'closed' && (
+            <>
             <div className="sheet-header">
               <div>
                 <p className="eyebrow">PHOTO LOG</p>
@@ -1496,20 +1571,7 @@ function CashlogApp() {
                 type="button"
                 className="icon-button"
                 aria-label="기록 창 닫기"
-                onClick={() => {
-                  const recorder = mediaRecorderRef.current
-                  if (recorder && recorder.state !== 'inactive') {
-                    recorder.onstop = null
-                    try {
-                      recorder.stop()
-                    } catch {
-                      void 0
-                    }
-                  }
-                  stopCamera()
-                  revokeAndClearPreview()
-                  setAddMode('closed')
-                }}
+                onClick={closeAddSheet}
               >
                 <X size={22} aria-hidden />
               </button>
@@ -1729,9 +1791,10 @@ function CashlogApp() {
                 isSaving={isSaving}
               />
             )}
-          </div>
-        </section>
-      )}
+            </>
+            )}
+          </motion.div>
+        </motion.section>
       <footer className="legal-footer">
         <a href="/privacy.html">개인정보처리방침</a>
         <a href="https://github.com/UICHANLEE/cashlog">GitHub</a>

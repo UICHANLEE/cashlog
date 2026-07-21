@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { Hand, Rotate3D, Sparkles } from 'lucide-react'
+import { Hand, Sparkles } from 'lucide-react'
 import * as THREE from 'three'
 import {
   getPetPalette,
@@ -9,6 +9,7 @@ import {
   type PetKind,
   type PetPaletteId,
 } from '../domain/pet'
+import { signalSoftImpact } from '../motion/haptics'
 import './InteractivePet3D.css'
 
 type InteractivePet3DProps = {
@@ -29,6 +30,14 @@ type PetPortraitProps = {
 }
 
 const portraitPath = (kind: PetKind) => `/pets/${kind}-3d.png`
+
+const rubberbandClamp = (value: number, min: number, max: number, dimension: number) => {
+  if (value >= min && value <= max) return value
+  const boundary = value < min ? min : max
+  const overshoot = Math.abs(value - boundary)
+  const resisted = (overshoot * dimension * 0.55) / (dimension + 0.55 * overshoot)
+  return boundary + (value < min ? -resisted : resisted)
+}
 
 export function PetPortrait({ kind, name, className = '' }: PetPortraitProps) {
   return (
@@ -180,6 +189,7 @@ export function InteractivePet3D({
   const reactionTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const interact = useCallback(() => {
+    signalSoftImpact()
     triggerRef.current?.()
     setReaction(`${name}가 기분 좋게 꼬리를 흔들어요`)
     if (reactionTimer.current) clearTimeout(reactionTimer.current)
@@ -376,7 +386,16 @@ export function InteractivePet3D({
     toyRing.rotation.x = Math.PI / 2
     toy.add(toyRing)
 
-    const pointer = { x: 0, y: 0, dragging: false, toy: false, lastX: 0, lastY: 0 }
+    const pointer = {
+      x: 0,
+      y: 0,
+      dragging: false,
+      toy: false,
+      lastX: 0,
+      lastY: 0,
+      lastTime: performance.now(),
+    }
+    const toyVelocity = { x: 0, y: 0 }
     const targetRotation = { x: 0, y: 0 }
     let happyUntil = 0
     let blinkStart = performance.now() + 1200 + Math.random() * 1800
@@ -401,14 +420,20 @@ export function InteractivePet3D({
       pointer.y = -(((event.clientY - rect.top) / rect.height) * 2 - 1)
       if (pointer.dragging) {
         if (pointer.toy) {
-          toy.position.x = THREE.MathUtils.clamp(pointer.x * 3.25, -2.55, 2.55)
-          toy.position.y = THREE.MathUtils.clamp(pointer.y * 2.4 - 0.1, -1.62, 1.72)
+          const nextX = rubberbandClamp(pointer.x * 3.25, -2.55, 2.55, 1.4)
+          const nextY = rubberbandClamp(pointer.y * 2.4 - 0.1, -1.62, 1.72, 1.2)
+          const elapsedSeconds = Math.max(0.008, (event.timeStamp - pointer.lastTime) / 1000)
+          toyVelocity.x = (nextX - toy.position.x) / elapsedSeconds
+          toyVelocity.y = (nextY - toy.position.y) / elapsedSeconds
+          toy.position.x = nextX
+          toy.position.y = nextY
         } else {
           targetRotation.y += (event.clientX - pointer.lastX) * 0.012
           targetRotation.x = THREE.MathUtils.clamp(targetRotation.x + (event.clientY - pointer.lastY) * 0.004, -0.18, 0.22)
         }
         pointer.lastX = event.clientX
         pointer.lastY = event.clientY
+        pointer.lastTime = event.timeStamp
       }
     }
 
@@ -417,6 +442,7 @@ export function InteractivePet3D({
       pointer.dragging = true
       pointer.lastX = event.clientX
       pointer.lastY = event.clientY
+      pointer.lastTime = event.timeStamp
       pointer.toy = event.clientX > rect.left + rect.width * 0.68 && event.clientY > rect.top + rect.height * 0.58
       canvas.setPointerCapture(event.pointerId)
       happyUntil = performance.now() + 1050
@@ -424,6 +450,12 @@ export function InteractivePet3D({
     const onPointerUp = (event: PointerEvent) => {
       pointer.dragging = false
       pointer.toy = false
+      if (reducedMotion) {
+        toy.position.x = THREE.MathUtils.clamp(toy.position.x, -2.55, 2.55)
+        toy.position.y = THREE.MathUtils.clamp(toy.position.y, -1.62, 1.72)
+        toyVelocity.x = 0
+        toyVelocity.y = 0
+      }
       if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId)
     }
     const onPointerLeave = () => {
@@ -443,8 +475,11 @@ export function InteractivePet3D({
       happyUntil = performance.now() + 1050
     }
 
+    let previousFrameTime = performance.now()
     const animate = (time: number) => {
       const t = time * 0.001
+      const frameSeconds = Math.min(0.032, Math.max(0.001, (time - previousFrameTime) / 1000))
+      previousFrameTime = time
       const happy = time < happyUntil
       const breathe = reducedMotion ? 1 : 1 + Math.sin(t * 2.2) * 0.018
       root.scale.y = (compact ? 0.92 : 1) * breathe
@@ -458,6 +493,17 @@ export function InteractivePet3D({
       tail.rotation.z = reducedMotion ? 0 : Math.sin(t * (happy ? 8 : 3.3)) * (happy ? 0.22 : 0.1)
       wavingPaw.rotation.z = 0.44 + (happy ? Math.sin(t * 11) * 0.18 : Math.sin(t * 2.2) * 0.035)
       leftPaw.rotation.x = happy ? Math.sin(t * 10) * 0.08 : 0
+
+      if (!pointer.dragging && !reducedMotion) {
+        const targetX = THREE.MathUtils.clamp(toy.position.x, -2.55, 2.55)
+        const targetY = THREE.MathUtils.clamp(toy.position.y, -1.62, 1.72)
+        const stiffness = 170
+        const damping = 19
+        toyVelocity.x += ((targetX - toy.position.x) * stiffness - toyVelocity.x * damping) * frameSeconds
+        toyVelocity.y += ((targetY - toy.position.y) * stiffness - toyVelocity.y * damping) * frameSeconds
+        toy.position.x += toyVelocity.x * frameSeconds
+        toy.position.y += toyVelocity.y * frameSeconds
+      }
       toy.rotation.y += reducedMotion ? 0 : 0.02
       toy.position.z = 2.02 + (reducedMotion ? 0 : Math.sin(t * 3.2) * 0.055)
 
@@ -525,10 +571,6 @@ export function InteractivePet3D({
         <Sparkles size={15} aria-hidden="true" />
         <span>{reaction}</span>
       </div>
-      <div className="pet-3d-actions" aria-hidden="true">
-        <span><Hand size={14} /> 쓰다듬기</span>
-        <span><Rotate3D size={14} /> 돌려보기</span>
-      </div>
       <button
         type="button"
         className="pet-3d-touch-target"
@@ -537,6 +579,7 @@ export function InteractivePet3D({
           interact()
         }}
         aria-label={`${name} 쓰다듬기`}
+        title="쓰다듬기"
       >
         <Hand size={18} aria-hidden="true" />
       </button>

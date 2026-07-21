@@ -52,9 +52,9 @@
   box-shadow: var(--sticker-shadow-sm);
   cursor: pointer;
   transition:
-    transform 0.14s ease,
-    box-shadow 0.14s ease,
-    background 0.14s ease;
+    transform var(--motion-press) var(--ease-out),
+    box-shadow var(--motion-press) var(--ease-out),
+    background-color var(--motion-control) var(--ease-out);
 }
 
 .pet-kind-card.active {
@@ -64,6 +64,10 @@
     var(--paper-card);
   transform: translate(2px, 2px);
   box-shadow: 1px 1px 0 var(--line);
+}
+
+.pet-kind-card:active {
+  transform: translate3d(2px, 2px, 0) scale(0.97);
 }
 
 .pet-kind-preview {
@@ -169,7 +173,7 @@
   filter:
     drop-shadow(0 14px 18px rgba(42, 37, 31, 0.18))
     drop-shadow(2px 4px 0 rgba(42, 37, 31, 0.08));
-  transition: transform 0.18s ease;
+  transition: transform var(--motion-control) var(--ease-out);
   position: relative;
   z-index: 1;
 }
@@ -236,11 +240,11 @@
 }
 
 .pet-stage.is-cheering .pet-doodle-cat {
-  animation: pet-hop 0.55s ease;
+  animation: pet-hop 0.55s var(--ease-out);
 }
 
 .pet-stage.is-cheering .pet-doodle-dog {
-  animation: pet-hop 0.55s ease 0.08s;
+  animation: pet-hop 0.55s var(--ease-out) 0.08s;
 }
 
 @keyframes pet-hop {
@@ -265,7 +269,7 @@
 }
 
 .pet-hearts span {
-  animation: pet-heart-rise 1.1s ease forwards;
+  animation: pet-heart-rise 1.1s var(--ease-out) forwards;
 }
 
 .pet-hearts span:nth-child(2) {
@@ -325,6 +329,7 @@
 }
 
 .pet-level-fill {
+  width: 100%;
   height: 100%;
   border-radius: inherit;
   background: repeating-linear-gradient(
@@ -334,7 +339,8 @@
     #ffdf6b 8px,
     #ffdf6b 16px
   );
-  transition: width 0.4s ease;
+  transform-origin: left center;
+  transition: transform var(--motion-panel) var(--ease-out);
 }
 
 .pet-level small {
@@ -375,6 +381,11 @@
   font-size: 16px;
   font-weight: 700;
   cursor: pointer;
+  transition:
+    transform var(--motion-press) var(--ease-out),
+    color var(--motion-control) var(--ease-out),
+    background-color var(--motion-control) var(--ease-out),
+    box-shadow var(--motion-press) var(--ease-out);
 }
 
 .pet-wardrobe-tabs button[aria-selected='true'] {
@@ -382,6 +393,10 @@
   background: var(--crayon-sun);
   color: var(--ink);
   box-shadow: 1px 1px 0 var(--line);
+}
+
+.pet-wardrobe-tabs button:active {
+  transform: scale(0.97);
 }
 
 .pet-wardrobe-panel {
@@ -413,9 +428,9 @@
   box-shadow: var(--sticker-shadow-sm);
   cursor: pointer;
   transition:
-    transform 0.12s ease,
-    box-shadow 0.12s ease,
-    background 0.12s ease;
+    transform var(--motion-press) var(--ease-out),
+    box-shadow var(--motion-press) var(--ease-out),
+    background-color var(--motion-control) var(--ease-out);
 }
 
 .breed-card strong {
@@ -435,6 +450,10 @@
   background: var(--crayon-mint);
   transform: translate(2px, 2px);
   box-shadow: 1px 1px 0 var(--line);
+}
+
+.breed-card:active {
+  transform: translate3d(2px, 2px, 0) scale(0.97);
 }
 
 .pet-wardrobe-row {
@@ -477,8 +496,9 @@
   cursor: pointer;
   box-shadow: var(--sticker-shadow-sm);
   transition:
-    transform 0.12s ease,
-    box-shadow 0.12s ease;
+    transform var(--motion-press) var(--ease-out),
+    box-shadow var(--motion-press) var(--ease-out),
+    background-color var(--motion-control) var(--ease-out);
 }
 
 .outfit-chip > span,
@@ -551,7 +571,7 @@
 
 .outfit-chip:not(:disabled):active,
 .palette-chip:active {
-  transform: translate(2px, 2px);
+  transform: translate3d(2px, 2px, 0) scale(0.97);
   box-shadow: 1px 1px 0 var(--line);
 }
 
@@ -566,7 +586,7 @@
   color: var(--ink-soft);
 }
 
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   .outfit-chip:not(:disabled):hover,
   .palette-chip:hover,
   .breed-card:hover {
@@ -645,5 +665,17 @@
 
   .pet-hearts span {
     animation: none;
+  }
+
+  .pet-kind-card:active,
+  .pet-wardrobe-tabs button:active,
+  .breed-card:active,
+  .outfit-chip:not(:disabled):active,
+  .palette-chip:active {
+    transform: none;
+  }
+
+  .pet-level-fill {
+    transition: opacity 160ms var(--ease-out);
   }
 }
