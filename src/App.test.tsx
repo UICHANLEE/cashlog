@@ -281,6 +281,8 @@ describe('Cashlog photo MVP', () => {
   })
 
   it('renders the Uichan admin page on /uichan', async () => {
+    vi.stubEnv('VITE_PHOTO_ANALYSIS_MODE', 'remote')
+    vi.stubEnv('VITE_IMAGE_ANALYSIS_PIPELINE', 'product')
     vi.stubGlobal(
       'fetch',
       vi.fn(async () =>
