@@ -1,42 +1,73 @@
 .interactive-pet-3d {
+  --pet-accent: #ff8f7e;
+  --pet-body: #ffe6ba;
   position: relative;
   width: 100%;
-  min-height: 390px;
+  min-height: 430px;
   overflow: hidden;
   border: 0;
   border-radius: 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0));
-  cursor: grab;
-  touch-action: none;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
   isolation: isolate;
 }
 
-.interactive-pet-3d:active {
-  cursor: grabbing;
+.interactive-pet-3d::after {
+  position: absolute;
+  z-index: 0;
+  left: 50%;
+  bottom: 24px;
+  width: min(64%, 310px);
+  height: 16px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--pet-body) 42%, transparent);
+  filter: blur(12px);
+  content: '';
+  opacity: 0.5;
+  transform: translateX(-50%);
+  pointer-events: none;
 }
 
 .interactive-pet-3d:focus-visible {
-  outline: 4px solid rgba(255, 111, 89, 0.34);
+  outline: 4px solid color-mix(in srgb, var(--pet-accent) 40%, transparent);
   outline-offset: 3px;
 }
 
 .interactive-pet-3d canvas {
   position: absolute;
-  z-index: 1;
+  z-index: 2;
   inset: 0;
   display: block;
   width: 100%;
   height: 100%;
+  opacity: 0;
+  transition: opacity 180ms ease-out;
+}
+
+.interactive-pet-3d.is-canvas-ready canvas {
+  opacity: 1;
 }
 
 .interactive-pet-fallback {
   position: absolute;
   z-index: 1;
   left: 50%;
-  bottom: 12px;
-  width: min(88%, 360px);
+  bottom: -2px;
+  width: min(92%, 470px);
+  height: calc(100% - 22px);
+  object-fit: contain;
+  object-position: center bottom;
+  opacity: 1;
   transform: translateX(-50%);
-  filter: drop-shadow(0 16px 14px rgba(42, 37, 31, 0.14));
+  transform-origin: center bottom;
+  transition: opacity 180ms ease-out;
+  filter: drop-shadow(0 18px 17px rgba(65, 45, 32, 0.14));
+  pointer-events: none;
+}
+
+.interactive-pet-3d.is-canvas-ready .interactive-pet-fallback {
+  opacity: 0;
 }
 
 .pet-portrait-3d {
@@ -47,93 +78,62 @@
 
 .pet-3d-reaction {
   position: absolute;
-  z-index: 3;
-  top: 12px;
+  z-index: 4;
+  top: 10px;
   left: 50%;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   max-width: calc(100% - 36px);
   padding: 9px 13px;
-  border: 1px solid rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.82);
   border-radius: 999px;
-  background: rgba(255, 253, 247, 0.66);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  backdrop-filter: blur(20px) saturate(180%);
+  background: rgba(255, 253, 247, 0.72);
+  -webkit-backdrop-filter: blur(18px) saturate(165%);
+  backdrop-filter: blur(18px) saturate(165%);
   color: var(--ink);
   font-family: var(--font-hand);
   font-size: 15px;
   font-weight: 700;
   line-height: 1.2;
   text-align: center;
-  box-shadow: 0 8px 30px rgba(42, 37, 31, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  box-shadow: 0 8px 24px rgba(42, 37, 31, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9);
   transform: translateX(-50%);
   pointer-events: none;
 }
 
 .pet-3d-reaction svg {
   flex: 0 0 auto;
-  color: var(--accent);
-}
-
-.pet-3d-touch-target {
-  position: absolute;
-  z-index: 4;
-  right: 14px;
-  bottom: 14px;
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  border: 1px solid rgba(255, 255, 255, 0.78);
-  border-radius: 50%;
-  background: rgba(255, 158, 196, 0.82);
-  -webkit-backdrop-filter: blur(18px) saturate(170%);
-  backdrop-filter: blur(18px) saturate(170%);
-  color: var(--ink);
-  box-shadow: 0 10px 26px rgba(119, 62, 72, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.72);
-  cursor: pointer;
-  transition:
-    transform var(--motion-press) var(--ease-out),
-    box-shadow var(--motion-press) var(--ease-out);
-}
-
-.pet-3d-touch-target:active,
-.interactive-pet-3d:active .pet-3d-touch-target {
-  transform: scale(0.92);
-  box-shadow: 0 4px 12px rgba(119, 62, 72, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  color: var(--pet-accent);
 }
 
 .interactive-pet-3d.is-compact {
-  min-height: 270px;
+  min-height: 292px;
 }
 
 @media (max-width: 640px) {
   .interactive-pet-3d {
-    min-height: 350px;
+    min-height: 390px;
+  }
+
+  .interactive-pet-fallback {
+    width: min(96%, 420px);
   }
 
   .interactive-pet-3d.is-compact {
-    min-height: 285px;
+    min-height: 300px;
   }
-
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .interactive-pet-3d,
-  .pet-3d-touch-target {
-    scroll-behavior: auto;
-  }
-
-  .pet-3d-touch-target:active,
-  .interactive-pet-3d:active .pet-3d-touch-target {
-    transform: none;
+  .interactive-pet-3d canvas,
+  .interactive-pet-fallback {
+    transition: none;
   }
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  .pet-3d-reaction,
-  .pet-3d-touch-target {
+  .pet-3d-reaction {
     background: var(--paper-card);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
