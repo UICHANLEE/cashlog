@@ -3,6 +3,8 @@ import {
   type ExpenseSource,
   type LedgerCategoryId,
   type LedgerKind,
+  type MoodScore,
+  normalizeMoodScore,
 } from '../domain/cashlog'
 import { normalizePetState, type PetState } from '../domain/pet'
 import type { CategoryFeedbackPayload, DetectedProductItem } from '../domain/productImage'
@@ -18,6 +20,7 @@ type CashlogEntryRow = {
   category: LedgerCategoryId
   title: string
   memo: string
+  mood_score?: MoodScore | null
   source: ExpenseSource
   image_url?: string | null
   image_storage_path?: string | null
@@ -57,6 +60,7 @@ const expenseToRow = (expense: Expense, userId?: string): CashlogEntryRow => ({
   category: expense.category,
   title: expense.title,
   memo: expense.memo,
+  mood_score: expense.moodScore ?? null,
   source: expense.source,
   image_url: expense.imageStoragePath ? null : durableUrl(expense.imageUrl),
   image_storage_path: expense.imageStoragePath ?? null,
@@ -74,6 +78,7 @@ const rowToExpense = (row: CashlogEntryRow): Expense => ({
   category: row.category,
   title: row.title,
   memo: row.memo,
+  ...(normalizeMoodScore(row.mood_score) ? { moodScore: normalizeMoodScore(row.mood_score) } : {}),
   source: row.source,
   ...(row.image_url ? { imageUrl: row.image_url } : {}),
   ...(row.image_storage_path ? { imageStoragePath: row.image_storage_path } : {}),
@@ -89,7 +94,16 @@ export const mergeExpenses = (local: Expense[], remote: Expense[]): Expense[] =>
   for (const item of remote) {
     const previous = byId.get(item.id)
     if (!previous || item.updatedAt.localeCompare(previous.updatedAt) >= 0) {
-      byId.set(item.id, item)
+      byId.set(
+        item.id,
+        previous?.imageLocalKey && !item.imageStoragePath
+          ? {
+              ...item,
+              imageLocalKey: previous.imageLocalKey,
+              ...(previous.imageUrl ? { imageUrl: previous.imageUrl } : {}),
+            }
+          : item,
+      )
     }
   }
   return [...byId.values()].sort((a, b) => b.dateTime.localeCompare(a.dateTime))
@@ -159,25 +173,43 @@ export const createCashlogRepository = (
   }
 
   const saveCategoryFeedback = async (feedback: CategoryFeedbackPayload) => {
-    const response = await fetch(categoryFeedbackBase, {
+    const response = await fetch(`${categoryFeedbackBase}?on_conflict=event_id`, {
       method: 'POST',
       headers: {
         ...headers(config, session),
-        Prefer: 'return=minimal',
+        Prefer: 'resolution=ignore-duplicates,return=minimal',
       },
       body: JSON.stringify({
         ...(userId ? { user_id: userId } : {}),
+        schema_version: feedback.schemaVersion,
+        event_id: feedback.eventId,
+        sample_id: feedback.sampleId,
         expense_id: feedback.expenseId,
+        request_id: feedback.requestId ?? null,
+        model_version: feedback.modelVersion,
+        taxonomy_version: feedback.taxonomyVersion,
         model_category: feedback.modelCategory,
         user_category: feedback.userCategory,
-        confidence: feedback.confidence ?? null,
-        item_keyword: feedback.itemKeyword ?? null,
+        confidence: feedback.confidence,
+        predicted_top3: feedback.predictedTop3.map((candidate) => ({
+          category: candidate.category,
+          confidence: candidate.confidence,
+        })),
+        selected_leaf_id: feedback.selectedLeafId,
+        occurred_at: feedback.occurredAt,
+        source: feedback.source,
+        image_retention_consent: feedback.imageRetentionConsent,
+        image_object_key: feedback.imageObjectKey ?? null,
       }),
     })
     if (!response.ok) throw new Error(await response.text())
   }
 
-  const saveDetectedItems = async (expenseId: string, items: DetectedProductItem[]) => {
+  const saveDetectedItems = async (
+    expenseId: string,
+    items: DetectedProductItem[],
+    modelVersion?: string,
+  ) => {
     if (items.length === 0) return
     const response = await fetch(detectedItemsBase, {
       method: 'POST',
@@ -196,7 +228,7 @@ export const createCashlogRepository = (
           bbox: item.bbox ?? null,
           top3: item.topCategories ?? [],
           evidence: item.evidence ?? {},
-          model_version: null,
+          model_version: modelVersion ?? null,
         })),
       ),
     })

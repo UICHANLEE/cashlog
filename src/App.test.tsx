@@ -81,6 +81,28 @@ describe('Cashlog photo MVP', () => {
     expect(screen.getAllByRole('button', { name: /초코 쓰다듬기\. 드래그하면/ })).toHaveLength(1)
   })
 
+  it('applies and remembers Nabi wardrobe and color choices', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '나비' }))
+    const hoodie = screen.getByRole('button', { name: '나비 말랑 후디 옷' })
+    await user.click(hoodie)
+    expect(hoodie).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByLabelText('나비 현재 스타일')).toHaveTextContent('말랑 후디')
+
+    await user.click(screen.getByRole('tab', { name: '컬러' }))
+    await user.click(screen.getByRole('button', { name: '나비 딸기우유 색칠' }))
+    expect(screen.getByLabelText('나비 현재 스타일')).toHaveTextContent('딸기우유')
+
+    await waitFor(() => {
+      expect(JSON.parse(localStorage.getItem('cashlog.pet') ?? '{}')).toMatchObject({
+        catOutfit: 'hoodie',
+        catPalette: 'strawberry',
+      })
+    })
+  })
+
   it('opens the day photo story reel when 스토리 is enabled', async () => {
     const user = userEvent.setup()
     const todaySlice = new Date().toISOString().slice(0, 10)
@@ -114,8 +136,7 @@ describe('Cashlog photo MVP', () => {
     await user.click(screen.getByRole('button', { name: '직접 입력' }))
     await user.type(screen.getByLabelText('제목'), '지하철 충전')
     await user.type(screen.getByLabelText('금액'), '10000')
-    await user.click(screen.getByRole('button', { name: '나를 위해' }))
-    await user.click(screen.getByText('카테고리 · 식사 · 식재료'))
+    await user.click(screen.getByRole('button', { name: '5점 최고야' }))
     await user.click(screen.getByRole('button', { name: '대분류: 교통' }))
     await user.click(screen.getByRole('button', { name: '소분류: 대중교통' }))
     await user.click(screen.getByRole('button', { name: '저장하기' }))
@@ -125,7 +146,25 @@ describe('Cashlog photo MVP', () => {
     expect(screen.getByText('지하철 충전')).toBeInTheDocument()
     expect(screen.getAllByText('10,000원').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/교통 · 대중교통/).length).toBeGreaterThan(0)
-    expect(screen.getByText('나를 위한 소비')).toBeInTheDocument()
+    expect(screen.getByText(/5\/5 · 최고야/)).toBeInTheDocument()
+  })
+
+  it('keeps model-improvement image retention as a separate opt-in', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    const photo = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0])], 'cafe.jpg', {
+      type: 'image/jpeg',
+    })
+
+    await user.upload(screen.getByLabelText('갤러리에서 사진 선택'), photo)
+
+    const consent = await screen.findByRole('checkbox', {
+      name: /이 사진을 모델 학습·평가 후보로 추가 보관/,
+    })
+    expect(consent).not.toBeChecked()
+    expect(screen.getByText(/확정 카테고리만 추천 품질 통계로 기록/)).toBeInTheDocument()
+    await user.click(consent)
+    expect(consent).toBeChecked()
   })
 
   it('enables 하루 스토리 after a manual expense (no photo)', async () => {

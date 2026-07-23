@@ -90,7 +90,11 @@ export async function remoteAnalyzeProductImage(
     confidence: analysis.confidence,
     rawText: objects.length ? objects.join(', ') : analysis.reason,
     engine: 'custom',
-    model: 'product-detection-pipeline',
+    model:
+      analysis.modelVersions.verifier ??
+      analysis.modelVersions.classifier ??
+      'product-detection-pipeline',
+    taxonomyVersion: analysis.taxonomyVersion,
     detectedObjects: objects,
     detectedItems: analysis.items,
     topCategories: firstItem?.topCategories ?? [

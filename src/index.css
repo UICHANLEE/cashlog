@@ -31,6 +31,14 @@ html {
   --sticker-shadow: 4px 4px 0 var(--line);
   --sticker-shadow-sm: 3px 3px 0 var(--line);
 
+  /* Apple/Emil motion language: immediate press, decisive enter, calm movement. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --motion-press: 140ms;
+  --motion-control: 180ms;
+  --motion-panel: 260ms;
+
   --font-hand: 'Gaegu', 'Gamja Flower', ui-rounded, system-ui, sans-serif;
   --font-body: 'Gowun Dodum', 'Gaegu', ui-sans-serif, system-ui, sans-serif;
 
@@ -68,6 +76,11 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+button,
+[role='button'] {
+  -webkit-tap-highlight-color: transparent;
 }
 
 ::selection {

@@ -4,8 +4,23 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
 } from 'react'
+import { X } from 'lucide-react'
+import {
+  animate,
+  motion,
+  useMotionValue,
+  useReducedMotion,
+  useTransform,
+} from 'motion/react'
 import { formatCurrency } from '../domain/cashlog'
+import { signalSoftImpact } from '../motion/haptics'
+import {
+  decideStoryGesture,
+  storyDragOffset,
+  type StoryGestureDirection,
+} from './storyGesture'
 import { looksIncomeLikeSlide, netOutflowContribution } from './storyMoneyFlow'
 import './StoryReel.css'
 
@@ -39,6 +54,22 @@ type MotionBurst = {
   label: string
 }
 
+type PointerSample = {
+  x: number
+  time: number
+}
+
+type ActiveGesture = {
+  pointerId: number
+  startX: number
+  originX: number
+  width: number
+  samples: PointerSample[]
+  moved: boolean
+  offset: number
+  tapDirection: StoryGestureDirection
+}
+
 function slideIsIncome(slide: StorySlide): boolean {
   if (typeof slide.isIncome === 'boolean') return slide.isIncome
   return looksIncomeLikeSlide(slide.headline, slide.detail)
@@ -67,6 +98,14 @@ function slideDeltaLabel(slide: StorySlide) {
   return income ? `+${amt}` : `‑${amt}`
 }
 
+function releaseVelocity(samples: PointerSample[]) {
+  if (samples.length < 2) return 0
+  const last = samples[samples.length - 1]
+  const first = samples.find((sample) => last.time - sample.time <= 120) ?? samples[0]
+  const elapsedSeconds = Math.max(0.016, (last.time - first.time) / 1000)
+  return (last.x - first.x) / elapsedSeconds
+}
+
 /** 인스타 스토리 풀스크린 */
 export function StoryReel({
   title,
@@ -76,22 +115,38 @@ export function StoryReel({
   autoAdvanceMs = 6500,
 }: StoryReelProps) {
   const [index, setIndex] = useState(0)
+  const [timerCycle, setTimerCycle] = useState(0)
+  const [isDragging, setIsDragging] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const skipTickRef = useRef(true)
   const motionClearRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const transitionRef = useRef<ReturnType<typeof animate> | null>(null)
+  const navigationTokenRef = useRef(0)
+  const gestureRef = useRef<ActiveGesture | null>(null)
+  const suppressTapRef = useRef(false)
+  const viewportWidthRef = useRef(0)
   const [motionBurst, setMotionBurst] = useState<MotionBurst | null>(null)
+  const prefersReducedMotion = useReducedMotion()
+  const dragX = useMotionValue(0)
+  const slideTransform = useTransform(dragX, (value) => {
+    const tilt = Math.max(-2.2, Math.min(2.2, value / -150))
+    return `translate3d(${value}px, 0, 0) rotate(${tilt}deg)`
+  })
+  const slideOpacity = useTransform(dragX, (value) =>
+    Math.max(0.74, 1 - Math.abs(value) / 780),
+  )
 
-  const clearMotionTimer = () => {
+  const clearMotionTimer = useCallback(() => {
     if (motionClearRef.current) {
       clearTimeout(motionClearRef.current)
       motionClearRef.current = null
     }
-  }
+  }, [])
 
   const flushMotion = useCallback(() => {
     clearMotionTimer()
     setMotionBurst(null)
-  }, [])
+  }, [clearMotionTimer])
 
   const fireMotionForSlide = useCallback(
     (slide: StorySlide) => {
@@ -110,31 +165,125 @@ export function StoryReel({
     [flushMotion],
   )
 
-  const clearTimer = () => {
+  const clearTimer = useCallback(() => {
     if (timerRef.current) {
       clearTimeout(timerRef.current)
       timerRef.current = null
     }
-  }
+  }, [])
+
+  const stopTransition = useCallback(() => {
+    navigationTokenRef.current += 1
+    transitionRef.current?.stop()
+    transitionRef.current = null
+  }, [])
+
+  const settleSlide = useCallback(
+    (velocity = 0) => {
+      stopTransition()
+      if (prefersReducedMotion) {
+        dragX.set(0)
+      } else {
+        transitionRef.current = animate(dragX, 0, {
+          type: 'spring',
+          duration: 0.34,
+          bounce: 0.16,
+          velocity,
+        })
+      }
+      setTimerCycle((cycle) => cycle + 1)
+    },
+    [dragX, prefersReducedMotion, stopTransition],
+  )
+
+  const navigate = useCallback(
+    async (
+      direction: Exclude<StoryGestureDirection, 0>,
+      velocity = 0,
+      options: { animate?: boolean; impact?: boolean } = {},
+    ) => {
+      clearTimer()
+      flushMotion()
+      const targetIndex = index + direction
+
+      if (targetIndex < 0) {
+        settleSlide(velocity)
+        return
+      }
+
+      const shouldAnimate = options.animate !== false && !prefersReducedMotion
+      if (!shouldAnimate) {
+        stopTransition()
+        dragX.set(0)
+        if (targetIndex >= slides.length) onClose()
+        else setIndex(targetIndex)
+        if (options.impact) signalSoftImpact()
+        return
+      }
+
+      stopTransition()
+      const token = navigationTokenRef.current
+      const width = Math.max(
+        320,
+        viewportWidthRef.current || window.innerWidth || 320,
+      )
+      const exitTarget = direction === 1 ? -width * 1.08 : width * 1.08
+      const exitAnimation = animate(dragX, exitTarget, {
+        type: 'spring',
+        duration: 0.32,
+        bounce: 0.08,
+        velocity,
+      })
+      transitionRef.current = exitAnimation
+      if (options.impact) signalSoftImpact()
+
+      try {
+        await exitAnimation.finished
+      } catch {
+        return
+      }
+      if (token !== navigationTokenRef.current) return
+      if (targetIndex >= slides.length) {
+        onClose()
+        return
+      }
+
+      setIndex(targetIndex)
+      dragX.set(direction === 1 ? width : -width)
+      requestAnimationFrame(() => {
+        if (token !== navigationTokenRef.current) return
+        transitionRef.current = animate(dragX, 0, {
+          type: 'spring',
+          duration: 0.38,
+          bounce: 0.12,
+        })
+      })
+    },
+    [
+      clearTimer,
+      dragX,
+      flushMotion,
+      index,
+      onClose,
+      prefersReducedMotion,
+      settleSlide,
+      slides.length,
+      stopTransition,
+    ],
+  )
 
   const scheduleAdvance = useCallback(() => {
     clearTimer()
-    if (autoAdvanceMs <= 0 || slides.length === 0) return
+    if (autoAdvanceMs <= 0 || slides.length === 0 || isDragging) return
     timerRef.current = setTimeout(() => {
-      setIndex((i) => {
-        if (i >= slides.length - 1) {
-          onClose()
-          return i
-        }
-        return i + 1
-      })
+      void navigate(1, 0, { animate: true })
     }, autoAdvanceMs)
-  }, [autoAdvanceMs, onClose, slides.length])
+  }, [autoAdvanceMs, clearTimer, isDragging, navigate, slides.length])
 
   useEffect(() => {
     scheduleAdvance()
     return clearTimer
-  }, [index, scheduleAdvance])
+  }, [index, scheduleAdvance, timerCycle, clearTimer])
 
   useEffect(() => {
     document.body.dataset.storyReelOpen = 'true'
@@ -146,8 +295,9 @@ export function StoryReel({
   useEffect(() => {
     return () => {
       clearMotionTimer()
+      transitionRef.current?.stop()
     }
-  }, [])
+  }, [clearMotionTimer])
 
   useEffect(() => {
     if (slides.length === 0) return
@@ -160,39 +310,122 @@ export function StoryReel({
     fireMotionForSlide(slide)
   }, [fireMotionForSlide, index, slides])
 
-  const prev = useCallback(() => {
-    clearTimer()
-    flushMotion()
-    setIndex((i) => (i <= 0 ? slides.length - 1 : i - 1))
-  }, [flushMotion, slides.length])
+  const prev = useCallback(
+    (animated = true, impact = true) => {
+      void navigate(-1, 0, { animate: animated, impact })
+    },
+    [navigate],
+  )
 
-  const next = useCallback(() => {
-    clearTimer()
-    flushMotion()
-    setIndex((i) => {
-      if (i >= slides.length - 1) {
-        onClose()
-        return i
-      }
-      return i + 1
-    })
-  }, [flushMotion, onClose, slides.length])
+  const next = useCallback(
+    (animated = true, impact = true) => {
+      void navigate(1, 0, { animate: animated, impact })
+    },
+    [navigate],
+  )
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-      if (e.key === 'ArrowRight') next()
-      if (e.key === 'ArrowLeft') prev()
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+      if (event.key === 'ArrowRight') next(false, false)
+      if (event.key === 'ArrowLeft') prev(false, false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [next, onClose, prev])
 
-  const touchStartX = useRef<number | null>(null)
+  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return
+    const target = event.target as HTMLElement
+    if (target.closest('.story-reel-close')) return
 
-  if (slides.length === 0) {
-    return null
+    clearTimer()
+    flushMotion()
+    stopTransition()
+    viewportWidthRef.current = Math.max(320, event.currentTarget.clientWidth)
+    gestureRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      originX: dragX.get(),
+      width: viewportWidthRef.current,
+      samples: [{ x: event.clientX, time: event.timeStamp }],
+      moved: false,
+      offset: dragX.get(),
+      tapDirection: target.closest('.story-tap-prev')
+        ? -1
+        : target.closest('.story-tap-next')
+          ? 1
+          : 0,
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setIsDragging(true)
   }
+
+  const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const gesture = gestureRef.current
+    if (!gesture || gesture.pointerId !== event.pointerId) return
+
+    const rawOffset = gesture.originX + event.clientX - gesture.startX
+    gesture.offset = rawOffset
+    gesture.moved ||= Math.abs(event.clientX - gesture.startX) > 8
+    gesture.samples.push({ x: event.clientX, time: event.timeStamp })
+    gesture.samples = gesture.samples
+      .filter((sample) => event.timeStamp - sample.time <= 140)
+      .slice(-6)
+    dragX.set(
+      prefersReducedMotion ? 0 : storyDragOffset(rawOffset, index, gesture.width),
+    )
+  }
+
+  const finishPointerGesture = (
+    event: ReactPointerEvent<HTMLDivElement>,
+    cancelled = false,
+  ) => {
+    const gesture = gestureRef.current
+    if (!gesture || gesture.pointerId !== event.pointerId) return
+    gesture.samples.push({ x: event.clientX, time: event.timeStamp })
+    const velocity = cancelled ? 0 : releaseVelocity(gesture.samples)
+    const direction = cancelled
+      ? 0
+      : decideStoryGesture({
+          offset: prefersReducedMotion ? gesture.offset : dragX.get(),
+          velocity,
+          viewportWidth: gesture.width,
+          index,
+          total: slides.length,
+        })
+
+    suppressTapRef.current = gesture.moved || gesture.tapDirection !== 0
+    if (suppressTapRef.current) {
+      window.setTimeout(() => {
+        suppressTapRef.current = false
+      }, 0)
+    }
+    gestureRef.current = null
+    setIsDragging(false)
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+
+    if (!gesture.moved && gesture.tapDirection !== 0) {
+      void navigate(gesture.tapDirection as -1 | 1, 0, { animate: true, impact: true })
+    } else if (direction === 0) {
+      settleSlide(velocity)
+    } else {
+      void navigate(direction, velocity, { animate: true, impact: true })
+    }
+  }
+
+  const handleTap = (direction: -1 | 1) => {
+    if (suppressTapRef.current) {
+      suppressTapRef.current = false
+      return
+    }
+    if (direction === -1) prev()
+    else next()
+  }
+
+  if (slides.length === 0) return null
 
   const slide = slides[index]
   const sliceNow = slides.slice(0, index + 1)
@@ -201,18 +434,22 @@ export function StoryReel({
 
   return (
     <div
-      className="story-reel-overlay"
+      className={`story-reel-overlay${isDragging ? ' is-dragging' : ''}`}
       role="dialog"
       aria-modal="true"
       aria-label={title}
       style={{ '--story-advance-duration': `${autoAdvanceMs}ms` } as CSSProperties}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={(event) => finishPointerGesture(event)}
+      onPointerCancel={(event) => finishPointerGesture(event, true)}
     >
       <header className="story-reel-chrome">
         <div className="story-progress-row" aria-hidden="true">
-          {slides.map((s, i) => (
-            <div key={s.id} className="story-progress-seg">
+          {slides.map((storySlide, progressIndex) => (
+            <div key={storySlide.id} className="story-progress-seg">
               <div
-                className={`story-progress-fill ${i === index ? 'active' : ''} ${i < index ? 'done' : ''}`}
+                className={`story-progress-fill ${progressIndex === index ? 'active' : ''} ${progressIndex < index ? 'done' : ''}`}
               />
             </div>
           ))}
@@ -230,8 +467,14 @@ export function StoryReel({
               {currentDelta}
             </span>
           </div>
-          <button type="button" className="story-reel-close" onClick={onClose}>
-            ✕ 닫기
+          <button
+            type="button"
+            className="story-reel-close"
+            onClick={onClose}
+            aria-label="스토리 닫기"
+            title="닫기"
+          >
+            <X size={20} aria-hidden="true" />
           </button>
         </div>
       </header>
@@ -246,20 +489,9 @@ export function StoryReel({
         </div>
       )}
 
-      <figure
+      <motion.figure
         className="story-reel-slide"
-        onTouchStart={(e) => {
-          touchStartX.current = e.touches[0]?.clientX ?? null
-        }}
-        onTouchEnd={(e) => {
-          if (touchStartX.current === null) return
-          const endX = e.changedTouches[0]?.clientX
-          if (endX === undefined) return
-          const d = endX - touchStartX.current
-          touchStartX.current = null
-          if (d > 60) prev()
-          else if (d < -60) next()
-        }}
+        style={{ transform: slideTransform, opacity: slideOpacity }}
       >
         {slide.videoUrl ? (
           <video
@@ -289,19 +521,20 @@ export function StoryReel({
           <span className="story-reel-amount">{slide.amountLabel}</span>
           {slide.detail ? <small className="story-reel-detail">{slide.detail}</small> : null}
         </figcaption>
-      </figure>
+      </motion.figure>
 
-      <button type="button" className="story-tap story-tap-prev" aria-label="이전 장" onClick={prev} />
+      <button
+        type="button"
+        className="story-tap story-tap-prev"
+        aria-label="이전 장"
+        onClick={() => handleTap(-1)}
+      />
       <button
         type="button"
         className="story-tap story-tap-next"
         aria-label="다음 장"
-        onClick={next}
+        onClick={() => handleTap(1)}
       />
-
-      <p className="story-reel-hint">
-        우측 상단 숫자는 지금까지의 증감이에요 (+들어옴, ‑나감). 슬라이드 전환 시 금액 모션이 뜹니다.
-      </p>
     </div>
   )
 }

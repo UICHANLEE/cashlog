@@ -389,6 +389,40 @@ export type ExpenseSource = 'photo' | 'manual'
 
 export type LedgerKind = 'expense' | 'income'
 
+export type MoodScore = 1 | 2 | 3 | 4 | 5
+
+export type MoodOption = {
+  score: MoodScore
+  face: string
+  label: string
+}
+
+export const moodOptions: MoodOption[] = [
+  { score: 1, face: '😣', label: '후회돼' },
+  { score: 2, face: '😕', label: '아쉬워' },
+  { score: 3, face: '😐', label: '괜찮아' },
+  { score: 4, face: '😊', label: '만족해' },
+  { score: 5, face: '🥰', label: '최고야' },
+]
+
+export function normalizeMoodScore(value: unknown): MoodScore | undefined {
+  const score = Number(value)
+  return Number.isInteger(score) && score >= 1 && score <= 5
+    ? (score as MoodScore)
+    : undefined
+}
+
+export function getMoodOption(score: MoodScore): MoodOption {
+  return moodOptions.find((option) => option.score === score) ?? moodOptions[2]
+}
+
+/** Keep won input digit-only while removing a leading placeholder zero. */
+export function normalizeAmountInput(value: string, maxDigits = 10): string {
+  const digits = value.replace(/\D/g, '').slice(0, maxDigits)
+  if (!digits) return ''
+  return digits.replace(/^0+/, '') || '0'
+}
+
 export type Expense = {
   id: string
   dateTime: string
@@ -398,10 +432,13 @@ export type Expense = {
   category: LedgerCategoryId
   title: string
   memo: string
+  moodScore?: MoodScore
   source: ExpenseSource
   imageUrl?: string
   /** 비공개 Storage의 영구 경로. imageUrl은 만료 가능한 표시용 URL이다. */
   imageStoragePath?: string
+  /** 로그인 전에도 새로고침 후 사진을 복원하기 위한 기기 내 IndexedDB 키 */
+  imageLocalKey?: string
   /** 영상 기록의 재생 URL (imageUrl은 포스터 프레임으로 함께 저장) */
   videoUrl?: string
   analysis?: MediaAnalysisSnapshot
@@ -425,6 +462,7 @@ export type MediaAnalysisSnapshot = {
   revision?: number
   engine?: AnalysisEngine
   model?: string
+  taxonomyVersion?: string
   ocrText?: string
   detectedObjects?: string[]
   detectedItems?: DetectedProductItem[]
@@ -449,6 +487,8 @@ export type PhotoAnalysis = {
   engine?: AnalysisEngine
   /** 실제 사용 모델명. 예: gpt-4o-mini, Qwen2.5-VL-3B-Instruct */
   model?: string
+  /** 학습 라벨 계약 버전. 모델 교체와 분리해 기록한다. */
+  taxonomyVersion?: string
   /** OCR 전용 원문. rawText는 UI용 요약으로 유지 */
   ocrText?: string
   /** 피사체/장소/브랜드 등 카테고리 추론에 쓴 단서 */
@@ -517,6 +557,7 @@ export const createExpenseFromAnalysis = ({
       revision: analysis.revision,
       engine: analysis.engine,
       model: analysis.model,
+      taxonomyVersion: analysis.taxonomyVersion,
       ocrText: analysis.ocrText ?? analysis.rawText,
       detectedObjects: analysis.detectedObjects ?? [],
       detectedItems: analysis.detectedItems ?? [],
@@ -538,6 +579,7 @@ export const createManualExpense = ({
   memo,
   dateTime,
   kind = 'expense',
+  moodScore,
 }: {
   title: string
   amount: number
@@ -545,6 +587,7 @@ export const createManualExpense = ({
   memo: string
   dateTime: string
   kind?: LedgerKind
+  moodScore?: MoodScore
 }): Expense => {
   const now = new Date().toISOString()
 
@@ -556,6 +599,7 @@ export const createManualExpense = ({
     category,
     title,
     memo,
+    ...(moodScore ? { moodScore } : {}),
     source: 'manual',
     createdAt: now,
     updatedAt: now,

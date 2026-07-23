@@ -17,7 +17,7 @@ export type CashlogSession = {
   user?: CashlogUser
 }
 
-export const CASHLOG_CONSENT_VERSION = '2026-07-14'
+export const CASHLOG_CONSENT_VERSION = '2026-07-17'
 
 export type SignupConsents = {
   age14: true

@@ -21,6 +21,13 @@ const storageHeaders = (config: SupabaseConfig, session: CashlogSession) => ({
 
 export type StoredImage = { path: string; signedUrl: string }
 
+export const resolveSupabaseSignedUrl = (baseUrl: string, signedUrl: string) => {
+  if (/^https?:\/\//i.test(signedUrl)) return signedUrl
+  const path = signedUrl.startsWith('/') ? signedUrl : `/${signedUrl}`
+  if (path.startsWith('/storage/v1/')) return `${baseUrl}${path}`
+  return `${baseUrl}/storage/v1${path}`
+}
+
 export const createCashlogStorage = (
   config: SupabaseConfig | null,
   session: CashlogSession | null,
@@ -41,7 +48,7 @@ export const createCashlogStorage = (
     const body = (await response.json()) as { signedURL?: string; signedUrl?: string }
     const signed = body.signedURL ?? body.signedUrl
     if (!signed) throw new Error('사진 접근 주소를 만들지 못했어요.')
-    return signed.startsWith('http') ? signed : `${config.url}${signed}`
+    return resolveSupabaseSignedUrl(config.url, signed)
   }
 
   const uploadImage = async (file: File, expenseId: string): Promise<StoredImage> => {

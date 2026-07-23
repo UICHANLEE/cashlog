@@ -1,4 +1,5 @@
 import {
+  type CSSProperties,
   type ChangeEvent,
   type FormEvent,
   useCallback,
@@ -8,24 +9,24 @@ import {
   useState,
 } from 'react'
 import {
+  ArrowRight,
   BarChart3,
   CalendarDays,
   Camera,
   Check,
   ChevronDown,
   Image as ImageIcon,
-  CloudRain,
-  Heart,
   Mic,
   PawPrint,
   Pencil,
-  Smile,
+  Plus,
+  RotateCcw,
   Sparkles,
   Utensils,
-  Users,
   UserRound,
   X,
 } from 'lucide-react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import './App.css'
 import { analyzePhoto } from './ai/analyzePhoto'
 import { captureFrameFromVideo } from './camera/captureFromVideo'
@@ -37,9 +38,7 @@ import {
   type Expense,
   dayExpenseTotal,
   dayIncomeTotal,
-  formatCategoryLabel,
   formatCurrency,
-  formatIncomeCategoryLabel,
   formatLedgerCategory,
   getCalendarDays,
   getStoryEntriesForDate,
@@ -47,6 +46,7 @@ import {
   getExpensesForDate,
   getCategoryMeta,
   getIncomeCategoryMeta,
+  getMoodOption,
   type IncomeCategoryId,
   incomeCategoryTree,
   type LedgerCategoryId,
@@ -54,7 +54,11 @@ import {
   ledgerAccentColor,
   migrateCategoryId,
   migrateIncomeCategoryId,
+  moodOptions,
+  normalizeAmountInput,
+  normalizeMoodScore,
   type PhotoAnalysis,
+  type MoodScore,
 } from './domain/cashlog'
 import {
   formatDayLogRelativeKo,
@@ -84,19 +88,30 @@ import { createCashlogStorage } from './services/supabaseStorage'
 import { prepareImageForStorage } from './media/prepareImageForStorage'
 import { assertValidImageFile } from './media/imageSignature'
 import { getMe as getSecureAccount, logout as secureLogout } from './account/accountApi'
+import { createCategoryFeedbackPayload } from './domain/productImage'
+import { createLocalMediaStore } from './services/localMediaStore'
+import { signalSoftImpact } from './motion/haptics'
 
 type AddMode = 'closed' | 'choice' | 'photo' | 'manual'
 type StoryMode = null | 'day' | 'month'
 type AppView = 'diary' | 'calendar' | 'pets'
 type AuthMode = 'signIn' | 'signUp' | 'magic'
 
+const APP_VIEW_ORDER: AppView[] = ['diary', 'calendar', 'pets']
+
 type ExpenseForm = {
   title: string
   amount: string
   category: LedgerCategoryId
   memo: string
+  moodScore: MoodScore | null
   kind: LedgerKind
 }
+
+type ExpenseFormChange = <K extends keyof ExpenseForm>(
+  field: K,
+  value: ExpenseForm[K],
+) => void
 
 const STORAGE_KEY = 'cashlog.expenses'
 const PET_STORAGE_KEY = 'cashlog.pet'
@@ -124,10 +139,15 @@ const loadExpenses = (): Expense[] => {
         kind === 'income'
           ? migrateIncomeCategoryId(String(expense.category))
           : migrateCategoryId(String(expense.category))
+      const durableImageUrl = expense.imageUrl && !expense.imageUrl.startsWith('blob:')
+        ? expense.imageUrl
+        : undefined
       return {
         ...expense,
+        imageUrl: durableImageUrl,
         kind,
         category,
+        moodScore: normalizeMoodScore(expense.moodScore),
         createdAt: expense.createdAt ?? expense.updatedAt ?? expense.dateTime,
         updatedAt: expense.updatedAt ?? expense.createdAt ?? expense.dateTime,
       }
@@ -143,14 +163,16 @@ const defaultIncomeLeafId =
 
 const emptyForm = (): ExpenseForm => ({
   title: '',
-  amount: '',
+  amount: '0',
   category: defaultExpenseLeafId,
   memo: '',
+  moodScore: null,
   kind: 'expense',
 })
 
 function CashlogApp() {
   const now = new Date()
+  const prefersReducedMotion = useReducedMotion()
   const [expenses, setExpenses] = useState<Expense[]>(loadExpenses)
   const [selectedDate, setSelectedDate] = useState(todayIsoDate)
   const [visibleMonth] = useState({ year: now.getFullYear(), month: now.getMonth() })
@@ -159,6 +181,7 @@ function CashlogApp() {
   const [photoPreview, setPhotoPreview] = useState('')
   const photoFileRef = useRef<File | null>(null)
   const [analysis, setAnalysis] = useState<PhotoAnalysis | null>(null)
+  const [trainingImageConsent, setTrainingImageConsent] = useState(false)
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -173,6 +196,7 @@ function CashlogApp() {
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [storyMode, setStoryMode] = useState<StoryMode>(null)
   const [activeView, setActiveView] = useState<AppView>('diary')
+  const [viewDirection, setViewDirection] = useState(1)
   const [showAccount, setShowAccount] = useState(false)
   const [aiContext, setAiContext] = useState<'friends' | 'solo' | null>(null)
   const [relativeMinuteTick, setRelativeMinuteTick] = useState(0)
@@ -191,6 +215,7 @@ function CashlogApp() {
   })
   const [, setSyncStatus] = useState('Supabase 미연결 · 로컬 저장 중')
   const authClient = useMemo(() => createCashlogAuthClient(), [])
+  const localMedia = useMemo(() => createLocalMediaStore(), [])
   const repository = useMemo(
     () => createCashlogRepository(authClient.config, session),
     [authClient.config, session],
@@ -201,6 +226,8 @@ function CashlogApp() {
   )
   const initialSyncedSessionRef = useRef<string | null>(null)
   const petCloudReadyRef = useRef(false)
+  const localImageUrlsRef = useRef(new Map<string, string>())
+  const promotingLocalImagesRef = useRef(new Set<string>())
 
   useEffect(() => {
     const id = window.setInterval(() => setRelativeMinuteTick((x) => x + 1), 60_000)
@@ -236,6 +263,7 @@ function CashlogApp() {
       return ''
     })
     setAnalysis(null)
+    setTrainingImageConsent(false)
     clearRecordTimer()
     setIsRecording(false)
     setRecordSeconds(0)
@@ -247,6 +275,7 @@ function CashlogApp() {
 
   const applyPhotoFile = useCallback(async (file: File) => {
     setCameraError(null)
+    setTrainingImageConsent(false)
     try {
       await assertValidImageFile(file)
     } catch (error) {
@@ -270,6 +299,7 @@ function CashlogApp() {
         amount: String(nextAnalysis.suggestedAmount),
         category: nextAnalysis.suggestedCategory,
         memo: nextAnalysis.suggestedMemo,
+        moodScore: null,
         kind: 'expense',
       })
     } catch (e) {
@@ -281,20 +311,59 @@ function CashlogApp() {
 
   const hydrateExpenseImages = useCallback(
     async (items: Expense[]) => {
-      if (!storage) return items
       return Promise.all(
         items.map(async (item) => {
-          if (!item.imageStoragePath) return item
-          try {
-            return { ...item, imageUrl: await storage.createSignedUrl(item.imageStoragePath) }
-          } catch {
-            return { ...item, imageUrl: undefined }
+          if (item.imageStoragePath && storage) {
+            try {
+              return { ...item, imageUrl: await storage.createSignedUrl(item.imageStoragePath) }
+            } catch {
+              // The device copy below is a fallback while cloud access recovers.
+            }
           }
+          if (item.imageLocalKey) {
+            try {
+              const existingUrl = localImageUrlsRef.current.get(item.id)
+              if (existingUrl) return { ...item, imageUrl: existingUrl }
+              const image = await localMedia.getImage(item.imageLocalKey)
+              if (image) {
+                const localUrl = URL.createObjectURL(image)
+                localImageUrlsRef.current.set(item.id, localUrl)
+                return { ...item, imageUrl: localUrl }
+              }
+            } catch {
+              return { ...item, imageUrl: undefined }
+            }
+          }
+          return item.imageUrl?.startsWith('blob:') ? { ...item, imageUrl: undefined } : item
         }),
       )
     },
-    [storage],
+    [localMedia, storage],
   )
+
+  useEffect(() => {
+    let alive = true
+    const restoreLocalPhotos = async () => {
+      const hydrated = await hydrateExpenseImages(loadExpenses())
+      if (!alive) return
+      const byId = new Map(hydrated.map((item) => [item.id, item]))
+      setExpenses((current) =>
+        current.map((item) => {
+          const restored = byId.get(item.id)
+          return restored?.imageUrl ? { ...item, imageUrl: restored.imageUrl } : item
+        }),
+      )
+    }
+    void restoreLocalPhotos()
+    return () => {
+      alive = false
+    }
+  }, [hydrateExpenseImages])
+
+  useEffect(() => () => {
+    localImageUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
+    localImageUrlsRef.current.clear()
+  }, [])
 
   useEffect(() => {
     const video = videoRef.current
@@ -431,6 +500,7 @@ function CashlogApp() {
   const selectedDayEarned = dayIncomeTotal(selectedExpenses)
   const selectedDayPhotos = selectedExpenses.filter((expense) => expense.imageUrl).slice(0, 3)
   const selectedDayExpenseMoments = selectedExpenses.filter((expense) => expense.kind === 'expense')
+  const recentMoodScore = expenses.find((expense) => expense.moodScore)?.moodScore
   const dominantDayCategory = (() => {
     const counts = new Map<string, { count: number; label: string }>()
     selectedDayExpenseMoments.forEach((expense) => {
@@ -507,6 +577,64 @@ function CashlogApp() {
         setSyncStatus(e instanceof Error ? `펫 동기화 실패: ${e.message.slice(0, 80)}` : '펫 동기화 실패')
       })
   }, [petState, repository, selectedPetName])
+
+  useEffect(() => {
+    if (!repository || !storage) return
+    const pending = expenses.filter(
+      (expense) => expense.imageLocalKey && !expense.imageStoragePath,
+    )
+    if (pending.length === 0) return
+
+    pending.forEach((expense) => {
+      if (!expense.imageLocalKey || promotingLocalImagesRef.current.has(expense.id)) return
+      promotingLocalImagesRef.current.add(expense.id)
+      void (async () => {
+        try {
+          const image = await localMedia.getImage(expense.imageLocalKey!)
+          if (!image) return
+          const file = new File([image], 'cashlog-photo.jpg', {
+            type: image.type || 'image/jpeg',
+            lastModified: Date.now(),
+          })
+          const uploaded = await storage.uploadImage(file, expense.id)
+          const cloudExpense: Expense = {
+            ...expense,
+            imageStoragePath: uploaded.path,
+            imageUrl: uploaded.signedUrl,
+          }
+          await repository.upsertExpense(cloudExpense)
+          await repository.saveImageMetadata({
+            expenseId: expense.id,
+            storagePath: uploaded.path,
+            originalFilename: file.name,
+            mimeType: file.type,
+            sizeBytes: file.size,
+            capturedAt: expense.dateTime,
+          })
+          await localMedia.deleteImage(expense.imageLocalKey!)
+          const localUrl = localImageUrlsRef.current.get(expense.id)
+          if (localUrl) URL.revokeObjectURL(localUrl)
+          localImageUrlsRef.current.delete(expense.id)
+          setExpenses((current) =>
+            current.map((item) =>
+              item.id === expense.id
+                ? { ...cloudExpense, imageLocalKey: undefined }
+                : item,
+            ),
+          )
+          setSyncStatus('기기 사진을 계정에 안전하게 보관했어요.')
+        } catch (error) {
+          setSyncStatus(
+            error instanceof Error
+              ? `사진 동기화 실패: ${error.message.slice(0, 80)}`
+              : '사진 동기화에 실패했어요.',
+          )
+        } finally {
+          promotingLocalImagesRef.current.delete(expense.id)
+        }
+      })()
+    })
+  }, [expenses, localMedia, repository, storage])
 
   const completeAuth = async (nextSession: CashlogSession, message: string) => {
     const hydrated = await authClient.hydrateSession(nextSession)
@@ -628,6 +756,7 @@ function CashlogApp() {
   }, [expenseToSlide, expenses, relativeMinuteTick, yearMonth])
 
   const openChoice = () => {
+    signalSoftImpact()
     stopCamera()
     revokeAndClearPreview()
     setCaptureKind('photo')
@@ -636,6 +765,7 @@ function CashlogApp() {
   }
 
   const openPhotoCapture = async () => {
+    signalSoftImpact()
     stopCamera()
     revokeAndClearPreview()
     setCaptureKind('photo')
@@ -646,11 +776,36 @@ function CashlogApp() {
   }
 
   const openManual = () => {
+    signalSoftImpact()
     stopCamera()
     revokeAndClearPreview()
     setForm(emptyForm())
     setAddMode('manual')
   }
+
+  const closeAddSheet = useCallback(() => {
+    const recorder = mediaRecorderRef.current
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.onstop = null
+      try {
+        recorder.stop()
+      } catch {
+        void 0
+      }
+    }
+    stopCamera()
+    revokeAndClearPreview()
+    setAddMode('closed')
+  }, [revokeAndClearPreview, stopCamera])
+
+  useEffect(() => {
+    if (addMode === 'closed') return undefined
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeAddSheet()
+    }
+    window.addEventListener('keydown', handleEscape)
+    return () => window.removeEventListener('keydown', handleEscape)
+  }, [addMode, closeAddSheet])
 
   const startCamera = async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -843,12 +998,6 @@ function CashlogApp() {
     const amount = Number(form.amount)
     if (!form.title.trim() || Number.isNaN(amount) || amount <= 0) return
 
-    if (photoFileRef.current && authClient.isConfigured && !storage) {
-      setShowAccount(true)
-      setAuthMessage('사진 보관본을 계정에 저장하려면 먼저 로그인해 주세요.')
-      return
-    }
-
     setIsSaving(true)
 
     const dateTime = new Date(`${selectedDate}T12:00:00`).toISOString()
@@ -868,6 +1017,7 @@ function CashlogApp() {
               amount,
               category: categoryNormalized,
               memo: form.memo.trim(),
+              moodScore: form.moodScore ?? undefined,
               kind: form.kind,
             }
           : {
@@ -876,6 +1026,7 @@ function CashlogApp() {
                 amount,
                 category: categoryNormalized,
                 memo: form.memo.trim(),
+                moodScore: form.moodScore ?? undefined,
                 dateTime,
                 kind: form.kind,
               }),
@@ -892,6 +1043,7 @@ function CashlogApp() {
         amount,
         category: categoryNormalized,
         memo: form.memo.trim(),
+        moodScore: form.moodScore ?? undefined,
         dateTime,
         kind: form.kind,
       })
@@ -899,82 +1051,125 @@ function CashlogApp() {
 
     const photoFile = photoFileRef.current
     let preparedImage: Awaited<ReturnType<typeof prepareImageForStorage>> | null = null
-    if (photoFile && storage) {
+    if (photoFile) {
       try {
         preparedImage = await prepareImageForStorage(photoFile)
-        const uploaded = await storage.uploadImage(preparedImage.file, expense.id)
+        const imageLocalKey = await localMedia.saveImage(expense.id, preparedImage.file)
         expense = {
           ...expense,
-          imageStoragePath: uploaded.path,
-          imageUrl: uploaded.signedUrl,
+          imageLocalKey,
+          imageUrl: photoPreview,
+        }
+        if (photoPreview.startsWith('blob:')) {
+          localImageUrlsRef.current.set(expense.id, photoPreview)
+        }
+        if (storage) {
+          try {
+            const uploaded = await storage.uploadImage(preparedImage.file, expense.id)
+            expense = {
+              ...expense,
+              imageStoragePath: uploaded.path,
+              imageUrl: uploaded.signedUrl,
+            }
+          } catch (error) {
+            setSyncStatus(
+              error instanceof Error
+                ? `사진은 이 기기에 저장했어요. 계정 보관 재시도 대기: ${error.message.slice(0, 60)}`
+                : '사진은 이 기기에 저장했고 계정 보관은 다시 시도할게요.',
+            )
+          }
+        } else if (authClient.isConfigured) {
+          setSyncStatus('사진은 이 기기에 저장했어요. 로그인하면 계정에도 보관됩니다.')
         }
         setCameraError(null)
       } catch (e) {
         setCameraError(
-          e instanceof Error ? `사진 보관에 실패했어요: ${e.message.slice(0, 80)}` : '사진 보관에 실패했어요.',
+          e instanceof Error ? `사진을 저장하지 못했어요: ${e.message.slice(0, 80)}` : '사진을 저장하지 못했어요.',
         )
         setIsSaving(false)
         return
       }
     }
 
-    setExpenses((current) => [expense, ...current])
+    let cloudEntrySaved = false
     if (repository) {
-      const shouldSaveFeedback =
+      const feedback =
         hasMedia &&
         analysis &&
         form.kind === 'expense' &&
-        categoryNormalized !== analysis.suggestedCategory
-      const firstDetectedItem = analysis?.detectedItems?.[0]
-      repository
-        .upsertExpense(expense)
-        .then(() =>
-          preparedImage && expense.imageStoragePath
-            ? repository.saveImageMetadata({
-                expenseId: expense.id,
-                storagePath: expense.imageStoragePath,
-                originalFilename: photoFile?.name ?? preparedImage.file.name,
-                mimeType: preparedImage.file.type,
-                sizeBytes: preparedImage.file.size,
-                width: preparedImage.width,
-                height: preparedImage.height,
-                capturedAt: photoFile?.lastModified
-                  ? new Date(photoFile.lastModified).toISOString()
-                  : expense.dateTime,
-              })
-            : undefined,
-        )
-        .then(() => repository.saveDetectedItems(expense.id, analysis?.detectedItems ?? []))
-        .then(() =>
-          shouldSaveFeedback
-            ? repository.saveCategoryFeedback({
-                expenseId: expense.id,
-                modelCategory: analysis!.suggestedCategory,
-                userCategory: migrateCategoryId(String(categoryNormalized)),
-                confidence: analysis!.confidence,
-                itemKeyword:
-                  firstDetectedItem?.name ??
-                  firstDetectedItem?.displayName ??
-                  analysis!.detectedObjects?.[0],
-              })
-            : undefined,
-        )
-        .then(() => setSyncStatus('새 기록 클라우드 저장 완료'))
-        .catch((e: unknown) => {
-          setSyncStatus(e instanceof Error ? `클라우드 저장 실패: ${e.message.slice(0, 80)}` : '클라우드 저장 실패')
+        createCategoryFeedbackPayload({
+          expenseId: expense.id,
+          analysis,
+          selectedLeafId: migrateCategoryId(String(categoryNormalized)),
+          imageRetentionConsent:
+            trainingImageConsent && Boolean(expense.imageStoragePath),
+          imageObjectKey: expense.imageStoragePath,
         })
+      try {
+        await repository.upsertExpense(expense)
+        cloudEntrySaved = true
+        const relatedWrites: Promise<unknown>[] = [
+          repository.saveDetectedItems(
+            expense.id,
+            analysis?.detectedItems ?? [],
+            analysis?.model,
+          ),
+        ]
+        if (preparedImage && expense.imageStoragePath) {
+          relatedWrites.push(repository.saveImageMetadata({
+            expenseId: expense.id,
+            storagePath: expense.imageStoragePath,
+            originalFilename: photoFile?.name ?? preparedImage.file.name,
+            mimeType: preparedImage.file.type,
+            sizeBytes: preparedImage.file.size,
+            width: preparedImage.width,
+            height: preparedImage.height,
+            capturedAt: photoFile?.lastModified
+              ? new Date(photoFile.lastModified).toISOString()
+              : expense.dateTime,
+          }))
+        }
+        if (feedback) relatedWrites.push(repository.saveCategoryFeedback(feedback))
+        const relatedResults = await Promise.allSettled(relatedWrites)
+        const relatedFailed = relatedResults.some((result) => result.status === 'rejected')
+        setSyncStatus(
+          relatedFailed
+            ? '기록과 사진은 저장했지만 일부 분석 정보는 다음 동기화에서 보완할게요.'
+            : '새 기록 클라우드 저장 완료',
+        )
+      } catch (error) {
+        setSyncStatus(
+          error instanceof Error
+            ? `기기에는 저장했어요. 클라우드 저장 실패: ${error.message.slice(0, 70)}`
+            : '기기에는 저장했지만 클라우드 저장에 실패했어요.',
+        )
+      }
     }
+
+    if (cloudEntrySaved && expense.imageStoragePath && expense.imageLocalKey) {
+      try {
+        await localMedia.deleteImage(expense.imageLocalKey)
+        const localUrl = localImageUrlsRef.current.get(expense.id)
+        if (localUrl) URL.revokeObjectURL(localUrl)
+        localImageUrlsRef.current.delete(expense.id)
+        expense = { ...expense, imageLocalKey: undefined }
+      } catch {
+        // A stale device copy is harmless and can be cleaned up on a later sync.
+      }
+    }
+
+    setExpenses((current) => [expense, ...current])
     stopCamera()
-    // 미리보기 URL의 소유권을 저장된 기록으로 넘김 (여기서 revoke 하지 않음)
     setPhotoPreview('')
     photoFileRef.current = null
     setVideoPreview('')
     setAnalysis(null)
+    setTrainingImageConsent(false)
     setAddMode('closed')
     setIsSaving(false)
   }
 
-  const updateForm = (field: keyof ExpenseForm, value: string | LedgerKind) => {
+  const updateForm: ExpenseFormChange = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }))
   }
 
@@ -1007,8 +1202,27 @@ function CashlogApp() {
     updateForm('memo', context === 'friends' ? '친구와 함께' : '혼자 보낸 시간')
   }
 
+  const navigateToView = useCallback((nextView: AppView) => {
+    if (nextView === activeView) return
+    const currentIndex = APP_VIEW_ORDER.indexOf(activeView)
+    const nextIndex = APP_VIEW_ORDER.indexOf(nextView)
+    setViewDirection(nextIndex > currentIndex ? 1 : -1)
+    setActiveView(nextView)
+    signalSoftImpact()
+  }, [activeView])
+
+  const viewVariants = {
+    enter: (direction: number) => prefersReducedMotion
+      ? { opacity: 0 }
+      : { opacity: 0, x: direction * 42, scale: 0.985 },
+    center: { opacity: 1, x: 0, scale: 1 },
+    exit: (direction: number) => prefersReducedMotion
+      ? { opacity: 0 }
+      : { opacity: 0, x: direction * -28, scale: 0.992 },
+  }
+
   return (
-    <main className={`app-shell${activeView === 'diary' ? ' timeline-app-shell' : ''}`}>
+    <main className="app-shell timeline-app-shell">
       <header className="timeline-topbar">
         <button
           type="button"
@@ -1036,8 +1250,28 @@ function CashlogApp() {
         </button>
       </header>
 
-      {showAccount && (
-        <section className="account-card account-drawer" aria-label="로그인과 동기화">
+      <AnimatePresence initial={false}>
+        {showAccount && (
+        <motion.section
+          className="account-card account-drawer"
+          aria-label="로그인과 동기화"
+          initial={
+            prefersReducedMotion
+              ? { opacity: 0 }
+              : { opacity: 0, y: -10, scale: 0.98 }
+          }
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={
+            prefersReducedMotion
+              ? { opacity: 0 }
+              : { opacity: 0, y: -8, scale: 0.985 }
+          }
+          transition={
+            prefersReducedMotion
+              ? { duration: 0.16, ease: [0.23, 1, 0.32, 1] }
+              : { type: 'spring', duration: 0.3, bounce: 0 }
+          }
+        >
           <div>
             <p className="eyebrow">MY CASHLOG</p>
             <h2>{session?.user?.email ?? '내 기록 지키기'}</h2>
@@ -1142,13 +1376,45 @@ function CashlogApp() {
               </form>
             )}
           {authMessage && <small className="account-message">{authMessage}</small>}
-        </section>
-      )}
+        </motion.section>
+        )}
+      </AnimatePresence>
 
+      <motion.div
+        className="app-view-viewport"
+        animate={
+          addMode === 'closed'
+            ? { scale: 1, y: 0, opacity: 1 }
+            : prefersReducedMotion
+              ? { opacity: 0.94 }
+              : { scale: 0.985, y: -6, opacity: 0.92 }
+        }
+        transition={
+          prefersReducedMotion
+            ? { duration: 0.14 }
+            : { type: 'spring', duration: 0.34, bounce: 0 }
+        }
+      >
+        <AnimatePresence initial={false} custom={viewDirection} mode="popLayout">
+          <motion.div
+            key={activeView}
+            className="app-view-screen"
+            custom={viewDirection}
+            variants={viewVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={
+              prefersReducedMotion
+                ? { duration: 0.14, ease: [0.23, 1, 0.32, 1] }
+                : { type: 'spring', duration: 0.42, bounce: 0 }
+            }
+          >
       {activeView === 'pets' ? (
         <PetCorner
           totalRecords={expenses.length}
           petState={petState}
+          recentMoodScore={recentMoodScore}
           onKindChange={handlePetKindChange}
           onBreedChange={handleBreedChange}
           onOutfitChange={handleOutfitChange}
@@ -1223,7 +1489,7 @@ function CashlogApp() {
           <header className="today-heading">
             <div>
               <p className="eyebrow">TODAY</p>
-              <button type="button" className="date-switcher" onClick={() => setActiveView('calendar')}>
+              <button type="button" className="date-switcher" onClick={() => navigateToView('calendar')}>
                 {selectedDateLabel} <ChevronDown size={20} aria-hidden />
               </button>
             </div>
@@ -1298,6 +1564,12 @@ function CashlogApp() {
                           {expense.kind === 'income' ? '+' : ''}{formatCurrency(expense.amount)}
                         </strong>
                       </div>
+                      {expense.moodScore && (
+                        <span className="entry-mood" aria-label={`기분 ${expense.moodScore}점, ${getMoodOption(expense.moodScore).label}`}>
+                          <span aria-hidden>{getMoodOption(expense.moodScore).face}</span>
+                          {expense.moodScore}/5 · {getMoodOption(expense.moodScore).label}
+                        </span>
+                      )}
                       {expense.memo && <p>{expense.memo}</p>}
                       <Check className="entry-check" size={18} aria-label="기록 완료" />
                     </div>
@@ -1325,22 +1597,77 @@ function CashlogApp() {
           <button type="button" className="sr-only-action" onClick={openChoice}>+ 기록 추가</button>
         </section>
       )}
+          </motion.div>
+        </AnimatePresence>
+      </motion.div>
 
       <nav className="bottom-nav" aria-label="주요 화면">
-        <button type="button" className={activeView === 'diary' ? 'active' : ''} aria-pressed={activeView === 'diary'} onClick={() => setActiveView('diary')}>
-          <BarChart3 size={22} aria-hidden /><span>하루 타임라인</span>
-        </button>
-        <button type="button" className={activeView === 'calendar' ? 'active' : ''} aria-pressed={activeView === 'calendar'} onClick={() => setActiveView('calendar')}>
-          <CalendarDays size={22} aria-hidden /><span>달력</span>
-        </button>
-        <button type="button" className={activeView === 'pets' ? 'active' : ''} aria-pressed={activeView === 'pets'} onClick={() => setActiveView('pets')}>
-          <PawPrint size={22} aria-hidden /><span>{selectedPetName}</span>
-        </button>
+        <motion.button
+          type="button"
+          className={activeView === 'diary' ? 'active' : ''}
+          aria-label="하루 타임라인"
+          aria-pressed={activeView === 'diary'}
+          onClick={() => navigateToView('diary')}
+          whileTap={prefersReducedMotion ? undefined : { scale: 0.94 }}
+        >
+          {activeView === 'diary' && <motion.span className="bottom-nav-selection" layoutId="bottom-nav-selection" transition={{ type: 'spring', duration: 0.32, bounce: 0.06 }} aria-hidden="true" />}
+          <span className="bottom-nav-content"><BarChart3 size={21} aria-hidden /><span>기록</span></span>
+        </motion.button>
+        <motion.button
+          type="button"
+          className={activeView === 'calendar' ? 'active' : ''}
+          aria-label="달력"
+          aria-pressed={activeView === 'calendar'}
+          onClick={() => navigateToView('calendar')}
+          whileTap={prefersReducedMotion ? undefined : { scale: 0.94 }}
+        >
+          {activeView === 'calendar' && <motion.span className="bottom-nav-selection" layoutId="bottom-nav-selection" transition={{ type: 'spring', duration: 0.32, bounce: 0.06 }} aria-hidden="true" />}
+          <span className="bottom-nav-content"><CalendarDays size={21} aria-hidden /><span>달력</span></span>
+        </motion.button>
+        <motion.button
+          type="button"
+          className={activeView === 'pets' ? 'active' : ''}
+          aria-label={selectedPetName}
+          aria-pressed={activeView === 'pets'}
+          onClick={() => navigateToView('pets')}
+          whileTap={prefersReducedMotion ? undefined : { scale: 0.94 }}
+        >
+          {activeView === 'pets' && <motion.span className="bottom-nav-selection" layoutId="bottom-nav-selection" transition={{ type: 'spring', duration: 0.32, bounce: 0.06 }} aria-hidden="true" />}
+          <span className="bottom-nav-content"><PawPrint size={21} aria-hidden /><span>{selectedPetName}</span></span>
+        </motion.button>
       </nav>
 
-      {addMode !== 'closed' && (
-        <section className="sheet-backdrop" aria-label="기록 추가">
-          <div className="add-sheet">
+      <motion.section
+          className={`sheet-backdrop${addMode !== 'closed' ? ' is-open' : ''}`}
+          role={addMode !== 'closed' ? 'dialog' : undefined}
+          aria-modal={addMode !== 'closed' ? 'true' : undefined}
+          aria-label={addMode !== 'closed' ? '기록 추가' : undefined}
+          aria-hidden={addMode === 'closed'}
+          initial={false}
+          animate={{ opacity: addMode !== 'closed' ? 1 : 0 }}
+          transition={{ duration: prefersReducedMotion ? 0.16 : 0.2, ease: [0.23, 1, 0.32, 1] }}
+          onPointerDown={(event) => {
+            if (addMode !== 'closed' && event.target === event.currentTarget) closeAddSheet()
+          }}
+        >
+          <motion.div
+            className="add-sheet"
+            initial={false}
+            animate={
+              addMode !== 'closed'
+                ? { opacity: 1, y: 0, scale: 1 }
+                : prefersReducedMotion
+                  ? { opacity: 0, y: 0, scale: 1 }
+                  : { opacity: 0, y: 28, scale: 0.98 }
+            }
+            transition={
+              prefersReducedMotion
+                ? { duration: 0.16, ease: [0.23, 1, 0.32, 1] }
+                : { type: 'spring', duration: 0.4, bounce: 0.12 }
+            }
+          >
+            {addMode !== 'closed' && (
+            <>
             <div className="sheet-header">
               <div>
                 <p className="eyebrow">PHOTO LOG</p>
@@ -1350,20 +1677,7 @@ function CashlogApp() {
                 type="button"
                 className="icon-button"
                 aria-label="기록 창 닫기"
-                onClick={() => {
-                  const recorder = mediaRecorderRef.current
-                  if (recorder && recorder.state !== 'inactive') {
-                    recorder.onstop = null
-                    try {
-                      recorder.stop()
-                    } catch {
-                      void 0
-                    }
-                  }
-                  stopCamera()
-                  revokeAndClearPreview()
-                  setAddMode('closed')
-                }}
+                onClick={closeAddSheet}
               >
                 <X size={22} aria-hidden />
               </button>
@@ -1544,6 +1858,21 @@ function CashlogApp() {
                         </div>
                       </div>
                     </div>
+                    <label className="training-consent">
+                      <input
+                        type="checkbox"
+                        checked={trainingImageConsent}
+                        onChange={(event) => setTrainingImageConsent(event.target.checked)}
+                      />
+                      <span>
+                        <strong>[선택]</strong> 이 사진을 모델 학습·평가 후보로 추가
+                        보관하는 데 동의합니다.
+                      </span>
+                    </label>
+                    <small className="training-consent-note">
+                      동의하지 않으면 사진은 학습 후보가 되지 않으며, 확정 카테고리만
+                      추천 품질 통계로 기록됩니다.
+                    </small>
                   </div>
                 )}
                 <ExpenseEditor
@@ -1568,9 +1897,10 @@ function CashlogApp() {
                 isSaving={isSaving}
               />
             )}
-          </div>
-        </section>
-      )}
+            </>
+            )}
+          </motion.div>
+        </motion.section>
       <footer className="legal-footer">
         <a href="/privacy.html">개인정보처리방침</a>
         <a href="https://github.com/UICHANLEE/cashlog">GitHub</a>
@@ -1608,7 +1938,7 @@ function ExpenseEditor({
   petName,
 }: {
   form: ExpenseForm
-  onChange: (field: keyof ExpenseForm, value: string | LedgerKind) => void
+  onChange: ExpenseFormChange
   onLedgerKindChange: (kind: LedgerKind) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   isSaving: boolean
@@ -1616,18 +1946,7 @@ function ExpenseEditor({
   detectedItemCount?: number
   petName?: string
 }) {
-  const expenseMeta = getCategoryMeta(form.category as CategoryId)
-  const expenseActiveGroup = expenseMeta.group
-  const incomeMeta = getIncomeCategoryMeta(form.category as IncomeCategoryId)
-  const incomeActiveGroup = incomeMeta.group
-
-  const categoryLegend =
-    form.kind === 'expense' ? '지출 카테고리 (편한가계부 분류)' : '수입 카테고리 (편한가계부 분류)'
-
-  const categoryHint =
-    form.kind === 'expense'
-      ? '편한가계부처럼 대분류를 고른 뒤 소분류를 선택하세요.'
-      : '수입은 지출과 다른 카테고리 트리로 정리합니다. 같은 방식으로 골라 주세요.'
+  const canSubmit = Boolean(form.title.trim()) && Number(form.amount) > 0
 
   return (
     <form className={`expense-form${assistantMode ? ' assistant-expense-form' : ''}`} onSubmit={onSubmit}>
@@ -1661,6 +1980,7 @@ function ExpenseEditor({
           </button>
         </div>
       </fieldset>
+      <AmountEditor form={form} onChange={onChange} assistantMode={assistantMode} />
       <label>
         {assistantMode ? '이 장면의 이름' : '제목'}
         <input
@@ -1671,65 +1991,148 @@ function ExpenseEditor({
           }
         />
       </label>
-      <label>
-        {assistantMode ? '총 결제금액' : '금액'}
-        <input
-          inputMode="numeric"
-          value={form.amount}
-          onChange={(event) => onChange('amount', event.target.value)}
-          placeholder="0"
-        />
-      </label>
-      <fieldset className="feeling-fieldset">
-        <legend>이 소비는 어떤 기분으로 남길까?</legend>
-        <div className="feeling-options" role="group" aria-label="소비 기분">
-          <button type="button" className={form.memo === '기분 좋은 소비' ? 'active' : ''} onClick={() => onChange('memo', '기분 좋은 소비')}><Smile size={17} />기분 좋아</button>
-          <button type="button" className={form.memo === '나를 위한 소비' ? 'active' : ''} onClick={() => onChange('memo', '나를 위한 소비')}><Heart size={17} />나를 위해</button>
-          <button type="button" className={form.memo === '같이 즐긴 소비' ? 'active' : ''} onClick={() => onChange('memo', '같이 즐긴 소비')}><Users size={17} />같이 즐김</button>
-          <button type="button" className={form.memo === '조금 아쉬운 소비' ? 'active' : ''} onClick={() => onChange('memo', '조금 아쉬운 소비')}><CloudRain size={17} />조금 아쉬워</button>
-        </div>
-      </fieldset>
+      <CategoryEditor form={form} onChange={onChange} />
+      <MoodScoreEditor form={form} onChange={onChange} />
       {assistantMode ? (
         <details className="expense-more-details">
-          <summary>카테고리와 메모 직접 고치기</summary>
+          <summary>메모 더 남기기</summary>
           <div className="expense-more-fields">
-            <CategoryEditor form={form} onChange={onChange} categoryLegend={categoryLegend} categoryHint={categoryHint} expenseActiveGroup={expenseActiveGroup} incomeActiveGroup={incomeActiveGroup} />
             <MemoEditor form={form} onChange={onChange} />
           </div>
         </details>
       ) : (
-        <>
-          <details className="expense-more-details category-quick-details">
-            <summary>
-              카테고리 · {form.kind === 'expense'
-                ? formatCategoryLabel(form.category as CategoryId)
-                : formatIncomeCategoryLabel(form.category as IncomeCategoryId)}
-            </summary>
-            <div className="expense-more-fields">
-              <CategoryEditor form={form} onChange={onChange} categoryLegend={categoryLegend} categoryHint={categoryHint} expenseActiveGroup={expenseActiveGroup} incomeActiveGroup={incomeActiveGroup} />
-            </div>
-          </details>
-          <MemoEditor form={form} onChange={onChange} />
-        </>
+        <MemoEditor form={form} onChange={onChange} />
       )}
-      <button type="submit" className="primary-button" disabled={isSaving}>
+      <button type="submit" className="primary-button" disabled={isSaving || !canSubmit}>
         {isSaving ? '사진 보관 중...' : assistantMode ? '이 장면으로 저장' : '저장하기'}
       </button>
     </form>
   )
 }
 
-function CategoryEditor({ form, onChange, categoryLegend, categoryHint, expenseActiveGroup, incomeActiveGroup }: {
+function AmountEditor({ form, onChange, assistantMode }: {
   form: ExpenseForm
-  onChange: (field: keyof ExpenseForm, value: string | LedgerKind) => void
-  categoryLegend: string
-  categoryHint: string
-  expenseActiveGroup: ReturnType<typeof getCategoryMeta>['group']
-  incomeActiveGroup: ReturnType<typeof getIncomeCategoryMeta>['group']
+  onChange: ExpenseFormChange
+  assistantMode: boolean
 }) {
+  const numericAmount = Number(form.amount) || 0
+  const addAmount = (amount: number) => {
+    const next = Math.min(9_999_999_999, numericAmount + amount)
+    onChange('amount', String(next))
+    signalSoftImpact()
+  }
+
+  return (
+    <div className="amount-editor">
+      <div className="amount-editor-heading">
+        <label htmlFor="cashlog-amount">{assistantMode ? '총 결제금액' : '결제금액'}</label>
+        <output htmlFor="cashlog-amount" aria-live="polite">
+          {numericAmount > 0 ? formatCurrency(numericAmount) : '금액 입력'}
+        </output>
+      </div>
+      <div className="amount-input-shell">
+        <input
+          id="cashlog-amount"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          autoComplete="off"
+          maxLength={10}
+          value={form.amount}
+          aria-label="금액"
+          onFocus={() => {
+            if (form.amount === '0') onChange('amount', '')
+          }}
+          onChange={(event) => onChange('amount', normalizeAmountInput(event.target.value))}
+          onBlur={() => {
+            if (!form.amount) onChange('amount', '0')
+          }}
+          placeholder="0"
+          aria-describedby="cashlog-amount-preview"
+        />
+        <span aria-hidden>원</span>
+      </div>
+      <span id="cashlog-amount-preview" className="sr-only">
+        {numericAmount > 0 ? `${numericAmount.toLocaleString('ko-KR')}원` : '입력된 금액 없음'}
+      </span>
+      <div className="amount-quick-actions" role="group" aria-label="금액 빠른 더하기">
+        {[1_000, 5_000, 10_000, 50_000].map((amount) => (
+          <button key={amount} type="button" onClick={() => addAmount(amount)}>
+            <Plus size={14} aria-hidden />
+            {amount >= 10_000 ? `${amount / 10_000}만` : `${amount / 1_000}천`}
+          </button>
+        ))}
+        <button
+          type="button"
+          className="amount-reset"
+          onClick={() => {
+            onChange('amount', '0')
+            signalSoftImpact()
+          }}
+          aria-label="금액 초기화"
+          title="금액 초기화"
+        >
+          <RotateCcw size={15} aria-hidden />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function MoodScoreEditor({ form, onChange }: {
+  form: ExpenseForm
+  onChange: ExpenseFormChange
+}) {
+  return (
+    <fieldset className="mood-score-fieldset">
+      <div className="mood-score-heading">
+        <legend>기분 점수</legend>
+        <output aria-live="polite">
+          {form.moodScore ? `${form.moodScore}/5 · ${moodOptions[form.moodScore - 1].label}` : '선택 안 함'}
+        </output>
+      </div>
+      <div className="mood-score-options" role="group" aria-label="기분 점수 1점에서 5점">
+        {moodOptions.map((option) => (
+          <button
+            key={option.score}
+            type="button"
+            className={form.moodScore === option.score ? 'active' : ''}
+            aria-pressed={form.moodScore === option.score}
+            aria-label={`${option.score}점 ${option.label}`}
+            onClick={() => {
+              onChange('moodScore', form.moodScore === option.score ? null : option.score)
+              signalSoftImpact()
+            }}
+          >
+            <span aria-hidden>{option.face}</span>
+            <strong>{option.score}</strong>
+            <small>{option.label}</small>
+          </button>
+        ))}
+      </div>
+    </fieldset>
+  )
+}
+
+function CategoryEditor({ form, onChange }: {
+  form: ExpenseForm
+  onChange: ExpenseFormChange
+}) {
+  const expenseMeta = getCategoryMeta(form.category as CategoryId)
+  const incomeMeta = getIncomeCategoryMeta(form.category as IncomeCategoryId)
+  const activeGroup = form.kind === 'expense' ? expenseMeta.group : incomeMeta.group
+  const activeLeaf = form.kind === 'expense' ? expenseMeta.leaf : incomeMeta.leaf
   return <fieldset className="category-fieldset">
-        <legend>{categoryLegend}</legend>
-        <p className="category-hint">{categoryHint}</p>
+        <legend>카테고리</legend>
+        <div className="category-selection-path" aria-live="polite">
+          <span aria-hidden>{activeGroup.icon}</span>
+          <strong>{activeGroup.name}</strong>
+          <ArrowRight size={14} aria-hidden />
+          <b>{activeLeaf.name}</b>
+        </div>
+        <div className="category-step-heading">
+          <span>1</span>
+          <strong>대분류</strong>
+        </div>
         {form.kind === 'expense' ? (
           <>
             <div className="category-groups" role="group" aria-label="대분류">
@@ -1738,18 +2141,29 @@ function CategoryEditor({ form, onChange, categoryLegend, categoryHint, expenseA
                   key={group.id}
                   type="button"
                   className={
-                    group.id === expenseActiveGroup.id ? 'category-pill active' : 'category-pill'
+                    group.id === expenseMeta.group.id ? 'category-pill active' : 'category-pill'
                   }
-                  aria-pressed={group.id === expenseActiveGroup.id}
+                  aria-pressed={group.id === expenseMeta.group.id}
                   aria-label={`대분류: ${group.name}`}
-                  onClick={() => onChange('category', group.leaves[0].id)}
+                  style={{ '--category-accent': group.color } as CSSProperties}
+                  onClick={() => {
+                    onChange('category', group.leaves[0].id)
+                    signalSoftImpact()
+                  }}
                 >
-                  {group.name}
+                  <span aria-hidden>{group.icon}</span>
+                  <strong>{group.name}</strong>
+                  {group.id === expenseMeta.group.id && <Check size={14} aria-hidden />}
                 </button>
               ))}
             </div>
+            <div className="category-step-heading category-leaf-heading">
+              <span>2</span>
+              <strong>소분류</strong>
+              <small>{expenseMeta.group.name}</small>
+            </div>
             <div className="category-leaves" role="group" aria-label="소분류">
-              {expenseActiveGroup.leaves.map((leaf) => (
+              {expenseMeta.group.leaves.map((leaf) => (
                 <button
                   key={leaf.id}
                   type="button"
@@ -1758,15 +2172,16 @@ function CategoryEditor({ form, onChange, categoryLegend, categoryHint, expenseA
                   }
                   aria-pressed={leaf.id === form.category}
                   aria-label={`소분류: ${leaf.name}`}
-                  onClick={() => onChange('category', leaf.id)}
+                  onClick={() => {
+                    onChange('category', leaf.id)
+                    signalSoftImpact()
+                  }}
                 >
                   {leaf.name}
+                  {leaf.id === form.category && <Check size={15} aria-hidden />}
                 </button>
               ))}
             </div>
-            <p className="category-selected">
-              선택: <strong>{formatCategoryLabel(form.category as CategoryId)}</strong>
-            </p>
           </>
         ) : (
           <>
@@ -1776,18 +2191,29 @@ function CategoryEditor({ form, onChange, categoryLegend, categoryHint, expenseA
                   key={group.id}
                   type="button"
                   className={
-                    group.id === incomeActiveGroup.id ? 'category-pill active' : 'category-pill'
+                    group.id === incomeMeta.group.id ? 'category-pill active' : 'category-pill'
                   }
-                  aria-pressed={group.id === incomeActiveGroup.id}
+                  aria-pressed={group.id === incomeMeta.group.id}
                   aria-label={`수입 대분류: ${group.name}`}
-                  onClick={() => onChange('category', group.leaves[0].id)}
+                  style={{ '--category-accent': group.color } as CSSProperties}
+                  onClick={() => {
+                    onChange('category', group.leaves[0].id)
+                    signalSoftImpact()
+                  }}
                 >
-                  {group.name}
+                  <span aria-hidden>{group.icon}</span>
+                  <strong>{group.name}</strong>
+                  {group.id === incomeMeta.group.id && <Check size={14} aria-hidden />}
                 </button>
               ))}
             </div>
+            <div className="category-step-heading category-leaf-heading">
+              <span>2</span>
+              <strong>소분류</strong>
+              <small>{incomeMeta.group.name}</small>
+            </div>
             <div className="category-leaves" role="group" aria-label="수입 소분류">
-              {incomeActiveGroup.leaves.map((leaf) => (
+              {incomeMeta.group.leaves.map((leaf) => (
                 <button
                   key={leaf.id}
                   type="button"
@@ -1796,18 +2222,16 @@ function CategoryEditor({ form, onChange, categoryLegend, categoryHint, expenseA
                   }
                   aria-pressed={leaf.id === form.category}
                   aria-label={`수입 소분류: ${leaf.name}`}
-                  onClick={() => onChange('category', leaf.id)}
+                  onClick={() => {
+                    onChange('category', leaf.id)
+                    signalSoftImpact()
+                  }}
                 >
                   {leaf.name}
+                  {leaf.id === form.category && <Check size={15} aria-hidden />}
                 </button>
               ))}
             </div>
-            <p className="category-selected">
-              선택:{' '}
-              <strong>
-                {formatIncomeCategoryLabel(form.category as IncomeCategoryId)}
-              </strong>
-            </p>
           </>
         )}
       </fieldset>
@@ -1815,7 +2239,7 @@ function CategoryEditor({ form, onChange, categoryLegend, categoryHint, expenseA
 
 function MemoEditor({ form, onChange }: {
   form: ExpenseForm
-  onChange: (field: keyof ExpenseForm, value: string | LedgerKind) => void
+  onChange: ExpenseFormChange
 }) {
   return (
       <label>

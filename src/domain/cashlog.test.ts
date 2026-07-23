@@ -16,6 +16,8 @@ import {
   getStoryEntriesForMonth,
   migrateCategoryId,
   migrateIncomeCategoryId,
+  normalizeAmountInput,
+  normalizeMoodScore,
 } from './cashlog'
 
 describe('cashlog domain', () => {
@@ -206,6 +208,20 @@ describe('cashlog domain', () => {
     expect(migrateIncomeCategoryId('inc_pay_bonus')).toBe('inc_pay_bonus')
     expect(migrateIncomeCategoryId('meal_cafe')).toBe('inc_uncat')
     expect(migrateIncomeCategoryId('bogus')).toBe('inc_uncat')
+  })
+
+  it('keeps amount input digit-only and removes leading zeroes', () => {
+    expect(normalizeAmountInput('0')).toBe('0')
+    expect(normalizeAmountInput('012,300원')).toBe('12300')
+    expect(normalizeAmountInput('abc')).toBe('')
+    expect(normalizeAmountInput('00050')).toBe('50')
+  })
+
+  it('accepts only a 1-5 mood score', () => {
+    expect(normalizeMoodScore(5)).toBe(5)
+    expect(normalizeMoodScore('2')).toBe(2)
+    expect(normalizeMoodScore(0)).toBeUndefined()
+    expect(normalizeMoodScore(6)).toBeUndefined()
   })
 
   it('collects photo expenses for a day and month', () => {

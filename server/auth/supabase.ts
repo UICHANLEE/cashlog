@@ -3,6 +3,7 @@ import type { VercelRequest } from '@vercel/node'
 import { getServerSupabaseConfig } from './config.js'
 import { ACCESS_COOKIE, readCookies } from './cookies.js'
 import { ApiError, clientIp } from './http.js'
+import { resolveServerStorageSignedUrl } from './storageUrl.js'
 
 type SupabaseSession = {
   access_token: string
@@ -201,7 +202,7 @@ export const signedProfileImageUrl = async (path: string | null) => {
   const signed = body.signedURL || body.signedUrl
   if (!signed) return null
   const config = getServerSupabaseConfig()
-  return signed.startsWith('http') ? signed : `${config.url}/storage/v1${signed}`
+  return resolveServerStorageSignedUrl(config.url, signed)
 }
 
 export const updateAuthPassword = async (accessToken: string, password: string) => {
