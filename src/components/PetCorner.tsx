@@ -69,6 +69,17 @@ const outfitIcon = (id: OutfitId) => {
   return <PawPrint size={19} />
 }
 
+const actionOptions: Array<{
+  id: PetAction
+  label: string
+  icon: typeof Hand
+}> = [
+  { id: 'pet', label: '쓰다듬기', icon: Hand },
+  { id: 'treat', label: '간식', icon: Cookie },
+  { id: 'highfive', label: '하이파이브', icon: Sparkles },
+  { id: 'dance', label: '댄스', icon: Music2 },
+]
+
 export function PetCorner({
   totalRecords,
   petState,
@@ -336,32 +347,39 @@ export function PetCorner({
             </span>
           )}
         </div>
-        {cheer && (
-          <div className="pet-hearts" aria-hidden>
-            <span>♡</span>
-            <span>♥</span>
-            <span>♡</span>
-          </div>
-        )}
+        <AnimatePresence>
+          {cheer && (
+            <motion.div
+              key={`${petAction}-${cheerRequest}`}
+              className={`pet-action-burst is-${petAction}`}
+              initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.94, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98, y: -20 }}
+              transition={{ type: 'spring', duration: 0.36, bounce: 0.12 }}
+              aria-hidden
+            >
+              {petAction === 'treat' && <Cookie size={24} />}
+              {petAction === 'highfive' && <Sparkles size={24} />}
+              {petAction === 'dance' && <Music2 size={24} />}
+              {petAction === 'pet' && <Hand size={24} />}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       <div className="pet-action-row" role="group" aria-label={`${activeName}와 놀기`}>
-        <button type="button" onClick={() => play('pet')}>
-          <Hand size={18} aria-hidden />
-          <span>쓰다듬기</span>
-        </button>
-        <button type="button" onClick={() => play('treat')}>
-          <Cookie size={18} aria-hidden />
-          <span>간식</span>
-        </button>
-        <button type="button" onClick={() => play('highfive')}>
-          <Sparkles size={18} aria-hidden />
-          <span>하이파이브</span>
-        </button>
-        <button type="button" onClick={() => play('dance')}>
-          <Music2 size={18} aria-hidden />
-          <span>댄스</span>
-        </button>
+        {actionOptions.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            className={cheer && petAction === id ? 'active' : ''}
+            aria-pressed={cheer && petAction === id}
+            onClick={() => play(id)}
+          >
+            <Icon size={18} aria-hidden />
+            <span>{label}</span>
+          </button>
+        ))}
       </div>
 
       <div className="pet-level">

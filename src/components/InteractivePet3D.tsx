@@ -11,6 +11,7 @@ import * as THREE from 'three'
 import type { MoodScore } from '../domain/cashlog'
 import {
   getPetPalette,
+  getOutfit,
   type CatBreedId,
   type DogBreedId,
   type OutfitId,
@@ -18,6 +19,7 @@ import {
   type PetPaletteId,
 } from '../domain/pet'
 import { signalSoftImpact } from '../motion/haptics'
+import { createPetCostumeDataUrl } from './petCostumeArtwork'
 import './InteractivePet3D.css'
 
 type InteractivePet3DProps = {
@@ -80,8 +82,10 @@ export function InteractivePet3D({
   const triggerRef = useRef<((nextAction: PetAction) => void) | null>(null)
   const reactionTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [canvasReady, setCanvasReady] = useState(false)
+  const [costumeReady, setCostumeReady] = useState(outfit === 'none')
   const [reaction, setReaction] = useState(`${name}가 편안하게 바라보고 있어요`)
   const colors = getPetPalette(palette)
+  const currentOutfit = getOutfit(outfit)
 
   const announce = useCallback((message: string) => {
     setReaction(message)
@@ -166,7 +170,10 @@ export function InteractivePet3D({
     scene.add(shadow)
 
     let portrait: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> | null = null
+    let tintOverlay: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> | null = null
+    let costume: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> | null = null
     let texture: THREE.Texture | null = null
+    let costumeTexture: THREE.Texture | null = null
     let disposed = false
 
     const loader = new THREE.TextureLoader()
@@ -185,17 +192,67 @@ export function InteractivePet3D({
           map: texture,
           transparent: true,
           alphaTest: 0.015,
+          depthTest: false,
           depthWrite: false,
           toneMapped: false,
         })
         portrait = new THREE.Mesh(geometry, material)
         portrait.position.z = 0.2
+        portrait.renderOrder = 1
         character.add(portrait)
+
+        if (palette !== 'cream') {
+          const tintMaterial = new THREE.MeshBasicMaterial({
+            map: texture,
+            color: new THREE.Color(colors.body),
+            transparent: true,
+            opacity: 0.24,
+            depthTest: false,
+            depthWrite: false,
+            toneMapped: false,
+          })
+          tintOverlay = new THREE.Mesh(geometry, tintMaterial)
+          tintOverlay.position.z = 0.22
+          tintOverlay.renderOrder = 2
+          character.add(tintOverlay)
+        }
+
         setCanvasReady(true)
       },
       undefined,
       () => setCanvasReady(false),
     )
+
+    const costumeUrl = createPetCostumeDataUrl(outfit, kind, colors)
+    if (costumeUrl) {
+      loader.load(
+        costumeUrl,
+        (loadedTexture) => {
+          if (disposed) {
+            loadedTexture.dispose()
+            return
+          }
+          costumeTexture = loadedTexture
+          costumeTexture.colorSpace = THREE.SRGBColorSpace
+          costumeTexture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy())
+          const costumeMaterial = new THREE.MeshBasicMaterial({
+            map: costumeTexture,
+            transparent: true,
+            alphaTest: 0.015,
+            depthTest: false,
+            depthWrite: false,
+            toneMapped: false,
+          })
+          costume = new THREE.Mesh(new THREE.PlaneGeometry(5.15, 5.15), costumeMaterial)
+          costume.position.z = 0.32
+          costume.renderOrder = 3
+          character.add(costume)
+          setCostumeReady(true)
+        },
+        undefined,
+        () => setCostumeReady(false),
+      )
+    }
 
     const pointer = { x: 0, y: 0 }
     let activeAction: PetAction | null = null
@@ -257,11 +314,15 @@ export function InteractivePet3D({
       const idle = reducedMotion ? 0 : Math.sin(t * 1.55) * 0.026 * moodEnergy
       const breathe = reducedMotion ? 1 : 1 + Math.sin(t * 1.9) * 0.0045
       const danceSway = playing === 'dance' && !reducedMotion ? Math.sin(t * 5.4) * 0.055 : 0
-      const greetingTilt = playing === 'highfive' && !reducedMotion ? -0.035 : 0
+      const greetingTilt = playing === 'highfive' && !reducedMotion ? Math.sin(t * 7.2) * 0.028 - 0.035 : 0
       const treatLift = playing === 'treat' && !reducedMotion
-        ? Math.abs(Math.sin(t * 5.8)) * 0.045
+        ? Math.abs(Math.sin(t * 7.2)) * 0.09
         : 0
-      const petSquish = playing === 'pet' && !reducedMotion ? 0.012 : 0
+      const petSquish = playing === 'pet' && !reducedMotion ? 0.018 : 0
+      const highfiveLean = playing === 'highfive' && !reducedMotion ? 0.035 : 0
+      const danceScale = playing === 'dance' && !reducedMotion
+        ? Math.abs(Math.sin(t * 5.4)) * 0.018
+        : 0
 
       character.position.y += (
         (compact ? -0.12 : -0.02) + idle + treatLift - character.position.y
@@ -270,16 +331,16 @@ export function InteractivePet3D({
         pointer.x * 0.045 - character.rotation.y
       ) * Math.min(1, delta * 7)
       character.rotation.x += (
-        -pointer.y * 0.018 - character.rotation.x
+        -pointer.y * 0.018 + highfiveLean - character.rotation.x
       ) * Math.min(1, delta * 7)
       character.rotation.z += (
         danceSway + greetingTilt - character.rotation.z
       ) * Math.min(1, delta * 9)
       character.scale.x += (
-        breathe + petSquish - character.scale.x
+        breathe + petSquish + danceScale - character.scale.x
       ) * Math.min(1, delta * 9)
       character.scale.y += (
-        breathe - petSquish - character.scale.y
+        breathe - petSquish + danceScale - character.scale.y
       ) * Math.min(1, delta * 9)
       shadow.scale.x += (
         1.46 - idle * 1.1 - shadow.scale.x
@@ -300,12 +361,16 @@ export function InteractivePet3D({
       canvas.removeEventListener('pointerleave', onPointerLeave)
       portrait?.geometry.dispose()
       portrait?.material.dispose()
+      tintOverlay?.material.dispose()
+      costume?.geometry.dispose()
+      costume?.material.dispose()
       texture?.dispose()
+      costumeTexture?.dispose()
       shadow.geometry.dispose()
       shadowMaterial.dispose()
       renderer.dispose()
     }
-  }, [compact, kind, moodScore])
+  }, [colors, compact, kind, moodScore, outfit, palette])
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -326,6 +391,8 @@ export function InteractivePet3D({
       style={style}
       data-breed={breed}
       data-outfit={outfit}
+      data-costume-rendered={outfit !== 'none'}
+      data-costume-ready={costumeReady}
       role="button"
       tabIndex={0}
       aria-label={`${name} 캐릭터. 누르면 다정하게 인사해요.`}
@@ -343,6 +410,12 @@ export function InteractivePet3D({
         <Sparkles size={15} aria-hidden="true" />
         <span>{reaction}</span>
       </div>
+      {outfit !== 'none' && (
+        <span className="pet-costume-badge" aria-label={`${currentOutfit.name} 착용 중`}>
+          <span aria-hidden>{currentOutfit.icon}</span>
+          {currentOutfit.name}
+        </span>
+      )}
     </div>
   )
 }

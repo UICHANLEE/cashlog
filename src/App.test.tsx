@@ -90,6 +90,7 @@ describe('Cashlog photo MVP', () => {
     await user.click(hoodie)
     expect(hoodie).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByLabelText('나비 현재 스타일')).toHaveTextContent('말랑 후디')
+    expect(screen.getByLabelText('말랑 후디 착용 중')).toBeInTheDocument()
 
     await user.click(screen.getByRole('tab', { name: '컬러' }))
     await user.click(screen.getByRole('button', { name: '나비 딸기우유 색칠' }))
