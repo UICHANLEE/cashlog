@@ -1,4 +1,5 @@
 import {
+  type CSSProperties,
   type ChangeEvent,
   type FormEvent,
   useCallback,
@@ -8,21 +9,20 @@ import {
   useState,
 } from 'react'
 import {
+  ArrowRight,
   BarChart3,
   CalendarDays,
   Camera,
   Check,
   ChevronDown,
   Image as ImageIcon,
-  CloudRain,
-  Heart,
   Mic,
   PawPrint,
   Pencil,
-  Smile,
+  Plus,
+  RotateCcw,
   Sparkles,
   Utensils,
-  Users,
   UserRound,
   X,
 } from 'lucide-react'
@@ -38,9 +38,7 @@ import {
   type Expense,
   dayExpenseTotal,
   dayIncomeTotal,
-  formatCategoryLabel,
   formatCurrency,
-  formatIncomeCategoryLabel,
   formatLedgerCategory,
   getCalendarDays,
   getStoryEntriesForDate,
@@ -48,6 +46,7 @@ import {
   getExpensesForDate,
   getCategoryMeta,
   getIncomeCategoryMeta,
+  getMoodOption,
   type IncomeCategoryId,
   incomeCategoryTree,
   type LedgerCategoryId,
@@ -55,7 +54,11 @@ import {
   ledgerAccentColor,
   migrateCategoryId,
   migrateIncomeCategoryId,
+  moodOptions,
+  normalizeAmountInput,
+  normalizeMoodScore,
   type PhotoAnalysis,
+  type MoodScore,
 } from './domain/cashlog'
 import {
   formatDayLogRelativeKo,
@@ -87,19 +90,28 @@ import { assertValidImageFile } from './media/imageSignature'
 import { getMe as getSecureAccount, logout as secureLogout } from './account/accountApi'
 import { createCategoryFeedbackPayload } from './domain/productImage'
 import { createLocalMediaStore } from './services/localMediaStore'
+import { signalSoftImpact } from './motion/haptics'
 
 type AddMode = 'closed' | 'choice' | 'photo' | 'manual'
 type StoryMode = null | 'day' | 'month'
 type AppView = 'diary' | 'calendar' | 'pets'
 type AuthMode = 'signIn' | 'signUp' | 'magic'
 
+const APP_VIEW_ORDER: AppView[] = ['diary', 'calendar', 'pets']
+
 type ExpenseForm = {
   title: string
   amount: string
   category: LedgerCategoryId
   memo: string
+  moodScore: MoodScore | null
   kind: LedgerKind
 }
+
+type ExpenseFormChange = <K extends keyof ExpenseForm>(
+  field: K,
+  value: ExpenseForm[K],
+) => void
 
 const STORAGE_KEY = 'cashlog.expenses'
 const PET_STORAGE_KEY = 'cashlog.pet'
@@ -135,6 +147,7 @@ const loadExpenses = (): Expense[] => {
         imageUrl: durableImageUrl,
         kind,
         category,
+        moodScore: normalizeMoodScore(expense.moodScore),
         createdAt: expense.createdAt ?? expense.updatedAt ?? expense.dateTime,
         updatedAt: expense.updatedAt ?? expense.createdAt ?? expense.dateTime,
       }
@@ -150,9 +163,10 @@ const defaultIncomeLeafId =
 
 const emptyForm = (): ExpenseForm => ({
   title: '',
-  amount: '',
+  amount: '0',
   category: defaultExpenseLeafId,
   memo: '',
+  moodScore: null,
   kind: 'expense',
 })
 
@@ -182,6 +196,7 @@ function CashlogApp() {
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [storyMode, setStoryMode] = useState<StoryMode>(null)
   const [activeView, setActiveView] = useState<AppView>('diary')
+  const [viewDirection, setViewDirection] = useState(1)
   const [showAccount, setShowAccount] = useState(false)
   const [aiContext, setAiContext] = useState<'friends' | 'solo' | null>(null)
   const [relativeMinuteTick, setRelativeMinuteTick] = useState(0)
@@ -284,6 +299,7 @@ function CashlogApp() {
         amount: String(nextAnalysis.suggestedAmount),
         category: nextAnalysis.suggestedCategory,
         memo: nextAnalysis.suggestedMemo,
+        moodScore: null,
         kind: 'expense',
       })
     } catch (e) {
@@ -484,6 +500,7 @@ function CashlogApp() {
   const selectedDayEarned = dayIncomeTotal(selectedExpenses)
   const selectedDayPhotos = selectedExpenses.filter((expense) => expense.imageUrl).slice(0, 3)
   const selectedDayExpenseMoments = selectedExpenses.filter((expense) => expense.kind === 'expense')
+  const recentMoodScore = expenses.find((expense) => expense.moodScore)?.moodScore
   const dominantDayCategory = (() => {
     const counts = new Map<string, { count: number; label: string }>()
     selectedDayExpenseMoments.forEach((expense) => {
@@ -739,6 +756,7 @@ function CashlogApp() {
   }, [expenseToSlide, expenses, relativeMinuteTick, yearMonth])
 
   const openChoice = () => {
+    signalSoftImpact()
     stopCamera()
     revokeAndClearPreview()
     setCaptureKind('photo')
@@ -747,6 +765,7 @@ function CashlogApp() {
   }
 
   const openPhotoCapture = async () => {
+    signalSoftImpact()
     stopCamera()
     revokeAndClearPreview()
     setCaptureKind('photo')
@@ -757,6 +776,7 @@ function CashlogApp() {
   }
 
   const openManual = () => {
+    signalSoftImpact()
     stopCamera()
     revokeAndClearPreview()
     setForm(emptyForm())
@@ -997,6 +1017,7 @@ function CashlogApp() {
               amount,
               category: categoryNormalized,
               memo: form.memo.trim(),
+              moodScore: form.moodScore ?? undefined,
               kind: form.kind,
             }
           : {
@@ -1005,6 +1026,7 @@ function CashlogApp() {
                 amount,
                 category: categoryNormalized,
                 memo: form.memo.trim(),
+                moodScore: form.moodScore ?? undefined,
                 dateTime,
                 kind: form.kind,
               }),
@@ -1021,6 +1043,7 @@ function CashlogApp() {
         amount,
         category: categoryNormalized,
         memo: form.memo.trim(),
+        moodScore: form.moodScore ?? undefined,
         dateTime,
         kind: form.kind,
       })
@@ -1146,7 +1169,7 @@ function CashlogApp() {
     setIsSaving(false)
   }
 
-  const updateForm = (field: keyof ExpenseForm, value: string | LedgerKind) => {
+  const updateForm: ExpenseFormChange = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }))
   }
 
@@ -1179,8 +1202,27 @@ function CashlogApp() {
     updateForm('memo', context === 'friends' ? '친구와 함께' : '혼자 보낸 시간')
   }
 
+  const navigateToView = useCallback((nextView: AppView) => {
+    if (nextView === activeView) return
+    const currentIndex = APP_VIEW_ORDER.indexOf(activeView)
+    const nextIndex = APP_VIEW_ORDER.indexOf(nextView)
+    setViewDirection(nextIndex > currentIndex ? 1 : -1)
+    setActiveView(nextView)
+    signalSoftImpact()
+  }, [activeView])
+
+  const viewVariants = {
+    enter: (direction: number) => prefersReducedMotion
+      ? { opacity: 0 }
+      : { opacity: 0, x: direction * 42, scale: 0.985 },
+    center: { opacity: 1, x: 0, scale: 1 },
+    exit: (direction: number) => prefersReducedMotion
+      ? { opacity: 0 }
+      : { opacity: 0, x: direction * -28, scale: 0.992 },
+  }
+
   return (
-    <main className={`app-shell${activeView === 'diary' ? ' timeline-app-shell' : ''}`}>
+    <main className="app-shell timeline-app-shell">
       <header className="timeline-topbar">
         <button
           type="button"
@@ -1216,13 +1258,13 @@ function CashlogApp() {
           initial={
             prefersReducedMotion
               ? { opacity: 0 }
-              : { opacity: 0, transform: 'translate3d(0, -8px, 0) rotate(0.8deg)' }
+              : { opacity: 0, y: -10, scale: 0.98 }
           }
-          animate={{ opacity: 1, transform: 'translate3d(0, 0, 0) rotate(0.8deg)' }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={
             prefersReducedMotion
               ? { opacity: 0 }
-              : { opacity: 0, transform: 'translate3d(0, -6px, 0) rotate(0.8deg)' }
+              : { opacity: 0, y: -8, scale: 0.985 }
           }
           transition={
             prefersReducedMotion
@@ -1338,10 +1380,41 @@ function CashlogApp() {
         )}
       </AnimatePresence>
 
+      <motion.div
+        className="app-view-viewport"
+        animate={
+          addMode === 'closed'
+            ? { scale: 1, y: 0, opacity: 1 }
+            : prefersReducedMotion
+              ? { opacity: 0.94 }
+              : { scale: 0.985, y: -6, opacity: 0.92 }
+        }
+        transition={
+          prefersReducedMotion
+            ? { duration: 0.14 }
+            : { type: 'spring', duration: 0.34, bounce: 0 }
+        }
+      >
+        <AnimatePresence initial={false} custom={viewDirection} mode="popLayout">
+          <motion.div
+            key={activeView}
+            className="app-view-screen"
+            custom={viewDirection}
+            variants={viewVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={
+              prefersReducedMotion
+                ? { duration: 0.14, ease: [0.23, 1, 0.32, 1] }
+                : { type: 'spring', duration: 0.42, bounce: 0 }
+            }
+          >
       {activeView === 'pets' ? (
         <PetCorner
           totalRecords={expenses.length}
           petState={petState}
+          recentMoodScore={recentMoodScore}
           onKindChange={handlePetKindChange}
           onBreedChange={handleBreedChange}
           onOutfitChange={handleOutfitChange}
@@ -1416,7 +1489,7 @@ function CashlogApp() {
           <header className="today-heading">
             <div>
               <p className="eyebrow">TODAY</p>
-              <button type="button" className="date-switcher" onClick={() => setActiveView('calendar')}>
+              <button type="button" className="date-switcher" onClick={() => navigateToView('calendar')}>
                 {selectedDateLabel} <ChevronDown size={20} aria-hidden />
               </button>
             </div>
@@ -1491,6 +1564,12 @@ function CashlogApp() {
                           {expense.kind === 'income' ? '+' : ''}{formatCurrency(expense.amount)}
                         </strong>
                       </div>
+                      {expense.moodScore && (
+                        <span className="entry-mood" aria-label={`기분 ${expense.moodScore}점, ${getMoodOption(expense.moodScore).label}`}>
+                          <span aria-hidden>{getMoodOption(expense.moodScore).face}</span>
+                          {expense.moodScore}/5 · {getMoodOption(expense.moodScore).label}
+                        </span>
+                      )}
                       {expense.memo && <p>{expense.memo}</p>}
                       <Check className="entry-check" size={18} aria-label="기록 완료" />
                     </div>
@@ -1518,17 +1597,44 @@ function CashlogApp() {
           <button type="button" className="sr-only-action" onClick={openChoice}>+ 기록 추가</button>
         </section>
       )}
+          </motion.div>
+        </AnimatePresence>
+      </motion.div>
 
       <nav className="bottom-nav" aria-label="주요 화면">
-        <button type="button" className={activeView === 'diary' ? 'active' : ''} aria-pressed={activeView === 'diary'} onClick={() => setActiveView('diary')}>
-          <BarChart3 size={22} aria-hidden /><span>하루 타임라인</span>
-        </button>
-        <button type="button" className={activeView === 'calendar' ? 'active' : ''} aria-pressed={activeView === 'calendar'} onClick={() => setActiveView('calendar')}>
-          <CalendarDays size={22} aria-hidden /><span>달력</span>
-        </button>
-        <button type="button" className={activeView === 'pets' ? 'active' : ''} aria-pressed={activeView === 'pets'} onClick={() => setActiveView('pets')}>
-          <PawPrint size={22} aria-hidden /><span>{selectedPetName}</span>
-        </button>
+        <motion.button
+          type="button"
+          className={activeView === 'diary' ? 'active' : ''}
+          aria-label="하루 타임라인"
+          aria-pressed={activeView === 'diary'}
+          onClick={() => navigateToView('diary')}
+          whileTap={prefersReducedMotion ? undefined : { scale: 0.94 }}
+        >
+          {activeView === 'diary' && <motion.span className="bottom-nav-selection" layoutId="bottom-nav-selection" transition={{ type: 'spring', duration: 0.32, bounce: 0.06 }} aria-hidden="true" />}
+          <span className="bottom-nav-content"><BarChart3 size={21} aria-hidden /><span>기록</span></span>
+        </motion.button>
+        <motion.button
+          type="button"
+          className={activeView === 'calendar' ? 'active' : ''}
+          aria-label="달력"
+          aria-pressed={activeView === 'calendar'}
+          onClick={() => navigateToView('calendar')}
+          whileTap={prefersReducedMotion ? undefined : { scale: 0.94 }}
+        >
+          {activeView === 'calendar' && <motion.span className="bottom-nav-selection" layoutId="bottom-nav-selection" transition={{ type: 'spring', duration: 0.32, bounce: 0.06 }} aria-hidden="true" />}
+          <span className="bottom-nav-content"><CalendarDays size={21} aria-hidden /><span>달력</span></span>
+        </motion.button>
+        <motion.button
+          type="button"
+          className={activeView === 'pets' ? 'active' : ''}
+          aria-label={selectedPetName}
+          aria-pressed={activeView === 'pets'}
+          onClick={() => navigateToView('pets')}
+          whileTap={prefersReducedMotion ? undefined : { scale: 0.94 }}
+        >
+          {activeView === 'pets' && <motion.span className="bottom-nav-selection" layoutId="bottom-nav-selection" transition={{ type: 'spring', duration: 0.32, bounce: 0.06 }} aria-hidden="true" />}
+          <span className="bottom-nav-content"><PawPrint size={21} aria-hidden /><span>{selectedPetName}</span></span>
+        </motion.button>
       </nav>
 
       <motion.section
@@ -1549,10 +1655,10 @@ function CashlogApp() {
             initial={false}
             animate={
               addMode !== 'closed'
-                ? { opacity: 1, transform: 'translate3d(0, 0, 0) scale(1)' }
+                ? { opacity: 1, y: 0, scale: 1 }
                 : prefersReducedMotion
-                  ? { opacity: 0, transform: 'none' }
-                  : { opacity: 0, transform: 'translate3d(0, 28px, 0) scale(0.98)' }
+                  ? { opacity: 0, y: 0, scale: 1 }
+                  : { opacity: 0, y: 28, scale: 0.98 }
             }
             transition={
               prefersReducedMotion
@@ -1832,7 +1938,7 @@ function ExpenseEditor({
   petName,
 }: {
   form: ExpenseForm
-  onChange: (field: keyof ExpenseForm, value: string | LedgerKind) => void
+  onChange: ExpenseFormChange
   onLedgerKindChange: (kind: LedgerKind) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   isSaving: boolean
@@ -1840,18 +1946,7 @@ function ExpenseEditor({
   detectedItemCount?: number
   petName?: string
 }) {
-  const expenseMeta = getCategoryMeta(form.category as CategoryId)
-  const expenseActiveGroup = expenseMeta.group
-  const incomeMeta = getIncomeCategoryMeta(form.category as IncomeCategoryId)
-  const incomeActiveGroup = incomeMeta.group
-
-  const categoryLegend =
-    form.kind === 'expense' ? '지출 카테고리 (편한가계부 분류)' : '수입 카테고리 (편한가계부 분류)'
-
-  const categoryHint =
-    form.kind === 'expense'
-      ? '편한가계부처럼 대분류를 고른 뒤 소분류를 선택하세요.'
-      : '수입은 지출과 다른 카테고리 트리로 정리합니다. 같은 방식으로 골라 주세요.'
+  const canSubmit = Boolean(form.title.trim()) && Number(form.amount) > 0
 
   return (
     <form className={`expense-form${assistantMode ? ' assistant-expense-form' : ''}`} onSubmit={onSubmit}>
@@ -1885,6 +1980,7 @@ function ExpenseEditor({
           </button>
         </div>
       </fieldset>
+      <AmountEditor form={form} onChange={onChange} assistantMode={assistantMode} />
       <label>
         {assistantMode ? '이 장면의 이름' : '제목'}
         <input
@@ -1895,65 +1991,148 @@ function ExpenseEditor({
           }
         />
       </label>
-      <label>
-        {assistantMode ? '총 결제금액' : '금액'}
-        <input
-          inputMode="numeric"
-          value={form.amount}
-          onChange={(event) => onChange('amount', event.target.value)}
-          placeholder="0"
-        />
-      </label>
-      <fieldset className="feeling-fieldset">
-        <legend>이 소비는 어떤 기분으로 남길까?</legend>
-        <div className="feeling-options" role="group" aria-label="소비 기분">
-          <button type="button" className={form.memo === '기분 좋은 소비' ? 'active' : ''} onClick={() => onChange('memo', '기분 좋은 소비')}><Smile size={17} />기분 좋아</button>
-          <button type="button" className={form.memo === '나를 위한 소비' ? 'active' : ''} onClick={() => onChange('memo', '나를 위한 소비')}><Heart size={17} />나를 위해</button>
-          <button type="button" className={form.memo === '같이 즐긴 소비' ? 'active' : ''} onClick={() => onChange('memo', '같이 즐긴 소비')}><Users size={17} />같이 즐김</button>
-          <button type="button" className={form.memo === '조금 아쉬운 소비' ? 'active' : ''} onClick={() => onChange('memo', '조금 아쉬운 소비')}><CloudRain size={17} />조금 아쉬워</button>
-        </div>
-      </fieldset>
+      <CategoryEditor form={form} onChange={onChange} />
+      <MoodScoreEditor form={form} onChange={onChange} />
       {assistantMode ? (
         <details className="expense-more-details">
-          <summary>카테고리와 메모 직접 고치기</summary>
+          <summary>메모 더 남기기</summary>
           <div className="expense-more-fields">
-            <CategoryEditor form={form} onChange={onChange} categoryLegend={categoryLegend} categoryHint={categoryHint} expenseActiveGroup={expenseActiveGroup} incomeActiveGroup={incomeActiveGroup} />
             <MemoEditor form={form} onChange={onChange} />
           </div>
         </details>
       ) : (
-        <>
-          <details className="expense-more-details category-quick-details">
-            <summary>
-              카테고리 · {form.kind === 'expense'
-                ? formatCategoryLabel(form.category as CategoryId)
-                : formatIncomeCategoryLabel(form.category as IncomeCategoryId)}
-            </summary>
-            <div className="expense-more-fields">
-              <CategoryEditor form={form} onChange={onChange} categoryLegend={categoryLegend} categoryHint={categoryHint} expenseActiveGroup={expenseActiveGroup} incomeActiveGroup={incomeActiveGroup} />
-            </div>
-          </details>
-          <MemoEditor form={form} onChange={onChange} />
-        </>
+        <MemoEditor form={form} onChange={onChange} />
       )}
-      <button type="submit" className="primary-button" disabled={isSaving}>
+      <button type="submit" className="primary-button" disabled={isSaving || !canSubmit}>
         {isSaving ? '사진 보관 중...' : assistantMode ? '이 장면으로 저장' : '저장하기'}
       </button>
     </form>
   )
 }
 
-function CategoryEditor({ form, onChange, categoryLegend, categoryHint, expenseActiveGroup, incomeActiveGroup }: {
+function AmountEditor({ form, onChange, assistantMode }: {
   form: ExpenseForm
-  onChange: (field: keyof ExpenseForm, value: string | LedgerKind) => void
-  categoryLegend: string
-  categoryHint: string
-  expenseActiveGroup: ReturnType<typeof getCategoryMeta>['group']
-  incomeActiveGroup: ReturnType<typeof getIncomeCategoryMeta>['group']
+  onChange: ExpenseFormChange
+  assistantMode: boolean
 }) {
+  const numericAmount = Number(form.amount) || 0
+  const addAmount = (amount: number) => {
+    const next = Math.min(9_999_999_999, numericAmount + amount)
+    onChange('amount', String(next))
+    signalSoftImpact()
+  }
+
+  return (
+    <div className="amount-editor">
+      <div className="amount-editor-heading">
+        <label htmlFor="cashlog-amount">{assistantMode ? '총 결제금액' : '결제금액'}</label>
+        <output htmlFor="cashlog-amount" aria-live="polite">
+          {numericAmount > 0 ? formatCurrency(numericAmount) : '금액 입력'}
+        </output>
+      </div>
+      <div className="amount-input-shell">
+        <input
+          id="cashlog-amount"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          autoComplete="off"
+          maxLength={10}
+          value={form.amount}
+          aria-label="금액"
+          onFocus={() => {
+            if (form.amount === '0') onChange('amount', '')
+          }}
+          onChange={(event) => onChange('amount', normalizeAmountInput(event.target.value))}
+          onBlur={() => {
+            if (!form.amount) onChange('amount', '0')
+          }}
+          placeholder="0"
+          aria-describedby="cashlog-amount-preview"
+        />
+        <span aria-hidden>원</span>
+      </div>
+      <span id="cashlog-amount-preview" className="sr-only">
+        {numericAmount > 0 ? `${numericAmount.toLocaleString('ko-KR')}원` : '입력된 금액 없음'}
+      </span>
+      <div className="amount-quick-actions" role="group" aria-label="금액 빠른 더하기">
+        {[1_000, 5_000, 10_000, 50_000].map((amount) => (
+          <button key={amount} type="button" onClick={() => addAmount(amount)}>
+            <Plus size={14} aria-hidden />
+            {amount >= 10_000 ? `${amount / 10_000}만` : `${amount / 1_000}천`}
+          </button>
+        ))}
+        <button
+          type="button"
+          className="amount-reset"
+          onClick={() => {
+            onChange('amount', '0')
+            signalSoftImpact()
+          }}
+          aria-label="금액 초기화"
+          title="금액 초기화"
+        >
+          <RotateCcw size={15} aria-hidden />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function MoodScoreEditor({ form, onChange }: {
+  form: ExpenseForm
+  onChange: ExpenseFormChange
+}) {
+  return (
+    <fieldset className="mood-score-fieldset">
+      <div className="mood-score-heading">
+        <legend>기분 점수</legend>
+        <output aria-live="polite">
+          {form.moodScore ? `${form.moodScore}/5 · ${moodOptions[form.moodScore - 1].label}` : '선택 안 함'}
+        </output>
+      </div>
+      <div className="mood-score-options" role="group" aria-label="기분 점수 1점에서 5점">
+        {moodOptions.map((option) => (
+          <button
+            key={option.score}
+            type="button"
+            className={form.moodScore === option.score ? 'active' : ''}
+            aria-pressed={form.moodScore === option.score}
+            aria-label={`${option.score}점 ${option.label}`}
+            onClick={() => {
+              onChange('moodScore', form.moodScore === option.score ? null : option.score)
+              signalSoftImpact()
+            }}
+          >
+            <span aria-hidden>{option.face}</span>
+            <strong>{option.score}</strong>
+            <small>{option.label}</small>
+          </button>
+        ))}
+      </div>
+    </fieldset>
+  )
+}
+
+function CategoryEditor({ form, onChange }: {
+  form: ExpenseForm
+  onChange: ExpenseFormChange
+}) {
+  const expenseMeta = getCategoryMeta(form.category as CategoryId)
+  const incomeMeta = getIncomeCategoryMeta(form.category as IncomeCategoryId)
+  const activeGroup = form.kind === 'expense' ? expenseMeta.group : incomeMeta.group
+  const activeLeaf = form.kind === 'expense' ? expenseMeta.leaf : incomeMeta.leaf
   return <fieldset className="category-fieldset">
-        <legend>{categoryLegend}</legend>
-        <p className="category-hint">{categoryHint}</p>
+        <legend>카테고리</legend>
+        <div className="category-selection-path" aria-live="polite">
+          <span aria-hidden>{activeGroup.icon}</span>
+          <strong>{activeGroup.name}</strong>
+          <ArrowRight size={14} aria-hidden />
+          <b>{activeLeaf.name}</b>
+        </div>
+        <div className="category-step-heading">
+          <span>1</span>
+          <strong>대분류</strong>
+        </div>
         {form.kind === 'expense' ? (
           <>
             <div className="category-groups" role="group" aria-label="대분류">
@@ -1962,18 +2141,29 @@ function CategoryEditor({ form, onChange, categoryLegend, categoryHint, expenseA
                   key={group.id}
                   type="button"
                   className={
-                    group.id === expenseActiveGroup.id ? 'category-pill active' : 'category-pill'
+                    group.id === expenseMeta.group.id ? 'category-pill active' : 'category-pill'
                   }
-                  aria-pressed={group.id === expenseActiveGroup.id}
+                  aria-pressed={group.id === expenseMeta.group.id}
                   aria-label={`대분류: ${group.name}`}
-                  onClick={() => onChange('category', group.leaves[0].id)}
+                  style={{ '--category-accent': group.color } as CSSProperties}
+                  onClick={() => {
+                    onChange('category', group.leaves[0].id)
+                    signalSoftImpact()
+                  }}
                 >
-                  {group.name}
+                  <span aria-hidden>{group.icon}</span>
+                  <strong>{group.name}</strong>
+                  {group.id === expenseMeta.group.id && <Check size={14} aria-hidden />}
                 </button>
               ))}
             </div>
+            <div className="category-step-heading category-leaf-heading">
+              <span>2</span>
+              <strong>소분류</strong>
+              <small>{expenseMeta.group.name}</small>
+            </div>
             <div className="category-leaves" role="group" aria-label="소분류">
-              {expenseActiveGroup.leaves.map((leaf) => (
+              {expenseMeta.group.leaves.map((leaf) => (
                 <button
                   key={leaf.id}
                   type="button"
@@ -1982,15 +2172,16 @@ function CategoryEditor({ form, onChange, categoryLegend, categoryHint, expenseA
                   }
                   aria-pressed={leaf.id === form.category}
                   aria-label={`소분류: ${leaf.name}`}
-                  onClick={() => onChange('category', leaf.id)}
+                  onClick={() => {
+                    onChange('category', leaf.id)
+                    signalSoftImpact()
+                  }}
                 >
                   {leaf.name}
+                  {leaf.id === form.category && <Check size={15} aria-hidden />}
                 </button>
               ))}
             </div>
-            <p className="category-selected">
-              선택: <strong>{formatCategoryLabel(form.category as CategoryId)}</strong>
-            </p>
           </>
         ) : (
           <>
@@ -2000,18 +2191,29 @@ function CategoryEditor({ form, onChange, categoryLegend, categoryHint, expenseA
                   key={group.id}
                   type="button"
                   className={
-                    group.id === incomeActiveGroup.id ? 'category-pill active' : 'category-pill'
+                    group.id === incomeMeta.group.id ? 'category-pill active' : 'category-pill'
                   }
-                  aria-pressed={group.id === incomeActiveGroup.id}
+                  aria-pressed={group.id === incomeMeta.group.id}
                   aria-label={`수입 대분류: ${group.name}`}
-                  onClick={() => onChange('category', group.leaves[0].id)}
+                  style={{ '--category-accent': group.color } as CSSProperties}
+                  onClick={() => {
+                    onChange('category', group.leaves[0].id)
+                    signalSoftImpact()
+                  }}
                 >
-                  {group.name}
+                  <span aria-hidden>{group.icon}</span>
+                  <strong>{group.name}</strong>
+                  {group.id === incomeMeta.group.id && <Check size={14} aria-hidden />}
                 </button>
               ))}
             </div>
+            <div className="category-step-heading category-leaf-heading">
+              <span>2</span>
+              <strong>소분류</strong>
+              <small>{incomeMeta.group.name}</small>
+            </div>
             <div className="category-leaves" role="group" aria-label="수입 소분류">
-              {incomeActiveGroup.leaves.map((leaf) => (
+              {incomeMeta.group.leaves.map((leaf) => (
                 <button
                   key={leaf.id}
                   type="button"
@@ -2020,18 +2222,16 @@ function CategoryEditor({ form, onChange, categoryLegend, categoryHint, expenseA
                   }
                   aria-pressed={leaf.id === form.category}
                   aria-label={`수입 소분류: ${leaf.name}`}
-                  onClick={() => onChange('category', leaf.id)}
+                  onClick={() => {
+                    onChange('category', leaf.id)
+                    signalSoftImpact()
+                  }}
                 >
                   {leaf.name}
+                  {leaf.id === form.category && <Check size={15} aria-hidden />}
                 </button>
               ))}
             </div>
-            <p className="category-selected">
-              선택:{' '}
-              <strong>
-                {formatIncomeCategoryLabel(form.category as IncomeCategoryId)}
-              </strong>
-            </p>
           </>
         )}
       </fieldset>
@@ -2039,7 +2239,7 @@ function CategoryEditor({ form, onChange, categoryLegend, categoryHint, expenseA
 
 function MemoEditor({ form, onChange }: {
   form: ExpenseForm
-  onChange: (field: keyof ExpenseForm, value: string | LedgerKind) => void
+  onChange: ExpenseFormChange
 }) {
   return (
       <label>

@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import {
   Cat,
+  Briefcase,
   Crown,
+  Cookie,
   Dog,
   Glasses,
+  Flower2,
   Hand,
   Lock,
+  Music2,
   Palette,
   PartyPopper,
   PawPrint,
@@ -13,6 +18,7 @@ import {
   Sparkles,
   Wind,
 } from 'lucide-react'
+import { getMoodOption, type MoodScore } from '../domain/cashlog'
 import {
   computeLevel,
   catBreeds,
@@ -31,12 +37,13 @@ import {
   type PetState,
 } from '../domain/pet'
 import { signalSoftImpact } from '../motion/haptics'
-import { InteractivePet3D, PetPortrait } from './InteractivePet3D'
+import { InteractivePet3D, PetPortrait, type PetAction } from './InteractivePet3D'
 import './PetCorner.css'
 
 type PetCornerProps = {
   totalRecords: number
   petState: PetState
+  recentMoodScore?: MoodScore
   cloudStatus?: string
   onKindChange: (kind: PetKind) => void
   onBreedChange: {
@@ -55,6 +62,9 @@ const outfitIcon = (id: OutfitId) => {
   if (id === 'glasses') return <Glasses size={19} />
   if (id === 'scarf') return <Wind size={19} />
   if (id === 'crown') return <Crown size={19} />
+  if (id === 'flower') return <Flower2 size={19} />
+  if (id === 'beret') return <Crown size={19} />
+  if (id === 'mini_bag') return <Briefcase size={19} />
   if (id === 'bow') return <Sparkles size={19} />
   return <PawPrint size={19} />
 }
@@ -62,15 +72,18 @@ const outfitIcon = (id: OutfitId) => {
 export function PetCorner({
   totalRecords,
   petState,
+  recentMoodScore,
   cloudStatus,
   onKindChange,
   onBreedChange,
   onOutfitChange,
   onPaletteChange,
 }: PetCornerProps) {
+  const prefersReducedMotion = useReducedMotion()
   const level = computeLevel(totalRecords)
   const [cheer, setCheer] = useState(false)
   const [cheerRequest, setCheerRequest] = useState(0)
+  const [petAction, setPetAction] = useState<PetAction>('pet')
   const [wardrobeTab, setWardrobeTab] = useState<WardrobeTab>('outfits')
   const cheerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -81,8 +94,9 @@ export function PetCorner({
     }
   }, [])
 
-  const play = useCallback(() => {
+  const play = useCallback((action: PetAction = 'pet') => {
     signalSoftImpact()
+    setPetAction(action)
     setCheer(true)
     setCheerRequest((request) => request + 1)
   }, [])
@@ -95,6 +109,12 @@ export function PetCorner({
   }, [cheerRequest, clearCheer])
 
   useEffect(() => clearCheer, [clearCheer])
+
+  const selectWardrobeTab = useCallback((nextTab: WardrobeTab) => {
+    if (nextTab === wardrobeTab) return
+    setWardrobeTab(nextTab)
+    signalSoftImpact()
+  }, [wardrobeTab])
 
   const atMax = level.remaining === 0
   const pct = Math.round(level.progress * 100)
@@ -127,7 +147,7 @@ export function PetCorner({
                 disabled={!unlocked}
                 onClick={() => {
                   onOutfitChange(kind, o.id)
-                  play()
+                  play('dance')
                 }}
               >
                 <span className="outfit-chip-icon" aria-hidden>{unlocked ? outfitIcon(o.id) : <Lock size={18} />}</span>
@@ -159,7 +179,7 @@ export function PetCorner({
                 aria-label={`${label} ${palette.name} 색칠`}
                 onClick={() => {
                   onPaletteChange(kind, palette.id)
-                  play()
+                  play('dance')
                 }}
               >
                 <span
@@ -197,7 +217,7 @@ export function PetCorner({
               onClick={() => {
                 if (activeKind === 'cat') onBreedChange('cat', breed.id as CatBreedId)
                 else onBreedChange('dog', breed.id as DogBreedId)
-                play()
+                play('dance')
               }}
             >
               <strong>{breed.name}</strong>
@@ -219,7 +239,7 @@ export function PetCorner({
           </h2>
           {cloudStatus && <small className="pet-sync-caption">{cloudStatus}</small>}
         </div>
-        <button type="button" className="ghost-button pet-play-btn" onClick={play}>
+        <button type="button" className="ghost-button pet-play-btn" onClick={() => play('pet')}>
           <Hand size={17} aria-hidden="true" /> 쓰다듬기
         </button>
       </div>
@@ -231,9 +251,17 @@ export function PetCorner({
           aria-pressed={activeKind === 'cat'}
           onClick={() => {
             onKindChange('cat')
-            play()
+            play('dance')
           }}
         >
+          {activeKind === 'cat' && (
+            <motion.span
+              className="pet-kind-selection"
+              layoutId="pet-kind-selection"
+              transition={{ type: 'spring', duration: 0.34, bounce: 0.08 }}
+              aria-hidden="true"
+            />
+          )}
           <PetPortrait kind="cat" name={petState.catName} className="pet-kind-preview" />
           <span><Cat size={15} aria-hidden="true" /> 고양이</span>
           <strong>{getPetBreed('cat', petState.catBreed).name}</strong>
@@ -244,9 +272,17 @@ export function PetCorner({
           aria-pressed={activeKind === 'dog'}
           onClick={() => {
             onKindChange('dog')
-            play()
+            play('dance')
           }}
         >
+          {activeKind === 'dog' && (
+            <motion.span
+              className="pet-kind-selection"
+              layoutId="pet-kind-selection"
+              transition={{ type: 'spring', duration: 0.34, bounce: 0.08 }}
+              aria-hidden="true"
+            />
+          )}
           <PetPortrait kind="dog" name={petState.dogName} className="pet-kind-preview" />
           <span><Dog size={15} aria-hidden="true" /> 강아지</span>
           <strong>{getPetBreed('dog', petState.dogBreed).name}</strong>
@@ -254,14 +290,31 @@ export function PetCorner({
       </div>
 
       <div className={`pet-stage pet-stage-3d${cheer ? ' is-cheering' : ''}`}>
-        <InteractivePet3D
-          kind={activeKind}
-          name={activeName}
-          palette={activePalette}
-          outfit={activeOutfit}
-          breed={activeKind === 'cat' ? petState.catBreed : petState.dogBreed}
-          cheer={cheer}
-        />
+        <AnimatePresence initial={false} mode="popLayout">
+          <motion.div
+            key={`${activeKind}-${activeBreed.id}-${activePalette}-${activeOutfit}`}
+            className="pet-character-stage"
+            initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.94, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.97, y: -8 }}
+            transition={
+              prefersReducedMotion
+                ? { duration: 0.14 }
+                : { type: 'spring', duration: 0.38, bounce: 0.08 }
+            }
+          >
+            <InteractivePet3D
+              kind={activeKind}
+              name={activeName}
+              palette={activePalette}
+              outfit={activeOutfit}
+              breed={activeKind === 'cat' ? petState.catBreed : petState.dogBreed}
+              action={petAction}
+              actionRequest={cheerRequest}
+              moodScore={recentMoodScore}
+            />
+          </motion.div>
+        </AnimatePresence>
         <div className="pet-stage-copy">
           <span className="pet-bond" aria-hidden><Sparkles size={22} /></span>
           <strong>{activeBreed.name}</strong>
@@ -276,6 +329,12 @@ export function PetCorner({
             <span aria-hidden>·</span>
             <span>{getOutfit(activeOutfit).name}</span>
           </div>
+          {recentMoodScore && (
+            <span className="pet-recent-mood">
+              <span aria-hidden>{getMoodOption(recentMoodScore).face}</span>
+              최근 기분 {recentMoodScore}/5
+            </span>
+          )}
         </div>
         {cheer && (
           <div className="pet-hearts" aria-hidden>
@@ -284,6 +343,25 @@ export function PetCorner({
             <span>♡</span>
           </div>
         )}
+      </div>
+
+      <div className="pet-action-row" role="group" aria-label={`${activeName}와 놀기`}>
+        <button type="button" onClick={() => play('pet')}>
+          <Hand size={18} aria-hidden />
+          <span>쓰다듬기</span>
+        </button>
+        <button type="button" onClick={() => play('treat')}>
+          <Cookie size={18} aria-hidden />
+          <span>간식</span>
+        </button>
+        <button type="button" onClick={() => play('highfive')}>
+          <Sparkles size={18} aria-hidden />
+          <span>하이파이브</span>
+        </button>
+        <button type="button" onClick={() => play('dance')}>
+          <Music2 size={18} aria-hidden />
+          <span>댄스</span>
+        </button>
       </div>
 
       <div className="pet-level">
@@ -313,20 +391,38 @@ export function PetCorner({
 
       <div className="pet-wardrobe">
         <div className="pet-wardrobe-tabs" role="tablist" aria-label="나비 꾸미기 메뉴">
-          <button type="button" role="tab" aria-selected={wardrobeTab === 'outfits'} onClick={() => setWardrobeTab('outfits')}>
+          <button id="pet-tab-outfits" type="button" role="tab" aria-controls="pet-wardrobe-panel" aria-selected={wardrobeTab === 'outfits'} onClick={() => selectWardrobeTab('outfits')}>
+            {wardrobeTab === 'outfits' && <motion.span className="wardrobe-tab-selection" layoutId="wardrobe-tab-selection" transition={{ type: 'spring', duration: 0.3, bounce: 0 }} aria-hidden="true" />}
             <Shirt size={17} aria-hidden /> 옷장
           </button>
-          <button type="button" role="tab" aria-selected={wardrobeTab === 'colors'} onClick={() => setWardrobeTab('colors')}>
+          <button id="pet-tab-colors" type="button" role="tab" aria-controls="pet-wardrobe-panel" aria-selected={wardrobeTab === 'colors'} onClick={() => selectWardrobeTab('colors')}>
+            {wardrobeTab === 'colors' && <motion.span className="wardrobe-tab-selection" layoutId="wardrobe-tab-selection" transition={{ type: 'spring', duration: 0.3, bounce: 0 }} aria-hidden="true" />}
             <Palette size={17} aria-hidden /> 컬러
           </button>
-          <button type="button" role="tab" aria-selected={wardrobeTab === 'breeds'} onClick={() => setWardrobeTab('breeds')}>
+          <button id="pet-tab-breeds" type="button" role="tab" aria-controls="pet-wardrobe-panel" aria-selected={wardrobeTab === 'breeds'} onClick={() => selectWardrobeTab('breeds')}>
+            {wardrobeTab === 'breeds' && <motion.span className="wardrobe-tab-selection" layoutId="wardrobe-tab-selection" transition={{ type: 'spring', duration: 0.3, bounce: 0 }} aria-hidden="true" />}
             <PawPrint size={17} aria-hidden /> 종류
           </button>
         </div>
-        <div className="pet-wardrobe-panel" role="tabpanel">
-          {wardrobeTab === 'outfits' && renderOutfits(activeKind)}
-          {wardrobeTab === 'colors' && renderColors(activeKind)}
-          {wardrobeTab === 'breeds' && renderBreeds()}
+        <div id="pet-wardrobe-panel" className="pet-wardrobe-panel" role="tabpanel" aria-labelledby={`pet-tab-${wardrobeTab}`}>
+          <AnimatePresence initial={false} mode="popLayout">
+            <motion.div
+              key={wardrobeTab}
+              className="pet-wardrobe-panel-content"
+              initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, x: 12 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, x: -8 }}
+              transition={
+                prefersReducedMotion
+                  ? { duration: 0.12 }
+                  : { type: 'spring', duration: 0.28, bounce: 0 }
+              }
+            >
+              {wardrobeTab === 'outfits' && renderOutfits(activeKind)}
+              {wardrobeTab === 'colors' && renderColors(activeKind)}
+              {wardrobeTab === 'breeds' && renderBreeds()}
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
 

@@ -136,8 +136,7 @@ describe('Cashlog photo MVP', () => {
     await user.click(screen.getByRole('button', { name: '직접 입력' }))
     await user.type(screen.getByLabelText('제목'), '지하철 충전')
     await user.type(screen.getByLabelText('금액'), '10000')
-    await user.click(screen.getByRole('button', { name: '나를 위해' }))
-    await user.click(screen.getByText('카테고리 · 식사 · 식재료'))
+    await user.click(screen.getByRole('button', { name: '5점 최고야' }))
     await user.click(screen.getByRole('button', { name: '대분류: 교통' }))
     await user.click(screen.getByRole('button', { name: '소분류: 대중교통' }))
     await user.click(screen.getByRole('button', { name: '저장하기' }))
@@ -147,7 +146,7 @@ describe('Cashlog photo MVP', () => {
     expect(screen.getByText('지하철 충전')).toBeInTheDocument()
     expect(screen.getAllByText('10,000원').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/교통 · 대중교통/).length).toBeGreaterThan(0)
-    expect(screen.getByText('나를 위한 소비')).toBeInTheDocument()
+    expect(screen.getByText(/5\/5 · 최고야/)).toBeInTheDocument()
   })
 
   it('keeps model-improvement image retention as a separate opt-in', async () => {

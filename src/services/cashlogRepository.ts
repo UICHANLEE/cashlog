@@ -3,6 +3,8 @@ import {
   type ExpenseSource,
   type LedgerCategoryId,
   type LedgerKind,
+  type MoodScore,
+  normalizeMoodScore,
 } from '../domain/cashlog'
 import { normalizePetState, type PetState } from '../domain/pet'
 import type { CategoryFeedbackPayload, DetectedProductItem } from '../domain/productImage'
@@ -18,6 +20,7 @@ type CashlogEntryRow = {
   category: LedgerCategoryId
   title: string
   memo: string
+  mood_score?: MoodScore | null
   source: ExpenseSource
   image_url?: string | null
   image_storage_path?: string | null
@@ -57,6 +60,7 @@ const expenseToRow = (expense: Expense, userId?: string): CashlogEntryRow => ({
   category: expense.category,
   title: expense.title,
   memo: expense.memo,
+  mood_score: expense.moodScore ?? null,
   source: expense.source,
   image_url: expense.imageStoragePath ? null : durableUrl(expense.imageUrl),
   image_storage_path: expense.imageStoragePath ?? null,
@@ -74,6 +78,7 @@ const rowToExpense = (row: CashlogEntryRow): Expense => ({
   category: row.category,
   title: row.title,
   memo: row.memo,
+  ...(normalizeMoodScore(row.mood_score) ? { moodScore: normalizeMoodScore(row.mood_score) } : {}),
   source: row.source,
   ...(row.image_url ? { imageUrl: row.image_url } : {}),
   ...(row.image_storage_path ? { imageStoragePath: row.image_storage_path } : {}),

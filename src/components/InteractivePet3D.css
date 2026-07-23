@@ -1,14 +1,11 @@
 .interactive-pet-3d {
   position: relative;
   width: 100%;
-  min-height: 330px;
+  min-height: 390px;
   overflow: hidden;
-  border: 2px dashed var(--line-soft);
-  border-radius: 28px 9px 30px 8px;
-  background:
-    radial-gradient(circle at 50% 72%, rgba(255, 210, 63, 0.24), transparent 24%),
-    linear-gradient(180deg, rgba(108, 184, 255, 0.12), rgba(255, 255, 255, 0) 48%),
-    var(--paper-soft);
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0));
   cursor: grab;
   touch-action: none;
   isolation: isolate;
@@ -21,32 +18,6 @@
 .interactive-pet-3d:focus-visible {
   outline: 4px solid rgba(255, 111, 89, 0.34);
   outline-offset: 3px;
-}
-
-.interactive-pet-3d::before,
-.interactive-pet-3d::after {
-  position: absolute;
-  z-index: 0;
-  color: var(--accent);
-  font-family: var(--font-hand);
-  pointer-events: none;
-}
-
-.interactive-pet-3d::before {
-  content: '♡  ˚  ·';
-  top: 34px;
-  left: 8%;
-  font-size: 30px;
-  transform: rotate(-9deg);
-}
-
-.interactive-pet-3d::after {
-  content: '⌁  ⌁';
-  right: 8%;
-  bottom: 68px;
-  color: var(--line-soft);
-  font-size: 28px;
-  transform: rotate(7deg);
 }
 
 .interactive-pet-3d canvas {
@@ -77,24 +48,26 @@
 .pet-3d-reaction {
   position: absolute;
   z-index: 3;
-  top: 16px;
+  top: 12px;
   left: 50%;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   max-width: calc(100% - 36px);
-  padding: 7px 11px;
-  border: 2px solid var(--line);
-  border-radius: 14px 5px 14px 5px;
-  background: rgba(255, 253, 247, 0.9);
+  padding: 9px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 999px;
+  background: rgba(255, 253, 247, 0.66);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
   color: var(--ink);
   font-family: var(--font-hand);
   font-size: 15px;
   font-weight: 700;
   line-height: 1.2;
   text-align: center;
-  box-shadow: 2px 2px 0 var(--line);
-  transform: translateX(-50%) rotate(-0.8deg);
+  box-shadow: 0 8px 30px rgba(42, 37, 31, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  transform: translateX(-50%);
   pointer-events: none;
 }
 
@@ -110,22 +83,25 @@
   bottom: 14px;
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
-  border: 2px solid var(--line);
+  width: 48px;
+  height: 48px;
+  border: 1px solid rgba(255, 255, 255, 0.78);
   border-radius: 50%;
-  background: var(--crayon-pink);
+  background: rgba(255, 158, 196, 0.82);
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+  backdrop-filter: blur(18px) saturate(170%);
   color: var(--ink);
-  box-shadow: 2px 2px 0 var(--line);
+  box-shadow: 0 10px 26px rgba(119, 62, 72, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.72);
   cursor: pointer;
   transition:
     transform var(--motion-press) var(--ease-out),
     box-shadow var(--motion-press) var(--ease-out);
 }
 
-.pet-3d-touch-target:active {
-  transform: translate3d(2px, 2px, 0) scale(0.97);
-  box-shadow: none;
+.pet-3d-touch-target:active,
+.interactive-pet-3d:active .pet-3d-touch-target {
+  transform: scale(0.92);
+  box-shadow: 0 4px 12px rgba(119, 62, 72, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
 .interactive-pet-3d.is-compact {
@@ -134,8 +110,7 @@
 
 @media (max-width: 640px) {
   .interactive-pet-3d {
-    min-height: 310px;
-    border-radius: 24px 8px 26px 7px;
+    min-height: 350px;
   }
 
   .interactive-pet-3d.is-compact {
@@ -150,7 +125,17 @@
     scroll-behavior: auto;
   }
 
-  .pet-3d-touch-target:active {
+  .pet-3d-touch-target:active,
+  .interactive-pet-3d:active .pet-3d-touch-target {
     transform: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .pet-3d-reaction,
+  .pet-3d-touch-target {
+    background: var(--paper-card);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 }

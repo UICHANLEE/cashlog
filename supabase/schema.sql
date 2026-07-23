@@ -10,6 +10,7 @@ create table if not exists public.cashlog_entries (
   category text not null,
   title text not null,
   memo text not null default '',
+  mood_score smallint check (mood_score between 1 and 5),
   source text not null check (source in ('photo', 'manual')),
   image_url text,
   image_storage_path text,
@@ -360,6 +361,7 @@ alter table public.cashlog_entries add column if not exists image_storage_path t
 alter table public.cashlog_entries add column if not exists analysis_status text;
 alter table public.cashlog_entries add column if not exists analysis_revision integer not null default 0;
 alter table public.cashlog_entries add column if not exists user_category_edited_at timestamptz;
+alter table public.cashlog_entries add column if not exists mood_score smallint check (mood_score between 1 and 5);
 alter table public.cashlog_detected_items add column if not exists top3 jsonb not null default '[]'::jsonb;
 alter table public.cashlog_detected_items add column if not exists evidence jsonb not null default '{}'::jsonb;
 alter table public.cashlog_detected_items add column if not exists model_version text;

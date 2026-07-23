@@ -389,6 +389,40 @@ export type ExpenseSource = 'photo' | 'manual'
 
 export type LedgerKind = 'expense' | 'income'
 
+export type MoodScore = 1 | 2 | 3 | 4 | 5
+
+export type MoodOption = {
+  score: MoodScore
+  face: string
+  label: string
+}
+
+export const moodOptions: MoodOption[] = [
+  { score: 1, face: '😣', label: '후회돼' },
+  { score: 2, face: '😕', label: '아쉬워' },
+  { score: 3, face: '😐', label: '괜찮아' },
+  { score: 4, face: '😊', label: '만족해' },
+  { score: 5, face: '🥰', label: '최고야' },
+]
+
+export function normalizeMoodScore(value: unknown): MoodScore | undefined {
+  const score = Number(value)
+  return Number.isInteger(score) && score >= 1 && score <= 5
+    ? (score as MoodScore)
+    : undefined
+}
+
+export function getMoodOption(score: MoodScore): MoodOption {
+  return moodOptions.find((option) => option.score === score) ?? moodOptions[2]
+}
+
+/** Keep won input digit-only while removing a leading placeholder zero. */
+export function normalizeAmountInput(value: string, maxDigits = 10): string {
+  const digits = value.replace(/\D/g, '').slice(0, maxDigits)
+  if (!digits) return ''
+  return digits.replace(/^0+/, '') || '0'
+}
+
 export type Expense = {
   id: string
   dateTime: string
@@ -398,6 +432,7 @@ export type Expense = {
   category: LedgerCategoryId
   title: string
   memo: string
+  moodScore?: MoodScore
   source: ExpenseSource
   imageUrl?: string
   /** 비공개 Storage의 영구 경로. imageUrl은 만료 가능한 표시용 URL이다. */
@@ -544,6 +579,7 @@ export const createManualExpense = ({
   memo,
   dateTime,
   kind = 'expense',
+  moodScore,
 }: {
   title: string
   amount: number
@@ -551,6 +587,7 @@ export const createManualExpense = ({
   memo: string
   dateTime: string
   kind?: LedgerKind
+  moodScore?: MoodScore
 }): Expense => {
   const now = new Date().toISOString()
 
@@ -562,6 +599,7 @@ export const createManualExpense = ({
     category,
     title,
     memo,
+    ...(moodScore ? { moodScore } : {}),
     source: 'manual',
     createdAt: now,
     updatedAt: now,

@@ -84,4 +84,40 @@ describe('cashlog category feedback repository', () => {
       imageUrl: 'blob:device-photo',
     })
   })
+
+  it('round-trips the mood score through Supabase rows', async () => {
+    const row = {
+      id: 'expense-mood',
+      date_time: '2026-07-23T12:00:00.000Z',
+      amount: 7500,
+      kind: 'expense',
+      category: 'meal_cafe',
+      title: '카페',
+      memo: '',
+      mood_score: 5,
+      source: 'manual',
+      created_at: '2026-07-23T12:00:00.000Z',
+      updated_at: '2026-07-23T12:00:00.000Z',
+    }
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) =>
+      init?.method === 'POST'
+        ? new Response(null, { status: 201 })
+        : new Response(JSON.stringify([row]), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const repository = createCashlogRepository(
+      { url: 'https://project.supabase.co', anonKey: 'anon' },
+      { accessToken: 'jwt', user: { id: 'user-1' } },
+    )
+
+    const [expense] = (await repository?.listExpenses()) ?? []
+    expect(expense.moodScore).toBe(5)
+
+    await repository?.upsertExpense(expense)
+    const upsertBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))
+    expect(upsertBody[0].mood_score).toBe(5)
+  })
 })
