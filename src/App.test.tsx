@@ -73,12 +73,12 @@ describe('Cashlog photo MVP', () => {
     expect(screen.getByText(/나비와 함께 쓰는 가계부/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '나비' })).toHaveAttribute('aria-pressed', 'true')
 
-    const petStages = screen.getAllByRole('button', { name: /나비 쓰다듬기\. 드래그하면/ })
+    const petStages = screen.getAllByRole('button', { name: /나비 캐릭터\. 누르면 다정하게 인사해요/ })
     await user.click(petStages[petStages.length - 1])
-    expect(screen.getByText('나비가 기분 좋게 꼬리를 흔들어요')).toBeInTheDocument()
+    expect(screen.getByText('나비가 눈을 가늘게 뜨고 기대요')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /초코 캐릭터.*강아지.*말티즈/ }))
-    expect(screen.getAllByRole('button', { name: /초코 쓰다듬기\. 드래그하면/ })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: /초코 캐릭터\. 누르면 다정하게 인사해요/ })).toHaveLength(1)
   })
 
   it('applies and remembers Nabi wardrobe and color choices', async () => {
