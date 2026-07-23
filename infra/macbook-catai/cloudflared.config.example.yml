@@ -1,0 +1,14 @@
+tunnel: __TUNNEL_UUID__
+credentials-file: __HOME__/.cloudflared/__TUNNEL_UUID__.json
+
+# Metrics stay on loopback. Do not expose this port through the tunnel.
+metrics: 127.0.0.1:20241
+loglevel: warn
+
+ingress:
+  - hostname: __HOSTNAME__
+    path: ^/(health|analyze-image)$
+    service: http://127.0.0.1:8010
+    originRequest:
+      connectTimeout: 5s
+  - service: http_status:404
