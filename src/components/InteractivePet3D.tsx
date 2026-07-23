@@ -19,7 +19,7 @@ import {
   type PetPaletteId,
 } from '../domain/pet'
 import { signalSoftImpact } from '../motion/haptics'
-import { createPetCostumeDataUrl } from './petCostumeArtwork'
+import { getPetAssetPath } from './petAssets'
 import './InteractivePet3D.css'
 
 type InteractivePet3DProps = {
@@ -41,10 +41,9 @@ export type PetAction = 'pet' | 'treat' | 'highfive' | 'dance'
 type PetPortraitProps = {
   kind: PetKind
   name: string
+  outfit?: OutfitId
   className?: string
 }
-
-const portraitPath = (kind: PetKind) => `/pets/${kind}-3d.png`
 
 const actionMessages = (name: string): Record<PetAction, string> => ({
   pet: `${name}가 눈을 가늘게 뜨고 기대요`,
@@ -53,11 +52,16 @@ const actionMessages = (name: string): Record<PetAction, string> => ({
   dance: `${name}가 기분 좋게 살랑거려요`,
 })
 
-export function PetPortrait({ kind, name, className = '' }: PetPortraitProps) {
+export function PetPortrait({
+  kind,
+  name,
+  outfit = 'none',
+  className = '',
+}: PetPortraitProps) {
   return (
     <img
       className={`pet-portrait-3d ${className}`.trim()}
-      src={portraitPath(kind)}
+      src={getPetAssetPath(kind, outfit)}
       alt={`${name} 캐릭터`}
       draggable={false}
     />
@@ -82,10 +86,11 @@ export function InteractivePet3D({
   const triggerRef = useRef<((nextAction: PetAction) => void) | null>(null)
   const reactionTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [canvasReady, setCanvasReady] = useState(false)
-  const [costumeReady, setCostumeReady] = useState(outfit === 'none')
+  const [assetReady, setAssetReady] = useState(false)
   const [reaction, setReaction] = useState(`${name}가 편안하게 바라보고 있어요`)
   const colors = getPetPalette(palette)
   const currentOutfit = getOutfit(outfit)
+  const petAssetPath = getPetAssetPath(kind, outfit)
 
   const announce = useCallback((message: string) => {
     setReaction(message)
@@ -171,14 +176,12 @@ export function InteractivePet3D({
 
     let portrait: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> | null = null
     let tintOverlay: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> | null = null
-    let costume: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> | null = null
     let texture: THREE.Texture | null = null
-    let costumeTexture: THREE.Texture | null = null
     let disposed = false
 
     const loader = new THREE.TextureLoader()
     loader.load(
-      portraitPath(kind),
+      petAssetPath,
       (loadedTexture) => {
         if (disposed) {
           loadedTexture.dispose()
@@ -201,7 +204,7 @@ export function InteractivePet3D({
         portrait.renderOrder = 1
         character.add(portrait)
 
-        if (palette !== 'cream') {
+        if (palette !== 'cream' && outfit === 'none') {
           const tintMaterial = new THREE.MeshBasicMaterial({
             map: texture,
             color: new THREE.Color(colors.body),
@@ -217,42 +220,15 @@ export function InteractivePet3D({
           character.add(tintOverlay)
         }
 
+        setAssetReady(true)
         setCanvasReady(true)
       },
       undefined,
-      () => setCanvasReady(false),
+      () => {
+        setAssetReady(false)
+        setCanvasReady(false)
+      },
     )
-
-    const costumeUrl = createPetCostumeDataUrl(outfit, kind, colors)
-    if (costumeUrl) {
-      loader.load(
-        costumeUrl,
-        (loadedTexture) => {
-          if (disposed) {
-            loadedTexture.dispose()
-            return
-          }
-          costumeTexture = loadedTexture
-          costumeTexture.colorSpace = THREE.SRGBColorSpace
-          costumeTexture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy())
-          const costumeMaterial = new THREE.MeshBasicMaterial({
-            map: costumeTexture,
-            transparent: true,
-            alphaTest: 0.015,
-            depthTest: false,
-            depthWrite: false,
-            toneMapped: false,
-          })
-          costume = new THREE.Mesh(new THREE.PlaneGeometry(5.15, 5.15), costumeMaterial)
-          costume.position.z = 0.32
-          costume.renderOrder = 3
-          character.add(costume)
-          setCostumeReady(true)
-        },
-        undefined,
-        () => setCostumeReady(false),
-      )
-    }
 
     const pointer = { x: 0, y: 0 }
     let activeAction: PetAction | null = null
@@ -362,15 +338,12 @@ export function InteractivePet3D({
       portrait?.geometry.dispose()
       portrait?.material.dispose()
       tintOverlay?.material.dispose()
-      costume?.geometry.dispose()
-      costume?.material.dispose()
       texture?.dispose()
-      costumeTexture?.dispose()
       shadow.geometry.dispose()
       shadowMaterial.dispose()
       renderer.dispose()
     }
-  }, [colors, compact, kind, moodScore, outfit, palette])
+  }, [colors, compact, moodScore, outfit, palette, petAssetPath])
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -392,7 +365,7 @@ export function InteractivePet3D({
       data-breed={breed}
       data-outfit={outfit}
       data-costume-rendered={outfit !== 'none'}
-      data-costume-ready={costumeReady}
+      data-costume-ready={outfit === 'none' || assetReady}
       role="button"
       tabIndex={0}
       aria-label={`${name} 캐릭터. 누르면 다정하게 인사해요.`}
@@ -403,6 +376,7 @@ export function InteractivePet3D({
       <PetPortrait
         kind={kind}
         name={name}
+        outfit={outfit}
         className="interactive-pet-fallback"
       />
       <canvas ref={canvasRef} aria-hidden="true" />

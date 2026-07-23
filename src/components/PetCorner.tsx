@@ -2,21 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import {
   Cat,
-  Briefcase,
-  Crown,
   Cookie,
   Dog,
-  Glasses,
-  Flower2,
   Hand,
   Lock,
   Music2,
   Palette,
-  PartyPopper,
   PawPrint,
   Shirt,
   Sparkles,
-  Wind,
 } from 'lucide-react'
 import { getMoodOption, type MoodScore } from '../domain/cashlog'
 import {
@@ -31,6 +25,7 @@ import {
   petPalettes,
   type CatBreedId,
   type DogBreedId,
+  type OutfitCollection,
   type OutfitId,
   type PetKind,
   type PetPaletteId,
@@ -38,6 +33,7 @@ import {
 } from '../domain/pet'
 import { signalSoftImpact } from '../motion/haptics'
 import { InteractivePet3D, PetPortrait, type PetAction } from './InteractivePet3D'
+import { getPetAssetPath } from './petAssets'
 import './PetCorner.css'
 
 type PetCornerProps = {
@@ -56,18 +52,11 @@ type PetCornerProps = {
 
 type WardrobeTab = 'outfits' | 'colors' | 'breeds'
 
-const outfitIcon = (id: OutfitId) => {
-  if (id === 'hoodie' || id === 'sailor') return <Shirt size={19} />
-  if (id === 'party') return <PartyPopper size={19} />
-  if (id === 'glasses') return <Glasses size={19} />
-  if (id === 'scarf') return <Wind size={19} />
-  if (id === 'crown') return <Crown size={19} />
-  if (id === 'flower') return <Flower2 size={19} />
-  if (id === 'beret') return <Crown size={19} />
-  if (id === 'mini_bag') return <Briefcase size={19} />
-  if (id === 'bow') return <Sparkles size={19} />
-  return <PawPrint size={19} />
-}
+const outfitCollections: Array<{ id: OutfitCollection; label: string }> = [
+  { id: 'daily', label: '데일리' },
+  { id: 'accent', label: '포인트' },
+  { id: 'season', label: '시즌' },
+]
 
 const actionOptions: Array<{
   id: PetAction
@@ -96,6 +85,11 @@ export function PetCorner({
   const [cheerRequest, setCheerRequest] = useState(0)
   const [petAction, setPetAction] = useState<PetAction>('pet')
   const [wardrobeTab, setWardrobeTab] = useState<WardrobeTab>('outfits')
+  const [outfitCollection, setOutfitCollection] = useState<OutfitCollection>(() => {
+    const current =
+      petState.selectedKind === 'cat' ? petState.catOutfit : petState.dogOutfit
+    return getOutfit(current).collection
+  })
   const cheerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const clearCheer = useCallback(() => {
@@ -141,11 +135,34 @@ export function PetCorner({
   const renderOutfits = (kind: PetKind) => {
     const current = kind === 'cat' ? petState.catOutfit : petState.dogOutfit
     const label = kind === 'cat' ? petState.catName : petState.dogName
+    const visibleOutfits = outfits.filter(
+      (outfit) => outfit.collection === outfitCollection,
+    )
     return (
       <div className="pet-wardrobe-row" aria-labelledby="pet-outfit-label">
         <span id="pet-outfit-label" className="pet-wardrobe-label">{label}에게 입혀 볼 옷</span>
+        <div className="outfit-collection-tabs" role="tablist" aria-label="옷 컬렉션">
+          {outfitCollections.map((collection) => {
+            const active = collection.id === outfitCollection
+            return (
+              <button
+                key={collection.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => {
+                  if (active) return
+                  setOutfitCollection(collection.id)
+                  signalSoftImpact()
+                }}
+              >
+                {collection.label}
+              </button>
+            )
+          })}
+        </div>
         <div className="outfit-chips" role="group" aria-label={`${label} 옷 고르기`}>
-          {outfits.map((o) => {
+          {visibleOutfits.map((o) => {
             const unlocked = isOutfitUnlocked(o.id, level.level)
             const active = o.id === current
             return (
@@ -161,9 +178,23 @@ export function PetCorner({
                   play('dance')
                 }}
               >
-                <span className="outfit-chip-icon" aria-hidden>{unlocked ? outfitIcon(o.id) : <Lock size={18} />}</span>
-                <strong>{o.name}</strong>
-                <small>{active ? '입는 중' : unlocked ? '입혀 보기' : `Lv.${o.minLevel}`}</small>
+                <span className="outfit-chip-preview" aria-hidden>
+                  <img
+                    src={getPetAssetPath(kind, o.id)}
+                    alt=""
+                    draggable={false}
+                  />
+                  {!unlocked && (
+                    <span className="outfit-chip-lock">
+                      <Lock size={17} />
+                    </span>
+                  )}
+                  {active && <span className="outfit-chip-wearing">착용 중</span>}
+                </span>
+                <span className="outfit-chip-copy">
+                  <strong>{o.name}</strong>
+                  <small>{active ? '지금 모습' : unlocked ? '입혀 보기' : `Lv.${o.minLevel} 해금`}</small>
+                </span>
               </button>
             )
           })}
@@ -262,6 +293,7 @@ export function PetCorner({
           aria-pressed={activeKind === 'cat'}
           onClick={() => {
             onKindChange('cat')
+            setOutfitCollection(getOutfit(petState.catOutfit).collection)
             play('dance')
           }}
         >
@@ -273,7 +305,12 @@ export function PetCorner({
               aria-hidden="true"
             />
           )}
-          <PetPortrait kind="cat" name={petState.catName} className="pet-kind-preview" />
+          <PetPortrait
+            kind="cat"
+            name={petState.catName}
+            outfit={petState.catOutfit}
+            className="pet-kind-preview"
+          />
           <span><Cat size={15} aria-hidden="true" /> 고양이</span>
           <strong>{getPetBreed('cat', petState.catBreed).name}</strong>
         </button>
@@ -283,6 +320,7 @@ export function PetCorner({
           aria-pressed={activeKind === 'dog'}
           onClick={() => {
             onKindChange('dog')
+            setOutfitCollection(getOutfit(petState.dogOutfit).collection)
             play('dance')
           }}
         >
@@ -294,7 +332,12 @@ export function PetCorner({
               aria-hidden="true"
             />
           )}
-          <PetPortrait kind="dog" name={petState.dogName} className="pet-kind-preview" />
+          <PetPortrait
+            kind="dog"
+            name={petState.dogName}
+            outfit={petState.dogOutfit}
+            className="pet-kind-preview"
+          />
           <span><Dog size={15} aria-hidden="true" /> 강아지</span>
           <strong>{getPetBreed('dog', petState.dogBreed).name}</strong>
         </button>

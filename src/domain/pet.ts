@@ -72,11 +72,16 @@ export type OutfitId =
   | 'mini_bag'
   | 'scarf'
   | 'crown'
+  | 'raincoat'
+  | 'pajamas'
+
+export type OutfitCollection = 'daily' | 'accent' | 'season'
 
 export type Outfit = {
   id: OutfitId
   name: string
   icon: string
+  collection: OutfitCollection
   /** 해금에 필요한 최소 레벨 */
   minLevel: number
 }
@@ -138,17 +143,19 @@ export function getPetPalette(id: PetPaletteId): PetPalette {
 
 /** 코디 목록 — 레벨이 오를수록 해금 */
 export const outfits: Outfit[] = [
-  { id: 'none', name: '기본', icon: '🐾', minLevel: 1 },
-  { id: 'bow', name: '리본', icon: '🎀', minLevel: 1 },
-  { id: 'flower', name: '꽃핀', icon: '🌸', minLevel: 1 },
-  { id: 'hoodie', name: '말랑 후디', icon: '🧥', minLevel: 1 },
-  { id: 'sailor', name: '세일러복', icon: '👕', minLevel: 2 },
-  { id: 'party', name: '파티모자', icon: '🎉', minLevel: 2 },
-  { id: 'beret', name: '베레모', icon: '🧢', minLevel: 2 },
-  { id: 'glasses', name: '선글라스', icon: '🕶️', minLevel: 3 },
-  { id: 'mini_bag', name: '미니백', icon: '👜', minLevel: 3 },
-  { id: 'scarf', name: '목도리', icon: '🧣', minLevel: 4 },
-  { id: 'crown', name: '왕관', icon: '👑', minLevel: 5 },
+  { id: 'none', name: '포근한 기본', icon: '🐾', collection: 'daily', minLevel: 1 },
+  { id: 'bow', name: '피치 리본', icon: '🎀', collection: 'daily', minLevel: 1 },
+  { id: 'flower', name: '봄꽃 핀', icon: '🌸', collection: 'daily', minLevel: 1 },
+  { id: 'hoodie', name: '말랑 후디', icon: '🧥', collection: 'daily', minLevel: 1 },
+  { id: 'sailor', name: '세일러 룩', icon: '👕', collection: 'daily', minLevel: 2 },
+  { id: 'party', name: '생일 꼬깔', icon: '🎉', collection: 'accent', minLevel: 2 },
+  { id: 'beret', name: '피치 베레모', icon: '🧢', collection: 'accent', minLevel: 2 },
+  { id: 'glasses', name: '동글 안경', icon: '👓', collection: 'accent', minLevel: 3 },
+  { id: 'mini_bag', name: '미니 크로스백', icon: '👜', collection: 'accent', minLevel: 3 },
+  { id: 'crown', name: '꼬마 왕관', icon: '👑', collection: 'accent', minLevel: 5 },
+  { id: 'scarf', name: '포근 목도리', icon: '🧣', collection: 'season', minLevel: 2 },
+  { id: 'raincoat', name: '민트 우비', icon: '🌧️', collection: 'season', minLevel: 3 },
+  { id: 'pajamas', name: '별밤 파자마', icon: '🌙', collection: 'season', minLevel: 4 },
 ]
 
 export function getOutfit(id: OutfitId): Outfit {

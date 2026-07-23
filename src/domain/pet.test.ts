@@ -3,6 +3,7 @@ import {
   computeLevel,
   isOutfitUnlocked,
   normalizePetState,
+  outfits,
   recordsToReachLevel,
 } from './pet'
 
@@ -43,6 +44,15 @@ describe('pet growth domain', () => {
     expect(isOutfitUnlocked('party', 2)).toBe(true)
     expect(isOutfitUnlocked('crown', 4)).toBe(false)
     expect(isOutfitUnlocked('crown', 5)).toBe(true)
+    expect(isOutfitUnlocked('raincoat', 2)).toBe(false)
+    expect(isOutfitUnlocked('raincoat', 3)).toBe(true)
+  })
+
+  it('organizes the wardrobe into daily, accent, and seasonal collections', () => {
+    expect(new Set(outfits.map(({ collection }) => collection))).toEqual(
+      new Set(['daily', 'accent', 'season']),
+    )
+    expect(outfits.find(({ id }) => id === 'pajamas')?.collection).toBe('season')
   })
 
   it('normalizes stored pet state and drops unknown outfits', () => {
