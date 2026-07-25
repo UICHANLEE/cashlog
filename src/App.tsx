@@ -2,6 +2,8 @@ import {
   type CSSProperties,
   type ChangeEvent,
   type FormEvent,
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -76,10 +78,8 @@ import {
   formatDayLogRelativeKo,
   formatMonthLogRelativeKo,
 } from './domain/relativeLabelsKo'
-import { StoryReel, type StorySlide } from './story/StoryReel'
-import { PetPortrait } from './components/InteractivePet3D'
-import { PetCorner } from './components/PetCorner'
-import { UichanAdmin } from './admin/UichanAdmin'
+import type { StorySlide } from './story/StoryReel'
+import { PetPortrait } from './components/PetPortrait'
 import {
   defaultPetState,
   normalizePetState,
@@ -103,6 +103,16 @@ import { getMe as getSecureAccount, logout as secureLogout } from './account/acc
 import { createCategoryFeedbackPayload } from './domain/productImage'
 import { createLocalMediaStore } from './services/localMediaStore'
 import { signalSoftImpact } from './motion/haptics'
+
+const PetCorner = lazy(() =>
+  import('./components/PetCorner').then((module) => ({ default: module.PetCorner })),
+)
+const StoryReel = lazy(() =>
+  import('./story/StoryReel').then((module) => ({ default: module.StoryReel })),
+)
+const UichanAdmin = lazy(() =>
+  import('./admin/UichanAdmin').then((module) => ({ default: module.UichanAdmin })),
+)
 
 type AddMode = 'closed' | 'choice' | 'photo' | 'manual'
 type StoryMode = null | 'day' | 'month'
@@ -1647,15 +1657,27 @@ function CashlogApp() {
             }
           >
       {activeView === 'pets' ? (
-        <PetCorner
-          totalRecords={expenses.length}
-          petState={petState}
-          recentMoodScore={recentMoodScore}
-          onKindChange={handlePetKindChange}
-          onBreedChange={handleBreedChange}
-          onOutfitChange={handleOutfitChange}
-          onPaletteChange={handlePaletteChange}
-        />
+        <Suspense
+          fallback={(
+            <section className="lazy-pet-view" role="status" aria-label="캐릭터 공간 불러오는 중">
+              <PetPortrait
+                kind={petState.selectedKind}
+                name={selectedPetName}
+                outfit={petState.selectedKind === 'cat' ? petState.catOutfit : petState.dogOutfit}
+              />
+            </section>
+          )}
+        >
+          <PetCorner
+            totalRecords={expenses.length}
+            petState={petState}
+            recentMoodScore={recentMoodScore}
+            onKindChange={handlePetKindChange}
+            onBreedChange={handleBreedChange}
+            onOutfitChange={handleOutfitChange}
+            onPaletteChange={handlePaletteChange}
+          />
+        </Suspense>
       ) : activeView === 'calendar' ? (
         <section className="calendar-view">
           <div className="calendar-card">
@@ -2184,22 +2206,26 @@ function CashlogApp() {
         <a href="https://github.com/UICHANLEE/cashlog">GitHub</a>
       </footer>
       {storyMode === 'day' && dayStorySlides.length > 0 && (
-        <StoryReel
-          key={`story-day-${selectedDate}-${dayStorySlides.map((s) => s.id).join()}`}
-          title={`${selectedDateLabel} 스토리`}
-          aggregateLabel="오늘"
-          slides={dayStorySlides}
-          onClose={closeStory}
-        />
+        <Suspense fallback={null}>
+          <StoryReel
+            key={`story-day-${selectedDate}-${dayStorySlides.map((s) => s.id).join()}`}
+            title={`${selectedDateLabel} 스토리`}
+            aggregateLabel="오늘"
+            slides={dayStorySlides}
+            onClose={closeStory}
+          />
+        </Suspense>
       )}
       {storyMode === 'month' && monthStorySlides.length > 0 && (
-        <StoryReel
-          key={`story-month-${visibleMonth.year}-${visibleMonth.month}-${monthStorySlides.map((s) => s.id).join()}`}
-          title={`${visibleMonth.year}년 ${visibleMonth.month + 1}월 기록`}
-          aggregateLabel={`${visibleMonth.year}년 ${visibleMonth.month + 1}월`}
-          slides={monthStorySlides}
-          onClose={closeStory}
-        />
+        <Suspense fallback={null}>
+          <StoryReel
+            key={`story-month-${visibleMonth.year}-${visibleMonth.month}-${monthStorySlides.map((s) => s.id).join()}`}
+            title={`${visibleMonth.year}년 ${visibleMonth.month + 1}월 기록`}
+            aggregateLabel={`${visibleMonth.year}년 ${visibleMonth.month + 1}월`}
+            slides={monthStorySlides}
+            onClose={closeStory}
+          />
+        </Suspense>
       )}
     </main>
   )
@@ -2739,7 +2765,13 @@ function MemoEditor({ form, onChange }: {
 }
 
 function App() {
-  return window.location.pathname === '/uichan' ? <UichanAdmin /> : <CashlogApp />
+  return window.location.pathname === '/uichan'
+    ? (
+      <Suspense fallback={null}>
+        <UichanAdmin />
+      </Suspense>
+    )
+    : <CashlogApp />
 }
 
 export default App

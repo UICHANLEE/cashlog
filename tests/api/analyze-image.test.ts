@@ -1,7 +1,7 @@
 import sharp from 'sharp'
 import { describe, expect, it } from 'vitest'
 
-import { optimizeAnalyzerInput } from './analyze-image'
+import { optimizeAnalyzerInput } from '../../api/analyze-image'
 
 
 describe('optimizeAnalyzerInput', () => {

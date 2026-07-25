@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import {
   Cat,
@@ -32,9 +32,14 @@ import {
   type PetState,
 } from '../domain/pet'
 import { signalSoftImpact } from '../motion/haptics'
-import { InteractivePet3D, PetPortrait, type PetAction } from './InteractivePet3D'
+import type { PetAction } from './InteractivePet3D'
+import { PetPortrait } from './PetPortrait'
 import { getPetAssetPath } from './petAssets'
 import './PetCorner.css'
+
+const InteractivePet3D = lazy(() =>
+  import('./InteractivePet3D').then((module) => ({ default: module.InteractivePet3D })),
+)
 
 type PetCornerProps = {
   totalRecords: number
@@ -357,16 +362,27 @@ export function PetCorner({
                 : { type: 'spring', duration: 0.38, bounce: 0.08 }
             }
           >
-            <InteractivePet3D
-              kind={activeKind}
-              name={activeName}
-              palette={activePalette}
-              outfit={activeOutfit}
-              breed={activeKind === 'cat' ? petState.catBreed : petState.dogBreed}
-              action={petAction}
-              actionRequest={cheerRequest}
-              moodScore={recentMoodScore}
-            />
+            <Suspense
+              fallback={(
+                <PetPortrait
+                  kind={activeKind}
+                  name={activeName}
+                  outfit={activeOutfit}
+                  className="pet-character-loading"
+                />
+              )}
+            >
+              <InteractivePet3D
+                kind={activeKind}
+                name={activeName}
+                palette={activePalette}
+                outfit={activeOutfit}
+                breed={activeKind === 'cat' ? petState.catBreed : petState.dogBreed}
+                action={petAction}
+                actionRequest={cheerRequest}
+                moodScore={recentMoodScore}
+              />
+            </Suspense>
           </motion.div>
         </AnimatePresence>
         <div className="pet-stage-copy">

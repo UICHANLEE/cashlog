@@ -70,7 +70,7 @@ describe('Cashlog photo MVP', () => {
 
     await user.click(screen.getByRole('button', { name: '나비' }))
 
-    expect(screen.getByText(/나비와 함께 쓰는 가계부/)).toBeInTheDocument()
+    expect(await screen.findByText(/나비와 함께 쓰는 가계부/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '나비' })).toHaveAttribute('aria-pressed', 'true')
 
     const petStages = screen.getAllByRole('button', { name: /나비 캐릭터\. 누르면 다정하게 인사해요/ })
@@ -86,7 +86,7 @@ describe('Cashlog photo MVP', () => {
     render(<App />)
 
     await user.click(screen.getByRole('button', { name: '나비' }))
-    const hoodie = screen.getByRole('button', { name: '나비 말랑 후디 옷' })
+    const hoodie = await screen.findByRole('button', { name: '나비 말랑 후디 옷' })
     await user.click(hoodie)
     expect(hoodie).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByLabelText('나비 현재 스타일')).toHaveTextContent('말랑 후디')
@@ -124,7 +124,7 @@ describe('Cashlog photo MVP', () => {
     render(<App />)
 
     await user.click(screen.getByRole('button', { name: /하루 스토리/i }))
-    const dialog = screen.getByRole('dialog', { name: /스토리/ })
+    const dialog = await screen.findByRole('dialog', { name: /스토리/ })
     expect(dialog).toBeInTheDocument()
     expect(within(dialog).getByText(/의 하루/)).toBeInTheDocument()
     await user.click(within(dialog).getByRole('button', { name: '다음 장' }))

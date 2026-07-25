@@ -20,6 +20,7 @@ import {
 } from '../domain/pet'
 import { signalSoftImpact } from '../motion/haptics'
 import { getPetAssetPath } from './petAssets'
+import { PetPortrait } from './PetPortrait'
 import './InteractivePet3D.css'
 
 type InteractivePet3DProps = {
@@ -38,35 +39,12 @@ type InteractivePet3DProps = {
 
 export type PetAction = 'pet' | 'treat' | 'highfive' | 'dance'
 
-type PetPortraitProps = {
-  kind: PetKind
-  name: string
-  outfit?: OutfitId
-  className?: string
-}
-
 const actionMessages = (name: string): Record<PetAction, string> => ({
   pet: `${name}가 눈을 가늘게 뜨고 기대요`,
   treat: `${name}가 간식 냄새에 귀를 쫑긋했어요`,
   highfive: `${name}가 앞발로 인사해요`,
   dance: `${name}가 기분 좋게 살랑거려요`,
 })
-
-export function PetPortrait({
-  kind,
-  name,
-  outfit = 'none',
-  className = '',
-}: PetPortraitProps) {
-  return (
-    <img
-      className={`pet-portrait-3d ${className}`.trim()}
-      src={getPetAssetPath(kind, outfit)}
-      alt={`${name} 캐릭터`}
-      draggable={false}
-    />
-  )
-}
 
 export function InteractivePet3D({
   kind,

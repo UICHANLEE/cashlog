@@ -13,6 +13,8 @@ const productAnalyzerHeaders = getProductAnalyzerConfig().headers
 export default defineConfig({
   plugins: [react()],
   build: {
+    // The optional Three.js pet renderer is isolated and loaded only after opening the pet tab.
+    chunkSizeWarningLimit: 550,
     rollupOptions: {
       input: {
         main: 'index.html',
