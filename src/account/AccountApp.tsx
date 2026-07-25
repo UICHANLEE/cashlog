@@ -57,7 +57,17 @@ const AccountShell = ({ eyebrow, title, children }: { eyebrow: string; title: st
 </main>
 
 const SignupPage = () => {
-  const [values, setValues] = useState({ nickname: '', email: '', password: '', passwordConfirm: '', age14: false, terms: false, privacy: false })
+  const [values, setValues] = useState({
+    nickname: '',
+    email: '',
+    password: '',
+    passwordConfirm: '',
+    age14: false,
+    terms: false,
+    privacy: false,
+    photoAndTime: false,
+    location: false,
+  })
   const [image, setImage] = useState<File | null>(null)
   const [preview, setPreview] = useState('')
   const [errors, setErrors] = useState<FieldErrors>({})
@@ -80,7 +90,17 @@ const SignupPage = () => {
     if (Object.keys(nextErrors).length) { setErrors(nextErrors); return }
     setLoading(true); setErrors({}); setMessage('')
     const form = new FormData()
-    Object.entries({ email: values.email.trim().toLowerCase(), password: values.password, passwordConfirm: values.passwordConfirm, nickname: values.nickname.trim(), age14Consent: String(values.age14), termsConsent: String(values.terms), privacyConsent: String(values.privacy) }).forEach(([key, value]) => form.append(key, value))
+    Object.entries({
+      email: values.email.trim().toLowerCase(),
+      password: values.password,
+      passwordConfirm: values.passwordConfirm,
+      nickname: values.nickname.trim(),
+      age14Consent: String(values.age14),
+      termsConsent: String(values.terms),
+      privacyConsent: String(values.privacy),
+      photoTimeConsent: String(values.photoAndTime),
+      locationConsent: String(values.location),
+    }).forEach(([key, value]) => form.append(key, value))
     if (image) form.append('profileImage', image)
     try {
       const result = await signup(form)
@@ -103,7 +123,10 @@ const SignupPage = () => {
       <div className="consent-list">
         <label><input type="checkbox" checked={values.age14} onChange={(event) => setValues({ ...values, age14: event.target.checked })} /><span><strong>[필수]</strong> 만 14세 이상입니다.</span></label><FieldError message={errors.age14Consent} />
         <label><input type="checkbox" checked={values.terms} onChange={(event) => setValues({ ...values, terms: event.target.checked })} /><span><strong>[필수]</strong> 이용약관에 동의합니다.</span></label><FieldError message={errors.termsConsent} />
-        <label><input type="checkbox" checked={values.privacy} onChange={(event) => setValues({ ...values, privacy: event.target.checked })} /><span><strong>[필수]</strong> <a href="/privacy.html" target="_blank">개인정보 처리방침</a>에 동의합니다. 사진·기록 시간 처리 내용을 포함합니다.</span></label><FieldError message={errors.privacyConsent} />
+        <label><input type="checkbox" checked={values.privacy} onChange={(event) => setValues({ ...values, privacy: event.target.checked })} /><span><strong>[필수]</strong> <a href="/privacy.html" target="_blank">개인정보 처리방침</a>에 동의합니다. 내 정보는 서비스 제공에 필요한 범위에서만 처리됩니다.</span></label><FieldError message={errors.privacyConsent} />
+        <label><input type="checkbox" checked={values.photoAndTime} onChange={(event) => setValues({ ...values, photoAndTime: event.target.checked })} /><span><strong>[필수]</strong> 선택한 사진과 사진 파일·기록 시각을 비공개 저장하고 카테고리 추천에 사용하는 데 동의합니다.</span></label><FieldError message={errors.photoTimeConsent} />
+        <label><input type="checkbox" checked={values.location} onChange={(event) => setValues({ ...values, location: event.target.checked })} /><span><strong>[선택]</strong> 사진 기록을 추가할 때 기기의 현재 위치를 자동으로 확인해 해당 기록에 저장하는 데 동의합니다.</span></label>
+        <p className="consent-protection">선택 동의를 하지 않으면 위치 권한을 요청하거나 위치를 수집하지 않습니다. 사진과 위치는 다른 사용자에게 공개하거나 판매하지 않으며, 위치 동의는 계정 메뉴에서 언제든 철회할 수 있습니다.</p>
       </div>
       {message && <p className="form-message error" role="alert">{message}</p>}
       <button className="primary-submit" disabled={loading}>{loading ? <><LoaderCircle className="spin" size={19} /> 계정 만드는 중</> : '가입하고 기록 시작'}</button>

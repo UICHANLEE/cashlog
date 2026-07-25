@@ -16,11 +16,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     requireMethod(req, 'POST')
     await enforceRateLimit(req, 'signup', 5, 3600)
     const { fields, profileImage } = await parseMultipart(req, [
-      'email', 'password', 'passwordConfirm', 'nickname', 'age14Consent', 'termsConsent', 'privacyConsent',
+      'email', 'password', 'passwordConfirm', 'nickname', 'age14Consent', 'termsConsent',
+      'privacyConsent', 'photoTimeConsent', 'locationConsent',
     ])
     const values = validateSignupFields(fields)
     const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined
-    const session = await authSignup(values.email, values.password, values.nickname, origin)
+    const session = await authSignup(
+      values.email,
+      values.password,
+      values.nickname,
+      { photoAndTime: values.photoAndTime, location: values.location },
+      origin,
+    )
     if (!session.user?.id) throw new ApiError(503, 'SIGNUP_FAILED', '계정 정보를 확인하지 못했어요.')
 
     let uploadedPath: string | null = null

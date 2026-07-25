@@ -268,6 +268,8 @@ function CashlogApp() {
     photoAndTime: false,
     location: false,
   })
+  const [locationCollectionConsent, setLocationCollectionConsent] = useState(false)
+  const [isSavingLocationConsent, setIsSavingLocationConsent] = useState(false)
   const [, setSyncStatus] = useState('Supabase 미연결 · 로컬 저장 중')
   const authClient = useMemo(() => createCashlogAuthClient(), [])
   const localMedia = useMemo(() => createLocalMediaStore(), [])
@@ -337,6 +339,59 @@ function CashlogApp() {
     setLocationMessage('')
   }, [])
 
+  const requestCurrentLocation = useCallback((automatic = false) => {
+    if (!locationCollectionConsent) {
+      setLocationDraft(null)
+      setLocationStatus('idle')
+      setLocationMessage('위치 저장에 동의하지 않아 위치를 사용하지 않아요.')
+      return
+    }
+    if (!navigator.geolocation) {
+      setLocationStatus('error')
+      setLocationMessage('이 기기에서는 위치를 가져올 수 없어요.')
+      return
+    }
+
+    setLocationStatus('loading')
+    setLocationMessage(
+      automatic
+        ? '동의한 설정에 따라 사진을 추가한 현재 위치를 확인하는 중...'
+        : '현재 위치를 확인하는 중...',
+    )
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocationDraft({
+          latitude: Number(position.coords.latitude.toFixed(6)),
+          longitude: Number(position.coords.longitude.toFixed(6)),
+          ...(Number.isFinite(position.coords.accuracy)
+            ? { accuracyMeters: Math.round(position.coords.accuracy) }
+            : {}),
+        })
+        setLocationStatus('ready')
+        setLocationMessage(
+          automatic
+            ? '이 사진 기록에 현재 위치를 자동으로 넣었어요.'
+            : '이 기록에만 현재 위치를 넣었어요.',
+        )
+        signalSoftImpact()
+      },
+      (error) => {
+        setLocationDraft(null)
+        setLocationStatus('error')
+        setLocationMessage(
+          error.code === error.PERMISSION_DENIED
+            ? '기기 위치 권한이 꺼져 있어요. 위치 없이도 저장할 수 있어요.'
+            : '위치를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.',
+        )
+      },
+      {
+        enableHighAccuracy: false,
+        timeout: 8_000,
+        maximumAge: 5 * 60_000,
+      },
+    )
+  }, [locationCollectionConsent])
+
   const applyPhotoFile = useCallback(async (file: File, sourceDate?: Date) => {
     setCameraError(null)
     setPhotoAssistMessage('')
@@ -360,6 +415,7 @@ function CashlogApp() {
     })
     setAnalysis(null)
     setIsAnalyzingPhoto(true)
+    if (locationCollectionConsent) requestCurrentLocation(true)
 
     try {
       const nextAnalysis = await analyzePhoto(file)
@@ -379,46 +435,11 @@ function CashlogApp() {
     } finally {
       setIsAnalyzingPhoto(false)
     }
-  }, [])
+  }, [locationCollectionConsent, requestCurrentLocation])
 
   const handleUseCurrentLocation = useCallback(() => {
-    if (!navigator.geolocation) {
-      setLocationStatus('error')
-      setLocationMessage('이 기기에서는 위치를 가져올 수 없어요.')
-      return
-    }
-
-    setLocationStatus('loading')
-    setLocationMessage('현재 위치를 확인하는 중...')
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLocationDraft({
-          latitude: Number(position.coords.latitude.toFixed(6)),
-          longitude: Number(position.coords.longitude.toFixed(6)),
-          ...(Number.isFinite(position.coords.accuracy)
-            ? { accuracyMeters: Math.round(position.coords.accuracy) }
-            : {}),
-        })
-        setLocationStatus('ready')
-        setLocationMessage('이 기록에만 현재 위치를 넣었어요.')
-        signalSoftImpact()
-      },
-      (error) => {
-        setLocationDraft(null)
-        setLocationStatus('error')
-        setLocationMessage(
-          error.code === error.PERMISSION_DENIED
-            ? '위치 권한이 꺼져 있어요. 위치 없이도 저장할 수 있어요.'
-            : '위치를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.',
-        )
-      },
-      {
-        enableHighAccuracy: false,
-        timeout: 8_000,
-        maximumAge: 5 * 60_000,
-      },
-    )
-  }, [])
+    requestCurrentLocation(false)
+  }, [requestCurrentLocation])
 
   const handleClearLocation = useCallback(() => {
     setLocationDraft(null)
@@ -508,6 +529,23 @@ function CashlogApp() {
   useEffect(() => {
     petCloudReadyRef.current = false
   }, [repository])
+
+  useEffect(() => {
+    let alive = true
+    if (!session) {
+      return undefined
+    }
+    void authClient.getSignupConsents(session)
+      .then((consents) => {
+        if (alive) setLocationCollectionConsent(consents?.location === true)
+      })
+      .catch(() => {
+        if (alive) setLocationCollectionConsent(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [authClient, session])
 
   useEffect(() => {
     if (!authClient.isConfigured) {
@@ -842,9 +880,34 @@ function CashlogApp() {
     void secureLogout().catch(() => undefined)
     authClient.signOut()
     setSession(null)
+    setLocationCollectionConsent(false)
     initialSyncedSessionRef.current = null
     setAuthMessage('로그아웃했어요.')
     setSyncStatus(authClient.isConfigured ? '로그인 대기 · 로컬 저장 중' : 'Supabase 미연결 · 로컬 저장 중')
+  }
+
+  const handleLocationConsentChange = async (allowed: boolean) => {
+    if (!session || isSavingLocationConsent) return
+    setIsSavingLocationConsent(true)
+    setAuthMessage('위치 정보 설정을 저장하는 중...')
+    try {
+      await authClient.updateLocationConsent(session, allowed)
+      setLocationCollectionConsent(allowed)
+      if (!allowed) {
+        setLocationDraft(null)
+        setLocationStatus('idle')
+        setLocationMessage('')
+      }
+      setAuthMessage(
+        allowed
+          ? '사진을 추가할 때 현재 위치를 자동으로 기록할게요.'
+          : '위치 자동 기록을 껐어요. 위치를 요청하거나 저장하지 않아요.',
+      )
+    } catch (error) {
+      setAuthMessage(error instanceof Error ? error.message : '위치 정보 설정을 저장하지 못했어요.')
+    } finally {
+      setIsSavingLocationConsent(false)
+    }
   }
 
   const expenseToSlide = useCallback((expense: Expense, mode: 'day' | 'month') => {
@@ -1524,11 +1587,28 @@ function CashlogApp() {
             {!session && <p>로그인하면 사진 기록과 캐릭터가 모든 기기에서 이어져요.</p>}
           </div>
           {session ? (
+            <>
+              <label className="account-location-setting">
+                <input
+                  type="checkbox"
+                  checked={locationCollectionConsent}
+                  disabled={isSavingLocationConsent}
+                  onChange={(event) => void handleLocationConsentChange(event.target.checked)}
+                />
+                <span>
+                  <strong>사진 위치 자동 기록</strong>
+                  <small>켜면 사진을 추가할 때 기기의 현재 위치를 확인해 해당 기록에만 저장해요.</small>
+                </span>
+              </label>
+              <p className="account-privacy-note">
+                끄면 위치 권한을 요청하거나 새 위치를 저장하지 않습니다. 언제든 다시 변경할 수 있어요.
+              </p>
               <div className="account-actions">
                 <button type="button" className="ghost-button" onClick={syncWithCloud}>지금 동기화</button>
                 <a className="ghost-button" href="/profile.html">프로필 관리</a>
                 <button type="button" className="ghost-button" onClick={handleSignOut}>로그아웃</button>
               </div>
+            </>
             ) : (
               <form className="account-form" onSubmit={handleAuthSubmit}>
                 <div className="social-login-buttons" aria-label="간편 로그인">
@@ -1550,16 +1630,17 @@ function CashlogApp() {
                     </label>
                     <label>
                       <input type="checkbox" checked={signupConsents.privacy} onChange={(event) => setSignupConsents((current) => ({ ...current, privacy: event.target.checked }))} />
-                      <span><strong>[필수]</strong> 계정·가계부 기록 수집 및 이용에 동의합니다.</span>
+                      <span><strong>[필수]</strong> <a href="/privacy.html" target="_blank">개인정보 처리방침</a>에 동의합니다.</span>
                     </label>
                     <label>
                       <input type="checkbox" checked={signupConsents.photoAndTime} onChange={(event) => setSignupConsents((current) => ({ ...current, photoAndTime: event.target.checked }))} />
-                      <span><strong>[필수]</strong> 사진과 촬영·기록 시간의 저장 및 AI 분석에 동의합니다.</span>
+                      <span><strong>[필수]</strong> 선택한 사진과 사진 파일·기록 시각의 비공개 저장 및 카테고리 추천에 동의합니다.</span>
                     </label>
                     <label>
                       <input type="checkbox" checked={signupConsents.location} onChange={(event) => setSignupConsents((current) => ({ ...current, location: event.target.checked }))} />
-                      <span><strong>[선택]</strong> 사진 촬영 위치의 저장 및 개인화에 동의합니다.</span>
+                      <span><strong>[선택]</strong> 사진을 추가할 때 기기의 현재 위치를 자동으로 확인해 해당 기록에 저장하는 데 동의합니다.</span>
                     </label>
+                    <p className="consent-protection">선택하지 않으면 위치 권한을 요청하거나 위치를 수집하지 않습니다. 사진과 위치는 다른 사용자에게 공개하거나 판매하지 않으며, 동의는 언제든 철회할 수 있습니다.</p>
                   </fieldset>
                 )}
                 <div className="account-divider"><span>또는 이메일로</span></div>
@@ -1589,11 +1670,11 @@ function CashlogApp() {
                         checked={signupConsents.privacy}
                         onChange={(event) => setSignupConsents((current) => ({ ...current, privacy: event.target.checked }))}
                       />
-                      <span><strong>[필수]</strong> 계정·가계부 기록 수집 및 이용에 동의합니다.</span>
+                      <span><strong>[필수]</strong> <a href="/privacy.html" target="_blank">개인정보 처리방침</a>에 동의합니다.</span>
                     </label>
                     <details>
                       <summary>개인정보 수집 내용</summary>
-                      <p>이메일, 계정 식별자, 소비 기록을 가입·동기화·서비스 제공 목적으로 처리하며, 탈퇴 시 지체 없이 삭제합니다. 관련 법령에 따른 보존 의무가 있는 정보는 해당 기간 동안 보관할 수 있습니다.</p>
+                      <p>이메일, 계정 식별자, 소비 기록을 가입·동기화·서비스 제공 목적으로만 처리합니다. 내 정보는 다른 사용자에게 공개하거나 판매하지 않으며, 열람·정정·삭제·처리정지·동의 철회를 요청할 수 있습니다.</p>
                     </details>
                     <label>
                       <input
@@ -1601,11 +1682,11 @@ function CashlogApp() {
                         checked={signupConsents.photoAndTime}
                         onChange={(event) => setSignupConsents((current) => ({ ...current, photoAndTime: event.target.checked }))}
                       />
-                      <span><strong>[필수]</strong> 사진과 촬영·기록 시간의 저장 및 AI 분석에 동의합니다.</span>
+                      <span><strong>[필수]</strong> 선택한 사진과 사진 파일·기록 시각의 비공개 저장 및 카테고리 추천에 동의합니다.</span>
                     </label>
                     <details>
-                      <summary>사진 처리 내용</summary>
-                      <p>사진은 용량을 줄인 비공개 보관본으로 계정에 저장되며 카테고리 추천에 사용됩니다. 다른 사용자는 볼 수 없고, 원할 때 삭제를 요청할 수 있습니다.</p>
+                      <summary>사진·시간 처리와 보호 내용</summary>
+                      <p>사진은 용량을 줄이고 EXIF를 제거한 비공개 보관본으로 저장됩니다. 사진 파일의 수정 시각 또는 사용자가 정한 기록 시각은 하루·한 달 스토리에 사용되며, 다른 사용자는 볼 수 없습니다.</p>
                     </details>
                     <label>
                       <input
@@ -1613,9 +1694,9 @@ function CashlogApp() {
                         checked={signupConsents.location}
                         onChange={(event) => setSignupConsents((current) => ({ ...current, location: event.target.checked }))}
                       />
-                      <span><strong>[선택]</strong> 사진 촬영 위치의 저장 및 개인화에 동의합니다.</span>
+                      <span><strong>[선택]</strong> 사진을 추가할 때 기기의 현재 위치를 자동으로 확인해 해당 기록에 저장하는 데 동의합니다.</span>
                     </label>
-                    <p className="consent-note">위치 동의를 거부해도 가입할 수 있으며, 실제 위치 권한은 기능을 사용할 때 기기에서 다시 확인합니다.</p>
+                    <p className="consent-note consent-protection">선택하지 않으면 위치 권한을 요청하거나 위치를 수집·전송·저장하지 않습니다. 동의해도 기기 권한을 별도로 허용해야 하며, 계정 메뉴에서 언제든 철회할 수 있습니다.</p>
                   </fieldset>
                 )}
                 <button type="submit">{authMode === 'signUp' ? '가입하고 시작' : authMode === 'magic' ? '메일 링크 받기' : '로그인'}</button>
@@ -2153,6 +2234,7 @@ function CashlogApp() {
                   entryTime={entryTime}
                   onEntryTimeChange={setEntryTime}
                   location={locationDraft}
+                  locationAllowed={locationCollectionConsent}
                   locationStatus={locationStatus}
                   locationMessage={locationMessage}
                   onRequestLocation={handleUseCurrentLocation}
@@ -2172,6 +2254,7 @@ function CashlogApp() {
                 entryTime={entryTime}
                 onEntryTimeChange={setEntryTime}
                 location={locationDraft}
+                locationAllowed={locationCollectionConsent}
                 locationStatus={locationStatus}
                 locationMessage={locationMessage}
                 onRequestLocation={handleUseCurrentLocation}
@@ -2315,6 +2398,7 @@ function ExpenseEditor({
   entryTime,
   onEntryTimeChange,
   location,
+  locationAllowed,
   locationStatus,
   locationMessage,
   onRequestLocation,
@@ -2333,6 +2417,7 @@ function ExpenseEditor({
   entryTime: string
   onEntryTimeChange: (time: string) => void
   location: ExpenseLocation | null
+  locationAllowed: boolean
   locationStatus: LocationStatus
   locationMessage: string
   onRequestLocation: () => void
@@ -2390,6 +2475,7 @@ function ExpenseEditor({
         entryTime={entryTime}
         onEntryTimeChange={onEntryTimeChange}
         location={location}
+        locationAllowed={locationAllowed}
         locationStatus={locationStatus}
         locationMessage={locationMessage}
         onRequestLocation={onRequestLocation}
@@ -2423,6 +2509,7 @@ function EntryContextEditor({
   entryTime,
   onEntryTimeChange,
   location,
+  locationAllowed,
   locationStatus,
   locationMessage,
   onRequestLocation,
@@ -2431,6 +2518,7 @@ function EntryContextEditor({
   entryTime: string
   onEntryTimeChange: (time: string) => void
   location: ExpenseLocation | null
+  locationAllowed: boolean
   locationStatus: LocationStatus
   locationMessage: string
   onRequestLocation: () => void
@@ -2448,7 +2536,11 @@ function EntryContextEditor({
         />
       </label>
       <div className="entry-location-field">
-        {location ? (
+        {!locationAllowed ? (
+          <span className="location-disabled">
+            <MapPin size={16} aria-hidden /> 위치 저장 꺼짐
+          </span>
+        ) : location ? (
           <div className="location-ready">
             <span><MapPin size={16} aria-hidden /> 위치 포함</span>
             <button type="button" onClick={onClearLocation} aria-label="기록 위치 지우기">

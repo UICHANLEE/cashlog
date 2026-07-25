@@ -52,5 +52,14 @@ export const validateSignupFields = (fields: Record<string, string>) => {
   if (fields.privacyConsent !== 'true') {
     throw new ApiError(400, 'PRIVACY_REQUIRED', '개인정보 처리방침에 동의해 주세요.', 'privacyConsent')
   }
-  return { email, nickname, password }
+  if (fields.photoTimeConsent !== 'true') {
+    throw new ApiError(400, 'PHOTO_TIME_REQUIRED', '사진과 기록 시간 처리에 동의해 주세요.', 'photoTimeConsent')
+  }
+  return {
+    email,
+    nickname,
+    password,
+    photoAndTime: true as const,
+    location: fields.locationConsent === 'true',
+  }
 }

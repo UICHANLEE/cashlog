@@ -20,7 +20,8 @@ export const validateProfileImage = async (file: File) => {
 }
 
 export const validateSignup = (values: {
-  nickname: string; email: string; password: string; passwordConfirm: string; age14: boolean; terms: boolean; privacy: boolean
+  nickname: string; email: string; password: string; passwordConfirm: string; age14: boolean;
+  terms: boolean; privacy: boolean; photoAndTime: boolean; location: boolean
 }) => {
   const errors: FieldErrors = {}
   if (values.nickname.trim().length < 2 || values.nickname.trim().length > 30) errors.nickname = '닉네임은 2~30자로 입력해 주세요.'
@@ -31,5 +32,6 @@ export const validateSignup = (values: {
   if (!values.age14) errors.age14Consent = '만 14세 이상 확인이 필요해요.'
   if (!values.terms) errors.termsConsent = '이용약관 동의가 필요해요.'
   if (!values.privacy) errors.privacyConsent = '개인정보 처리방침 동의가 필요해요.'
+  if (!values.photoAndTime) errors.photoTimeConsent = '사진과 기록 시간 처리 동의가 필요해요.'
   return errors
 }

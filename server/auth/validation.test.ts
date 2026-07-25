@@ -18,10 +18,30 @@ describe('account validation', () => {
     expect(() => validateSignupFields({
       email: 'me@example.com', nickname: '캐시로그', password: 'Cashlog!2026', passwordConfirm: 'different1!',
       age14Consent: 'true', termsConsent: 'true', privacyConsent: 'true',
+      photoTimeConsent: 'true',
     })).toThrow('비밀번호 확인')
     expect(() => validateSignupFields({
       email: 'me@example.com', nickname: '캐시로그', password: 'Cashlog!2026', passwordConfirm: 'Cashlog!2026',
       age14Consent: 'true', termsConsent: 'false', privacyConsent: 'true',
+      photoTimeConsent: 'true',
     })).toThrow('이용약관')
+  })
+
+  it('requires photo time consent and keeps location optional', () => {
+    const base = {
+      email: 'me@example.com',
+      nickname: '캐시로그',
+      password: 'Cashlog!2026',
+      passwordConfirm: 'Cashlog!2026',
+      age14Consent: 'true',
+      termsConsent: 'true',
+      privacyConsent: 'true',
+    }
+    expect(() => validateSignupFields(base)).toThrow('사진과 기록 시간')
+    expect(validateSignupFields({
+      ...base,
+      photoTimeConsent: 'true',
+      locationConsent: 'false',
+    })).toMatchObject({ photoAndTime: true, location: false })
   })
 })

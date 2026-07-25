@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
@@ -152,54 +152,83 @@ describe('Cashlog photo MVP', () => {
     expect(screen.getByText(/5\/5 · 최고야/)).toBeInTheDocument()
   })
 
-  it('stores an edited clock and an explicitly approved location', async () => {
+  it('does not request location when the account has not consented', async () => {
     const user = userEvent.setup()
+    const getCurrentPosition = vi.fn()
     vi.stubGlobal('navigator', {
       ...window.navigator,
-      geolocation: {
-        getCurrentPosition: vi.fn((success: PositionCallback) =>
-          success({
-            coords: {
-              latitude: 37.5665,
-              longitude: 126.978,
-              accuracy: 24,
-              altitude: null,
-              altitudeAccuracy: null,
-              heading: null,
-              speed: null,
-              toJSON: () => ({}),
-            },
-            timestamp: Date.now(),
-            toJSON: () => ({}),
-          } as GeolocationPosition),
-        ),
-      },
+      geolocation: { getCurrentPosition },
+    })
+    render(<App />)
+    const photo = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0])], 'cafe.jpg', {
+      type: 'image/jpeg',
+    })
+
+    await user.upload(screen.getByLabelText('갤러리에서 사진 선택'), photo)
+
+    expect(await screen.findByText('위치 저장 꺼짐')).toBeInTheDocument()
+    expect(getCurrentPosition).not.toHaveBeenCalled()
+  })
+
+  it('automatically stores current location for a consented photo record', async () => {
+    const user = userEvent.setup()
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://cashlog.supabase.co')
+    vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'anon-key')
+    localStorage.setItem('cashlog.supabase.session', JSON.stringify({
+      accessToken: 'access-token',
+      expiresAt: Date.now() + 60_000,
+      user: { id: 'user-1', email: 'me@example.com' },
+    }))
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/rest/v1/cashlog_user_consents')) {
+        return new Response(JSON.stringify([{
+          consent_version: '2026-07-26',
+          age_14_or_older: true,
+          privacy_consent: true,
+          photo_time_consent: true,
+          location_consent: true,
+        }]), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      if (url.includes('/rest/v1/cashlog_entries') || url.includes('/rest/v1/cashlog_pet_profiles')) {
+        return new Response(init?.method === 'POST' ? '' : '[]', { status: 200 })
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }))
+    const getCurrentPosition = vi.fn((success: PositionCallback) =>
+      success({
+        coords: {
+          latitude: 37.5665,
+          longitude: 126.978,
+          accuracy: 24,
+          altitude: null,
+          altitudeAccuracy: null,
+          heading: null,
+          speed: null,
+          toJSON: () => ({}),
+        },
+        timestamp: Date.now(),
+        toJSON: () => ({}),
+      } as GeolocationPosition),
+    )
+    vi.stubGlobal('navigator', {
+      ...window.navigator,
+      geolocation: { getCurrentPosition },
     })
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: '+ 기록 추가' }))
-    await user.click(screen.getByRole('button', { name: '직접 입력' }))
-    fireEvent.change(screen.getByLabelText('기록 시간'), { target: { value: '08:30' } })
-    await user.click(screen.getByRole('button', { name: '현재 위치 추가' }))
-    expect(await screen.findByText(/이 기록에만 현재 위치/)).toBeInTheDocument()
-    await user.type(screen.getByLabelText('제목'), '출근길 커피')
-    await user.type(screen.getByLabelText('금액'), '4500')
-    await user.click(screen.getByRole('button', { name: '저장하기' }))
+    await user.click(screen.getByRole('button', { name: '계정 메뉴 열기' }))
+    const account = screen.getByRole('region', { name: '로그인과 동기화' })
+    expect(await within(account).findByRole('checkbox', { name: /사진 위치 자동 기록/ })).toBeChecked()
+    await user.click(screen.getByRole('button', { name: '계정 메뉴 닫기' }))
 
-    await waitFor(() => {
-      const [saved] = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]')
-      expect(saved).toMatchObject({
-        localDate: expect.any(String),
-        timeZone: expect.any(String),
-        location: {
-          latitude: 37.5665,
-          longitude: 126.978,
-          accuracyMeters: 24,
-        },
-      })
-      expect(new Date(saved.dateTime).getHours()).toBe(8)
-      expect(new Date(saved.dateTime).getMinutes()).toBe(30)
+    const photo = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0])], 'cafe.jpg', {
+      type: 'image/jpeg',
     })
+    await user.upload(screen.getByLabelText('갤러리에서 사진 선택'), photo)
+
+    expect(await screen.findByText(/현재 위치를 자동으로 넣었어요/)).toBeInTheDocument()
+    expect(getCurrentPosition).toHaveBeenCalledOnce()
     expect(screen.getByText('위치 포함')).toBeInTheDocument()
   })
 
@@ -327,9 +356,9 @@ describe('Cashlog photo MVP', () => {
     expect(await within(account).findByText('필수 동의 항목을 모두 확인해 주세요.')).toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
 
-    await user.click(within(account).getByText(/만 14세 이상입니다/))
-    await user.click(within(account).getByText(/계정·가계부 기록 수집/))
-    await user.click(within(account).getByText(/사진과 촬영·기록 시간/))
+    await user.click(within(account).getByRole('checkbox', { name: /만 14세 이상입니다/ }))
+    await user.click(within(account).getByRole('checkbox', { name: /개인정보 처리방침/ }))
+    await user.click(within(account).getByRole('checkbox', { name: /선택한 사진과 사진 파일·기록 시각/ }))
     await user.click(within(account).getByRole('button', { name: '가입하고 시작' }))
 
     expect(fetchMock).toHaveBeenCalledOnce()

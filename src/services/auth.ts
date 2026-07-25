@@ -17,13 +17,21 @@ export type CashlogSession = {
   user?: CashlogUser
 }
 
-export const CASHLOG_CONSENT_VERSION = '2026-07-17'
+export const CASHLOG_CONSENT_VERSION = '2026-07-26'
 
 export type SignupConsents = {
   age14: true
   privacy: true
   photoAndTime: true
   location: boolean
+}
+
+export type StoredSignupConsents = {
+  age14: boolean
+  privacy: boolean
+  photoAndTime: boolean
+  location: boolean
+  consentVersion: string
 }
 
 type SupabaseAuthBody = {
@@ -253,6 +261,71 @@ export const createCashlogAuthClient = () => {
     return true
   }
 
+  const getSignupConsents = async (
+    session: CashlogSession,
+  ): Promise<StoredSignupConsents | null> => {
+    if (!config) return null
+    const user = session.user ?? (await getUser(session))
+    if (!user?.id) return null
+    const endpoint = new URL(`${config.url}/rest/v1/cashlog_user_consents`)
+    endpoint.searchParams.set(
+      'select',
+      'consent_version,age_14_or_older,privacy_consent,photo_time_consent,location_consent',
+    )
+    endpoint.searchParams.set('user_id', `eq.${user.id}`)
+    endpoint.searchParams.set('app_id', 'eq.cashlog')
+    endpoint.searchParams.set('limit', '1')
+    const response = await fetch(endpoint, {
+      headers: authHeaders(config, session.accessToken),
+    })
+    if (!response.ok) return null
+    const rows = (await response.json()) as Array<{
+      consent_version?: string
+      age_14_or_older?: boolean
+      privacy_consent?: boolean
+      photo_time_consent?: boolean
+      location_consent?: boolean
+    }>
+    const row = rows[0]
+    if (!row) return null
+    return {
+      age14: row.age_14_or_older === true,
+      privacy: row.privacy_consent === true,
+      photoAndTime: row.photo_time_consent === true,
+      location: row.location_consent === true,
+      consentVersion: row.consent_version ?? 'unknown',
+    }
+  }
+
+  const updateLocationConsent = async (
+    session: CashlogSession,
+    location: boolean,
+  ): Promise<void> => {
+    if (!config) throw new Error('로그인 서비스 연결이 아직 완료되지 않았어요.')
+    const user = session.user ?? (await getUser(session))
+    if (!user?.id) throw new Error('계정 정보를 확인하지 못했어요.')
+    const endpoint = new URL(`${config.url}/rest/v1/cashlog_user_consents`)
+    endpoint.searchParams.set('user_id', `eq.${user.id}`)
+    endpoint.searchParams.set('app_id', 'eq.cashlog')
+    const response = await fetch(endpoint, {
+      method: 'PATCH',
+      headers: {
+        ...authHeaders(config, session.accessToken),
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify({
+        location_consent: location,
+        consent_version: CASHLOG_CONSENT_VERSION,
+        updated_at: new Date().toISOString(),
+      }),
+    })
+    if (!response.ok) {
+      throw new Error(
+        await readAuthError(response, '위치 정보 동의 설정을 변경하지 못했어요.'),
+      )
+    }
+  }
+
   const signUpWithPassword = async (
     email: string,
     password: string,
@@ -316,6 +389,8 @@ export const createCashlogAuthClient = () => {
     signInWithOAuth,
     signUpWithPassword,
     persistPendingOAuthConsent,
+    getSignupConsents,
+    updateLocationConsent,
     hydrateSession,
     signOut,
   }

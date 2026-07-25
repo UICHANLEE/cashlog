@@ -120,6 +120,34 @@
   gap: 8px;
 }
 
+.account-location-setting {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  cursor: pointer;
+}
+
+.account-location-setting input {
+  width: 19px;
+  height: 19px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+.account-location-setting span {
+  display: grid;
+  gap: 2px;
+}
+
+.account-location-setting strong {
+  font-family: var(--font-hand);
+}
+
+.account-location-setting small,
+.account-card .account-privacy-note {
+  font-size: 12px;
+}
+
 .account-form {
   display: grid;
   grid-template-columns: 1fr;
@@ -284,6 +312,11 @@
   accent-color: var(--accent);
 }
 
+.signup-consents a {
+  color: inherit;
+  font-weight: 800;
+}
+
 .signup-consents details {
   margin: -2px 0 8px 27px;
   color: var(--ink-soft);
@@ -300,6 +333,13 @@
   margin: 5px 0 0;
   font-size: 12px;
   line-height: 1.45;
+}
+
+.signup-consents .consent-protection {
+  margin: 8px 0 2px 27px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .account-message {
@@ -1630,7 +1670,8 @@ video.preview-image {
 }
 
 .location-request,
-.location-ready {
+.location-ready,
+.location-disabled {
   display: flex;
   width: 100%;
   min-width: 0;
@@ -1665,6 +1706,11 @@ video.preview-image {
 .location-ready {
   justify-content: space-between;
   background: var(--crayon-mint);
+}
+
+.location-disabled {
+  background: rgba(255, 255, 255, 0.56);
+  color: var(--ink-soft);
 }
 
 .location-ready > span {

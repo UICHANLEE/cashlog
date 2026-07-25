@@ -36,7 +36,7 @@ describe('Cashlog signup consent', () => {
     expect(signupUrl.searchParams.get('redirect_to')).toBe(window.location.origin + '/')
     expect(body.data).toMatchObject({
       app_id: 'cashlog',
-      consent_version: '2026-07-17',
+      consent_version: '2026-07-26',
       age_14_or_older: true,
       privacy_consent: true,
       photo_time_consent: true,
@@ -127,5 +127,42 @@ describe('Cashlog signup consent', () => {
       location_consent: false,
     })
     expect(localStorage.getItem('cashlog.oauth.pending-consent')).toBeNull()
+  })
+
+  it('loads and withdraws the signed-in account location consent', async () => {
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://cashlog.supabase.co')
+    vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'anon-key')
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'PATCH') return new Response(null, { status: 204 })
+      return new Response(JSON.stringify([{
+        consent_version: '2026-07-26',
+        age_14_or_older: true,
+        privacy_consent: true,
+        photo_time_consent: true,
+        location_consent: true,
+      }]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const client = createCashlogAuthClient()
+    const session = {
+      accessToken: 'account-access',
+      user: { id: 'user-1', email: 'me@example.com' },
+    }
+
+    await expect(client.getSignupConsents(session)).resolves.toMatchObject({
+      location: true,
+      consentVersion: '2026-07-26',
+    })
+    await client.updateLocationConsent(session, false)
+
+    const [, update] = fetchMock.mock.calls[1]
+    expect(update?.method).toBe('PATCH')
+    expect(JSON.parse(String(update?.body))).toMatchObject({
+      location_consent: false,
+      consent_version: '2026-07-26',
+    })
   })
 })

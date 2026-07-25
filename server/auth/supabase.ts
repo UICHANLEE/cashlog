@@ -53,7 +53,13 @@ const headers = (key: string, token = key, extra?: Record<string, string>) => ({
   ...extra,
 })
 
-export const authSignup = async (email: string, password: string, nickname: string, origin?: string) => {
+export const authSignup = async (
+  email: string,
+  password: string,
+  nickname: string,
+  consents: { photoAndTime: true; location: boolean },
+  origin?: string,
+) => {
   const config = getServerSupabaseConfig()
   const endpoint = new URL(`${config.url}/auth/v1/signup`)
   if (origin) endpoint.searchParams.set('redirect_to', `${origin}/login.html?verified=1`)
@@ -64,8 +70,9 @@ export const authSignup = async (email: string, password: string, nickname: stri
       email,
       password,
       data: {
-        app_id: 'cashlog', nickname, consent_version: '2026-07-15', consented_at: new Date().toISOString(),
-        age_14_or_older: true, privacy_consent: true, photo_time_consent: true, location_consent: false,
+        app_id: 'cashlog', nickname, consent_version: '2026-07-26', consented_at: new Date().toISOString(),
+        age_14_or_older: true, privacy_consent: true,
+        photo_time_consent: consents.photoAndTime, location_consent: consents.location,
       },
     }),
   })

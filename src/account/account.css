@@ -41,6 +41,12 @@ a { color: inherit; }
 .consent-list input, .remember-row input { width: 17px; height: 17px; margin: 1px 0 0; accent-color: #ee5e4f; flex: none; }
 .consent-list strong { color: #d8453a; }
 .consent-list a { font-weight: 800; }
+.consent-list .consent-protection {
+  margin: 3px 0 0 25px;
+  color: #665f55;
+  font-size: 11px;
+  line-height: 1.6;
+}
 .primary-submit, .secondary-submit { min-height: 49px; display: flex; justify-content: center; align-items: center; gap: 7px; color: #fff; background: #ee5e4f; border: 2px solid #2d2925; border-radius: 5px; box-shadow: 3px 4px 0 #2d2925; font-weight: 800; cursor: pointer; transition: transform .14s, box-shadow .14s; }
 .primary-submit:hover, .secondary-submit:hover { transform: translate(-1px,-1px); box-shadow: 4px 5px 0 #2d2925; }
 .primary-submit:active, .secondary-submit:active { transform: translate(2px,2px); box-shadow: 1px 1px 0 #2d2925; }
