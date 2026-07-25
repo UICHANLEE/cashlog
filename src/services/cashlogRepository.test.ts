@@ -89,6 +89,11 @@ describe('cashlog category feedback repository', () => {
     const row = {
       id: 'expense-mood',
       date_time: '2026-07-23T12:00:00.000Z',
+      local_date: '2026-07-23',
+      time_zone: 'Asia/Seoul',
+      latitude: 37.5665,
+      longitude: 126.978,
+      location_accuracy_m: 20,
       amount: 7500,
       kind: 'expense',
       category: 'meal_cafe',
@@ -115,9 +120,25 @@ describe('cashlog category feedback repository', () => {
 
     const [expense] = (await repository?.listExpenses()) ?? []
     expect(expense.moodScore).toBe(5)
+    expect(expense).toMatchObject({
+      localDate: '2026-07-23',
+      timeZone: 'Asia/Seoul',
+      location: {
+        latitude: 37.5665,
+        longitude: 126.978,
+        accuracyMeters: 20,
+      },
+    })
 
     await repository?.upsertExpense(expense)
     const upsertBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))
     expect(upsertBody[0].mood_score).toBe(5)
+    expect(upsertBody[0]).toMatchObject({
+      local_date: '2026-07-23',
+      time_zone: 'Asia/Seoul',
+      latitude: 37.5665,
+      longitude: 126.978,
+      location_accuracy_m: 20,
+    })
   })
 })

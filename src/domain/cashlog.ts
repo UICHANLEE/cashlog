@@ -391,6 +391,12 @@ export type LedgerKind = 'expense' | 'income'
 
 export type MoodScore = 1 | 2 | 3 | 4 | 5
 
+export type ExpenseLocation = {
+  latitude: number
+  longitude: number
+  accuracyMeters?: number
+}
+
 export type MoodOption = {
   score: MoodScore
   face: string
@@ -426,6 +432,12 @@ export function normalizeAmountInput(value: string, maxDigits = 10): string {
 export type Expense = {
   id: string
   dateTime: string
+  /** 기록 당시 기기에서 보인 YYYY-MM-DD. UTC 날짜 경계와 분리한다. */
+  localDate?: string
+  /** 기록 당시 IANA time zone. 다른 기기에서도 원래 시각을 재현한다. */
+  timeZone?: string
+  /** 사용자가 기록 시점에 명시적으로 허용한 위치. */
+  location?: ExpenseLocation
   /** 항상 0 초과 원 단위 금액 (수입도 양수) */
   amount: number
   kind: LedgerKind
@@ -608,7 +620,7 @@ export const createManualExpense = ({
 
 export const getExpensesForDate = (expenses: Expense[], isoDate: string) =>
   expenses
-    .filter((expense) => toIsoDate(expense.dateTime) === isoDate)
+    .filter((expense) => (expense.localDate ?? toIsoDate(expense.dateTime)) === isoDate)
     .sort(compareExpensesChronological)
 
 /** 사진 지출만, 이미지 URL 있는 것만 시간순 */
@@ -627,7 +639,7 @@ export const getStoryEntriesForMonth = (
   yearMonth: string,
 ): Expense[] =>
   [...expenses]
-    .filter((e) => toIsoDate(e.dateTime).startsWith(yearMonth))
+    .filter((e) => (e.localDate ?? toIsoDate(e.dateTime)).startsWith(yearMonth))
     .sort(compareExpensesChronological)
 
 /** 해당 월(YYYY-MM) 전체에서 사진 지출 시간순 */
@@ -640,7 +652,7 @@ export const getPhotoExpensesForMonth = (
       (e) =>
         e.source === 'photo' &&
         Boolean(e.imageUrl?.trim()) &&
-        toIsoDate(e.dateTime).startsWith(yearMonth),
+        (e.localDate ?? toIsoDate(e.dateTime)).startsWith(yearMonth),
     )
     .sort(compareExpensesChronological)
 

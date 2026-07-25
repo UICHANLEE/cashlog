@@ -13,6 +13,7 @@ export async function remoteAnalyzePhoto(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ imageBase64, mimeType, filename: file.name }),
+    signal: AbortSignal.timeout(20_000),
   })
 
   const text = await res.text()

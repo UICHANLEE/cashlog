@@ -57,6 +57,7 @@ export async function remoteAnalyzeProductImage(
   const response = await fetch(endpoint, {
     method: 'POST',
     body: form,
+    signal: AbortSignal.timeout(20_000),
   })
 
   const text = await response.text()

@@ -26,6 +26,10 @@ import './StoryReel.css'
 
 export type StorySlide = {
   id: string
+  variant?: 'entry' | 'summary'
+  tone?: 'sun' | 'coral' | 'mint' | 'sky'
+  eyebrow?: string
+  stats?: Array<{ label: string; value: string }>
   /** 없으면 직접 입력(글만) 카드 표시 */
   imageUrl?: string
   /** 있으면 영상으로 재생 (imageUrl은 포스터로 사용) */
@@ -75,10 +79,15 @@ function slideIsIncome(slide: StorySlide): boolean {
   return looksIncomeLikeSlide(slide.headline, slide.detail)
 }
 
+function slideIsSummary(slide: StorySlide): boolean {
+  return slide.variant === 'summary'
+}
+
 /** 순지출 계: 지출 더하고 수입은 줄임 */
 function cumulativeNet(slice: StorySlide[]): number {
   let n = 0
   for (const s of slice) {
+    if (slideIsSummary(s)) continue
     n += netOutflowContribution(s.headline, s.detail, s.amountWon, s.isIncome)
   }
   return n
@@ -150,6 +159,7 @@ export function StoryReel({
 
   const fireMotionForSlide = useCallback(
     (slide: StorySlide) => {
+      if (slideIsSummary(slide)) return
       const income = slideIsIncome(slide)
       const direction: 'up' | 'down' = income ? 'up' : 'down'
       const amt = formatCurrency(slide.amountWon)
@@ -357,7 +367,7 @@ export function StoryReel({
           ? 1
           : 0,
     }
-    event.currentTarget.setPointerCapture(event.pointerId)
+    event.currentTarget.setPointerCapture?.(event.pointerId)
     setIsDragging(true)
   }
 
@@ -403,8 +413,8 @@ export function StoryReel({
     }
     gestureRef.current = null
     setIsDragging(false)
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId)
     }
 
     if (!gesture.moved && gesture.tapDirection !== 0) {
@@ -429,8 +439,8 @@ export function StoryReel({
 
   const slide = slides[index]
   const sliceNow = slides.slice(0, index + 1)
-  const cumulative = cumulativeNet(sliceNow)
-  const currentDelta = slideDeltaLabel(slide)
+  const cumulative = cumulativeNet(slideIsSummary(slide) ? slides : sliceNow)
+  const currentDelta = slideIsSummary(slide) ? null : slideDeltaLabel(slide)
 
   return (
     <div
@@ -457,15 +467,23 @@ export function StoryReel({
         <div className="story-reel-toolbar">
           <p className="story-reel-title">{title}</p>
           <div className="story-live-total">
-            <span className="story-live-label">누적 · {aggregateLabel}</span>
+            <span className="story-live-label">
+              {slideIsSummary(slide) ? '전체' : '누적'} · {aggregateLabel}
+            </span>
             <strong className="story-live-sum" aria-live="polite">
               {formatToolbarRunningTotal(cumulative)}
             </strong>
-            <span
-              className={`story-live-now ${slideIsIncome(slide) ? 'is-income' : 'is-spend'}`}
-            >
-              {currentDelta}
-            </span>
+            {currentDelta ? (
+              <span
+                className={`story-live-now ${slideIsIncome(slide) ? 'is-income' : 'is-spend'}`}
+              >
+                {currentDelta}
+              </span>
+            ) : (
+              <span className="story-live-now is-summary">
+                {index + 1} / {slides.length}
+              </span>
+            )}
           </div>
           <button
             type="button"
@@ -490,10 +508,30 @@ export function StoryReel({
       )}
 
       <motion.figure
-        className="story-reel-slide"
+        className={`story-reel-slide${slideIsSummary(slide) ? ' story-reel-summary-slide' : ''}`}
         style={{ transform: slideTransform, opacity: slideOpacity }}
       >
-        {slide.videoUrl ? (
+        {slideIsSummary(slide) ? (
+          <div className={`story-summary-pane tone-${slide.tone ?? 'sun'}`}>
+            <span className="story-summary-eyebrow">{slide.eyebrow ?? 'CASHLOG STORY'}</span>
+            <span className="story-summary-mark" aria-hidden>
+              {slide.tone === 'mint' ? '⌁' : slide.tone === 'coral' ? '✹' : '✦'}
+            </span>
+            <h2>{slide.headline}</h2>
+            {slide.detail ? <p>{slide.detail}</p> : null}
+            {slide.stats?.length ? (
+              <div className="story-summary-stats">
+                {slide.stats.map((stat) => (
+                  <div key={`${stat.label}-${stat.value}`}>
+                    <span>{stat.label}</span>
+                    <strong>{stat.value}</strong>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <small>{slide.amountLabel}</small>
+          </div>
+        ) : slide.videoUrl ? (
           <video
             className="story-reel-photo"
             src={slide.videoUrl}
@@ -516,23 +554,27 @@ export function StoryReel({
             <span className="story-reel-text-sub">사진 없이 입력한 장부입니다</span>
           </div>
         )}
-        <figcaption className="story-reel-caption">
-          <strong className="story-reel-headline">{slide.headline}</strong>
-          <span className="story-reel-amount">{slide.amountLabel}</span>
-          {slide.detail ? <small className="story-reel-detail">{slide.detail}</small> : null}
-        </figcaption>
+        {!slideIsSummary(slide) && (
+          <figcaption className="story-reel-caption">
+            <strong className="story-reel-headline">{slide.headline}</strong>
+            <span className="story-reel-amount">{slide.amountLabel}</span>
+            {slide.detail ? <small className="story-reel-detail">{slide.detail}</small> : null}
+          </figcaption>
+        )}
       </motion.figure>
 
       <button
         type="button"
         className="story-tap story-tap-prev"
         aria-label="이전 장"
+        tabIndex={-1}
         onClick={() => handleTap(-1)}
       />
       <button
         type="button"
         className="story-tap story-tap-next"
         aria-label="다음 장"
+        tabIndex={-1}
         onClick={() => handleTap(1)}
       />
     </div>

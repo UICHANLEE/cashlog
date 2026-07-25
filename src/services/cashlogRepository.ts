@@ -15,6 +15,11 @@ type CashlogEntryRow = {
   id: string
   user_id?: string
   date_time: string
+  local_date?: string | null
+  time_zone?: string | null
+  latitude?: number | null
+  longitude?: number | null
+  location_accuracy_m?: number | null
   amount: number
   kind: LedgerKind
   category: LedgerCategoryId
@@ -55,6 +60,11 @@ const expenseToRow = (expense: Expense, userId?: string): CashlogEntryRow => ({
   id: expense.id,
   ...(userId ? { user_id: userId } : {}),
   date_time: expense.dateTime,
+  local_date: expense.localDate ?? null,
+  time_zone: expense.timeZone ?? null,
+  latitude: expense.location?.latitude ?? null,
+  longitude: expense.location?.longitude ?? null,
+  location_accuracy_m: expense.location?.accuracyMeters ?? null,
   amount: expense.amount,
   kind: expense.kind,
   category: expense.category,
@@ -73,6 +83,19 @@ const expenseToRow = (expense: Expense, userId?: string): CashlogEntryRow => ({
 const rowToExpense = (row: CashlogEntryRow): Expense => ({
   id: row.id,
   dateTime: row.date_time,
+  ...(row.local_date ? { localDate: row.local_date } : {}),
+  ...(row.time_zone ? { timeZone: row.time_zone } : {}),
+  ...(typeof row.latitude === 'number' && typeof row.longitude === 'number'
+    ? {
+        location: {
+          latitude: row.latitude,
+          longitude: row.longitude,
+          ...(typeof row.location_accuracy_m === 'number'
+            ? { accuracyMeters: row.location_accuracy_m }
+            : {}),
+        },
+      }
+    : {}),
   amount: row.amount,
   kind: row.kind,
   category: row.category,

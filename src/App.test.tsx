@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
@@ -26,7 +26,7 @@ describe('Cashlog photo MVP', () => {
   it('shows disabled story playback until any entries exist', () => {
     render(<App />)
 
-    expect(screen.getByRole('button', { name: /오늘 한줄/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /하루 스토리/i })).toBeDisabled()
     expect(screen.getByText('로그인')).toBeInTheDocument()
   })
 
@@ -123,10 +123,12 @@ describe('Cashlog photo MVP', () => {
 
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: /오늘 한줄/i }))
-    const dialog = screen.getByRole('dialog', { name: `${todaySlice} 기록` })
+    await user.click(screen.getByRole('button', { name: /하루 스토리/i }))
+    const dialog = screen.getByRole('dialog', { name: /스토리/ })
     expect(dialog).toBeInTheDocument()
-    expect(within(dialog).getByText('오늘의 카페')).toBeInTheDocument()
+    expect(within(dialog).getByText(/의 하루/)).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: '다음 장' }))
+    expect(await within(dialog).findByText('오늘의 카페')).toBeInTheDocument()
   })
 
   it('lets a user add a manual expense without a photo', async () => {
@@ -150,6 +152,57 @@ describe('Cashlog photo MVP', () => {
     expect(screen.getByText(/5\/5 · 최고야/)).toBeInTheDocument()
   })
 
+  it('stores an edited clock and an explicitly approved location', async () => {
+    const user = userEvent.setup()
+    vi.stubGlobal('navigator', {
+      ...window.navigator,
+      geolocation: {
+        getCurrentPosition: vi.fn((success: PositionCallback) =>
+          success({
+            coords: {
+              latitude: 37.5665,
+              longitude: 126.978,
+              accuracy: 24,
+              altitude: null,
+              altitudeAccuracy: null,
+              heading: null,
+              speed: null,
+              toJSON: () => ({}),
+            },
+            timestamp: Date.now(),
+            toJSON: () => ({}),
+          } as GeolocationPosition),
+        ),
+      },
+    })
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '+ 기록 추가' }))
+    await user.click(screen.getByRole('button', { name: '직접 입력' }))
+    fireEvent.change(screen.getByLabelText('기록 시간'), { target: { value: '08:30' } })
+    await user.click(screen.getByRole('button', { name: '현재 위치 추가' }))
+    expect(await screen.findByText(/이 기록에만 현재 위치/)).toBeInTheDocument()
+    await user.type(screen.getByLabelText('제목'), '출근길 커피')
+    await user.type(screen.getByLabelText('금액'), '4500')
+    await user.click(screen.getByRole('button', { name: '저장하기' }))
+
+    await waitFor(() => {
+      const [saved] = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]')
+      expect(saved).toMatchObject({
+        localDate: expect.any(String),
+        timeZone: expect.any(String),
+        location: {
+          latitude: 37.5665,
+          longitude: 126.978,
+          accuracyMeters: 24,
+        },
+      })
+      expect(new Date(saved.dateTime).getHours()).toBe(8)
+      expect(new Date(saved.dateTime).getMinutes()).toBe(30)
+    })
+    expect(screen.getByText('위치 포함')).toBeInTheDocument()
+  })
+
   it('keeps model-improvement image retention as a separate opt-in', async () => {
     const user = userEvent.setup()
     render(<App />)
@@ -159,11 +212,12 @@ describe('Cashlog photo MVP', () => {
 
     await user.upload(screen.getByLabelText('갤러리에서 사진 선택'), photo)
 
+    await user.click(await screen.findByText('사진 활용 설정'))
     const consent = await screen.findByRole('checkbox', {
-      name: /이 사진을 모델 학습·평가 후보로 추가 보관/,
+      name: /추천 품질 개선을 위한 학습·평가 후보로 보관/,
     })
     expect(consent).not.toBeChecked()
-    expect(screen.getByText(/확정 카테고리만 추천 품질 통계로 기록/)).toBeInTheDocument()
+    expect(screen.getByText(/기록과 사진 보관에는 영향이 없어요/)).toBeInTheDocument()
     await user.click(consent)
     expect(consent).toBeChecked()
   })
@@ -183,10 +237,12 @@ describe('Cashlog photo MVP', () => {
 
     render(<App />)
 
-    expect(screen.getByRole('button', { name: /오늘 한줄/i })).not.toBeDisabled()
-    await user.click(screen.getByRole('button', { name: /오늘 한줄/i }))
-    const dialog = screen.getByRole('dialog', { name: `${todaySlice} 기록` })
-    expect(within(dialog).getByText('메모만')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /하루 스토리/i })).not.toBeDisabled()
+    await user.click(screen.getByRole('button', { name: /하루 스토리/i }))
+    const dialog = screen.getByRole('dialog', { name: /스토리/ })
+    expect(within(dialog).getByText(/의 하루/)).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: '다음 장' }))
+    expect(await within(dialog).findByText('메모만')).toBeInTheDocument()
   })
 
   it('lets a user add manual income via 수입 toggle', async () => {

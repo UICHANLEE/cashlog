@@ -5,6 +5,11 @@ create table if not exists public.cashlog_entries (
   id text primary key,
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   date_time timestamptz not null,
+  local_date date,
+  time_zone text,
+  latitude double precision,
+  longitude double precision,
+  location_accuracy_m double precision,
   amount integer not null check (amount > 0),
   kind text not null check (kind in ('expense', 'income')),
   category text not null,
@@ -362,6 +367,11 @@ alter table public.cashlog_entries add column if not exists analysis_status text
 alter table public.cashlog_entries add column if not exists analysis_revision integer not null default 0;
 alter table public.cashlog_entries add column if not exists user_category_edited_at timestamptz;
 alter table public.cashlog_entries add column if not exists mood_score smallint check (mood_score between 1 and 5);
+alter table public.cashlog_entries add column if not exists local_date date;
+alter table public.cashlog_entries add column if not exists time_zone text;
+alter table public.cashlog_entries add column if not exists latitude double precision;
+alter table public.cashlog_entries add column if not exists longitude double precision;
+alter table public.cashlog_entries add column if not exists location_accuracy_m double precision;
 alter table public.cashlog_detected_items add column if not exists top3 jsonb not null default '[]'::jsonb;
 alter table public.cashlog_detected_items add column if not exists evidence jsonb not null default '{}'::jsonb;
 alter table public.cashlog_detected_items add column if not exists model_version text;

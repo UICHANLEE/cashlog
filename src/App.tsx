@@ -15,7 +15,10 @@ import {
   Camera,
   Check,
   ChevronDown,
+  Clock,
   Image as ImageIcon,
+  LocateFixed,
+  MapPin,
   Mic,
   PawPrint,
   Pencil,
@@ -32,10 +35,12 @@ import { analyzePhoto } from './ai/analyzePhoto'
 import { captureFrameFromVideo } from './camera/captureFromVideo'
 import {
   categoryTree,
+  compareExpensesChronological,
   type CategoryId,
   createExpenseFromAnalysis,
   createManualExpense,
   type Expense,
+  type ExpenseLocation,
   dayExpenseTotal,
   dayIncomeTotal,
   formatCurrency,
@@ -60,6 +65,13 @@ import {
   type PhotoAnalysis,
   type MoodScore,
 } from './domain/cashlog'
+import {
+  clockFromDate,
+  combineLocalDateAndTime,
+  dominantDayPart,
+  formatExpenseClock,
+  groupExpensesByDayPart,
+} from './domain/entryContext'
 import {
   formatDayLogRelativeKo,
   formatMonthLogRelativeKo,
@@ -96,6 +108,7 @@ type AddMode = 'closed' | 'choice' | 'photo' | 'manual'
 type StoryMode = null | 'day' | 'month'
 type AppView = 'diary' | 'calendar' | 'pets'
 type AuthMode = 'signIn' | 'signUp' | 'magic'
+type LocationStatus = 'idle' | 'loading' | 'ready' | 'error'
 
 const APP_VIEW_ORDER: AppView[] = ['diary', 'calendar', 'pets']
 
@@ -170,6 +183,32 @@ const emptyForm = (): ExpenseForm => ({
   kind: 'expense',
 })
 
+const currentTimeZone = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  } catch {
+    return 'UTC'
+  }
+}
+
+const dominantCategoryLabel = (items: Expense[]) => {
+  const totals = new Map<string, { amount: number; count: number; label: string }>()
+  items
+    .filter((expense) => expense.kind === 'expense')
+    .forEach((expense) => {
+      const key = String(expense.category)
+      const current = totals.get(key)
+      totals.set(key, {
+        amount: (current?.amount ?? 0) + expense.amount,
+        count: (current?.count ?? 0) + 1,
+        label: formatLedgerCategory(expense),
+      })
+    })
+  return [...totals.values()].sort(
+    (a, b) => b.amount - a.amount || b.count - a.count,
+  )[0]?.label
+}
+
 function CashlogApp() {
   const now = new Date()
   const prefersReducedMotion = useReducedMotion()
@@ -178,12 +217,18 @@ function CashlogApp() {
   const [visibleMonth] = useState({ year: now.getFullYear(), month: now.getMonth() })
   const [addMode, setAddMode] = useState<AddMode>('closed')
   const [form, setForm] = useState<ExpenseForm>(emptyForm)
+  const [entryTime, setEntryTime] = useState(() => clockFromDate(new Date()))
+  const [locationDraft, setLocationDraft] = useState<ExpenseLocation | null>(null)
+  const [locationStatus, setLocationStatus] = useState<LocationStatus>('idle')
+  const [locationMessage, setLocationMessage] = useState('')
   const [photoPreview, setPhotoPreview] = useState('')
   const photoFileRef = useRef<File | null>(null)
   const [analysis, setAnalysis] = useState<PhotoAnalysis | null>(null)
   const [trainingImageConsent, setTrainingImageConsent] = useState(false)
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
   const [cameraError, setCameraError] = useState<string | null>(null)
+  const [photoAssistMessage, setPhotoAssistMessage] = useState('')
+  const [isAnalyzingPhoto, setIsAnalyzingPhoto] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const [captureKind, setCaptureKind] = useState<'photo' | 'video'>('photo')
@@ -263,6 +308,8 @@ function CashlogApp() {
       return ''
     })
     setAnalysis(null)
+    setPhotoAssistMessage('')
+    setIsAnalyzingPhoto(false)
     setTrainingImageConsent(false)
     clearRecordTimer()
     setIsRecording(false)
@@ -273,8 +320,16 @@ function CashlogApp() {
     mediaRecorderRef.current = null
   }, [clearRecordTimer])
 
-  const applyPhotoFile = useCallback(async (file: File) => {
+  const resetEntryContext = useCallback((sourceDate = new Date()) => {
+    setEntryTime(clockFromDate(sourceDate))
+    setLocationDraft(null)
+    setLocationStatus('idle')
+    setLocationMessage('')
+  }, [])
+
+  const applyPhotoFile = useCallback(async (file: File, sourceDate?: Date) => {
     setCameraError(null)
+    setPhotoAssistMessage('')
     setTrainingImageConsent(false)
     try {
       await assertValidImageFile(file)
@@ -285,11 +340,16 @@ function CashlogApp() {
       return
     }
     photoFileRef.current = file
+    const recordedAt =
+      sourceDate ??
+      (file.lastModified > 0 ? new Date(file.lastModified) : new Date())
+    setEntryTime(clockFromDate(recordedAt))
     setPhotoPreview((prev) => {
       if (prev.startsWith('blob:')) URL.revokeObjectURL(prev)
       return URL.createObjectURL(file)
     })
     setAnalysis(null)
+    setIsAnalyzingPhoto(true)
 
     try {
       const nextAnalysis = await analyzePhoto(file)
@@ -303,10 +363,58 @@ function CashlogApp() {
         kind: 'expense',
       })
     } catch (e) {
-      const message = e instanceof Error ? e.message : '사진 분석에 실패했어요.'
-      setCameraError(message)
+      void e
+      setPhotoAssistMessage('사진은 준비됐어요. 금액과 카테고리를 직접 확인해 주세요.')
       setForm(emptyForm())
+    } finally {
+      setIsAnalyzingPhoto(false)
     }
+  }, [])
+
+  const handleUseCurrentLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      setLocationStatus('error')
+      setLocationMessage('이 기기에서는 위치를 가져올 수 없어요.')
+      return
+    }
+
+    setLocationStatus('loading')
+    setLocationMessage('현재 위치를 확인하는 중...')
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocationDraft({
+          latitude: Number(position.coords.latitude.toFixed(6)),
+          longitude: Number(position.coords.longitude.toFixed(6)),
+          ...(Number.isFinite(position.coords.accuracy)
+            ? { accuracyMeters: Math.round(position.coords.accuracy) }
+            : {}),
+        })
+        setLocationStatus('ready')
+        setLocationMessage('이 기록에만 현재 위치를 넣었어요.')
+        signalSoftImpact()
+      },
+      (error) => {
+        setLocationDraft(null)
+        setLocationStatus('error')
+        setLocationMessage(
+          error.code === error.PERMISSION_DENIED
+            ? '위치 권한이 꺼져 있어요. 위치 없이도 저장할 수 있어요.'
+            : '위치를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.',
+        )
+      },
+      {
+        enableHighAccuracy: false,
+        timeout: 8_000,
+        maximumAge: 5 * 60_000,
+      },
+    )
+  }, [])
+
+  const handleClearLocation = useCallback(() => {
+    setLocationDraft(null)
+    setLocationStatus('idle')
+    setLocationMessage('')
+    signalSoftImpact()
   }, [])
 
   const hydrateExpenseImages = useCallback(
@@ -487,6 +595,10 @@ function CashlogApp() {
     () => getExpensesForDate(expenses, selectedDate),
     [expenses, selectedDate],
   )
+  const selectedExpenseGroups = useMemo(
+    () => groupExpensesByDayPart(selectedExpenses),
+    [selectedExpenses],
+  )
   const calendarDays = useMemo(
     () => getCalendarDays(visibleMonth.year, visibleMonth.month),
     [visibleMonth],
@@ -501,20 +613,19 @@ function CashlogApp() {
   const selectedDayPhotos = selectedExpenses.filter((expense) => expense.imageUrl).slice(0, 3)
   const selectedDayExpenseMoments = selectedExpenses.filter((expense) => expense.kind === 'expense')
   const recentMoodScore = expenses.find((expense) => expense.moodScore)?.moodScore
-  const dominantDayCategory = (() => {
-    const counts = new Map<string, { count: number; label: string }>()
-    selectedDayExpenseMoments.forEach((expense) => {
-      const key = String(expense.category)
-      const current = counts.get(key)
-      counts.set(key, { count: (current?.count ?? 0) + 1, label: formatLedgerCategory(expense) })
-    })
-    return [...counts.values()].sort((a, b) => b.count - a.count)[0]?.label
-  })()
+  const dominantDayCategory = dominantCategoryLabel(selectedDayExpenseMoments)
   const selectedDateLabel = new Intl.DateTimeFormat('ko-KR', {
     month: 'long',
     day: 'numeric',
     weekday: 'short',
   }).format(new Date(`${selectedDate}T12:00:00`))
+  const photoSuggestedCategories = useMemo(() => {
+    if (!analysis || form.kind !== 'expense') return []
+    return [
+      analysis.suggestedCategory,
+      ...(analysis.topCategories?.map((candidate) => candidate.category) ?? []),
+    ].filter((category, index, list) => list.indexOf(category) === index).slice(0, 3)
+  }, [analysis, form.kind])
 
   const syncWithCloud = async () => {
     if (!repository) {
@@ -747,13 +858,112 @@ function CashlogApp() {
 
   const dayStorySlides: StorySlide[] = useMemo(() => {
     void relativeMinuteTick
-    return getStoryEntriesForDate(expenses, selectedDate).map((e) => expenseToSlide(e, 'day'))
-  }, [expenseToSlide, expenses, relativeMinuteTick, selectedDate])
+    const entries = getStoryEntriesForDate(expenses, selectedDate)
+    if (entries.length === 0) return []
+    const spent = dayExpenseTotal(entries)
+    const earned = dayIncomeTotal(entries)
+    const busyPart = dominantDayPart(entries)
+    const photoCount = entries.filter((entry) => entry.imageUrl || entry.videoUrl).length
+    const locationCount = entries.filter((entry) => entry.location).length
+    const summary: StorySlide = {
+      id: `day-summary-${selectedDate}`,
+      variant: 'summary',
+      tone: 'sun',
+      eyebrow: 'DAY STORY',
+      headline: `${selectedDateLabel}의 하루`,
+      amountLabel: `${entries.length}개의 장면`,
+      amountWon: 0,
+      detail: `${selectedPetName}와 함께 모은 오늘의 소비 장면이에요.`,
+      stats: [
+        { label: '쓴 돈', value: formatCurrency(spent) },
+        {
+          label: '많이 쓴 시간',
+          value: busyPart ? `${busyPart.icon} ${busyPart.label}` : '아직 없어요',
+        },
+        {
+          label: '기록 단서',
+          value: `${photoCount}컷 · 위치 ${locationCount}곳`,
+        },
+        ...(earned > 0 ? [{ label: '들어온 돈', value: `+${formatCurrency(earned)}` }] : []),
+      ],
+    }
+    return [summary, ...entries.map((entry) => expenseToSlide(entry, 'day'))]
+  }, [
+    expenseToSlide,
+    expenses,
+    relativeMinuteTick,
+    selectedDate,
+    selectedDateLabel,
+    selectedPetName,
+  ])
 
   const monthStorySlides: StorySlide[] = useMemo(() => {
     void relativeMinuteTick
-    return getStoryEntriesForMonth(expenses, yearMonth).map((e) => expenseToSlide(e, 'month'))
-  }, [expenseToSlide, expenses, relativeMinuteTick, yearMonth])
+    const entries = getStoryEntriesForMonth(expenses, yearMonth)
+    if (entries.length === 0) return []
+    const expenseEntries = entries.filter((entry) => entry.kind === 'expense')
+    const spent = expenseEntries.reduce((sum, entry) => sum + entry.amount, 0)
+    const earned = entries
+      .filter((entry) => entry.kind === 'income')
+      .reduce((sum, entry) => sum + entry.amount, 0)
+    const topCategory = dominantCategoryLabel(expenseEntries) ?? '아직 분류 중'
+    const busyPart = dominantDayPart(expenseEntries)
+    const biggest = [...expenseEntries].sort((a, b) => b.amount - a.amount)[0]
+    const photoCount = entries.filter((entry) => entry.imageUrl || entry.videoUrl).length
+    const locationCount = entries.filter((entry) => entry.location).length
+    const highlights = [...entries]
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 8)
+      .sort(compareExpensesChronological)
+    const monthLabel = `${visibleMonth.year}년 ${visibleMonth.month + 1}월`
+
+    return [
+      {
+        id: `month-summary-${yearMonth}`,
+        variant: 'summary',
+        tone: 'coral',
+        eyebrow: 'MONTH STORY',
+        headline: `${monthLabel}, 이렇게 보냈어요`,
+        amountLabel: `${entries.length}개의 장면`,
+        amountWon: 0,
+        detail: '숫자만 나열하지 않고, 기억에 남는 장면부터 골라봤어요.',
+        stats: [
+          { label: '이번 달 지출', value: formatCurrency(spent) },
+          { label: '사진으로 남김', value: `${photoCount}컷` },
+          { label: '위치와 함께', value: `${locationCount}곳` },
+          ...(earned > 0 ? [{ label: '이번 달 수입', value: `+${formatCurrency(earned)}` }] : []),
+        ],
+      },
+      {
+        id: `month-pattern-${yearMonth}`,
+        variant: 'summary',
+        tone: 'mint',
+        eyebrow: 'MY PATTERN',
+        headline: '이번 달의 소비 리듬',
+        amountLabel: topCategory,
+        amountWon: 0,
+        detail: biggest
+          ? `가장 큰 장면은 “${biggest.title}” ${formatCurrency(biggest.amount)}이었어요.`
+          : '조금 더 기록하면 나만의 패턴이 보여요.',
+        stats: [
+          { label: '자주 쓴 곳', value: topCategory },
+          {
+            label: '지출이 모인 때',
+            value: busyPart ? `${busyPart.icon} ${busyPart.label}` : '아직 없어요',
+          },
+          { label: '다시 볼 장면', value: `${highlights.length}개` },
+        ],
+      },
+      ...highlights.map((entry) => expenseToSlide(entry, 'month')),
+    ]
+  }, [
+    expenseToSlide,
+    expenses,
+    relativeMinuteTick,
+    visibleMonth.month,
+    visibleMonth.year,
+    yearMonth,
+  ])
 
   const openChoice = () => {
     signalSoftImpact()
@@ -761,6 +971,7 @@ function CashlogApp() {
     revokeAndClearPreview()
     setCaptureKind('photo')
     setForm(emptyForm())
+    resetEntryContext()
     setAddMode('choice')
   }
 
@@ -770,6 +981,7 @@ function CashlogApp() {
     revokeAndClearPreview()
     setCaptureKind('photo')
     setForm(emptyForm())
+    resetEntryContext()
     setAiContext(null)
     setAddMode('photo')
     await startCamera()
@@ -780,6 +992,7 @@ function CashlogApp() {
     stopCamera()
     revokeAndClearPreview()
     setForm(emptyForm())
+    resetEntryContext()
     setAddMode('manual')
   }
 
@@ -795,8 +1008,9 @@ function CashlogApp() {
     }
     stopCamera()
     revokeAndClearPreview()
+    resetEntryContext()
     setAddMode('closed')
-  }, [revokeAndClearPreview, stopCamera])
+  }, [resetEntryContext, revokeAndClearPreview, stopCamera])
 
   useEffect(() => {
     if (addMode === 'closed') return undefined
@@ -806,6 +1020,15 @@ function CashlogApp() {
     window.addEventListener('keydown', handleEscape)
     return () => window.removeEventListener('keydown', handleEscape)
   }, [addMode, closeAddSheet])
+
+  useEffect(() => {
+    if (addMode === 'closed') return undefined
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [addMode])
 
   const startCamera = async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -964,6 +1187,8 @@ function CashlogApp() {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
+    const sourceDate = file.lastModified > 0 ? new Date(file.lastModified) : new Date()
+    resetEntryContext(sourceDate)
     setAddMode('photo')
     setAiContext(null)
     const isImage = file.type.startsWith('image/')
@@ -982,14 +1207,14 @@ function CashlogApp() {
       })
       const poster = await posterFromVideoFile(file)
       if (poster) {
-        await applyPhotoFile(poster)
+        void applyPhotoFile(poster, sourceDate)
       } else {
         setForm(emptyForm())
       }
       return
     }
 
-    await applyPhotoFile(file)
+    void applyPhotoFile(file)
   }
 
   const handleSave = async (event: FormEvent<HTMLFormElement>) => {
@@ -1000,7 +1225,12 @@ function CashlogApp() {
 
     setIsSaving(true)
 
-    const dateTime = new Date(`${selectedDate}T12:00:00`).toISOString()
+    const dateTime = combineLocalDateAndTime(selectedDate, entryTime)
+    const entryContext = {
+      localDate: selectedDate,
+      timeZone: currentTimeZone(),
+      ...(locationDraft ? { location: locationDraft } : {}),
+    }
     const categoryNormalized: LedgerCategoryId =
       form.kind === 'income'
         ? migrateIncomeCategoryId(String(form.category))
@@ -1034,19 +1264,23 @@ function CashlogApp() {
             }
       expense = {
         ...base,
+        ...entryContext,
         ...(photoPreview ? { imageUrl: photoPreview } : {}),
         ...(videoPreview ? { videoUrl: videoPreview } : {}),
       }
     } else {
-      expense = createManualExpense({
-        title: form.title.trim(),
-        amount,
-        category: categoryNormalized,
-        memo: form.memo.trim(),
-        moodScore: form.moodScore ?? undefined,
-        dateTime,
-        kind: form.kind,
-      })
+      expense = {
+        ...createManualExpense({
+          title: form.title.trim(),
+          amount,
+          category: categoryNormalized,
+          memo: form.memo.trim(),
+          moodScore: form.moodScore ?? undefined,
+          dateTime,
+          kind: form.kind,
+        }),
+        ...entryContext,
+      }
     }
 
     const photoFile = photoFileRef.current
@@ -1165,6 +1399,7 @@ function CashlogApp() {
     setVideoPreview('')
     setAnalysis(null)
     setTrainingImageConsent(false)
+    resetEntryContext()
     setAddMode('closed')
     setIsSaving(false)
   }
@@ -1220,6 +1455,7 @@ function CashlogApp() {
       ? { opacity: 0 }
       : { opacity: 0, x: direction * -28, scale: 0.992 },
   }
+  const canSaveDraft = Boolean(form.title.trim()) && Number(form.amount) > 0
 
   return (
     <main className="app-shell timeline-app-shell">
@@ -1246,7 +1482,7 @@ function CashlogApp() {
           disabled={dayStorySlides.length === 0}
           onClick={() => setStoryMode('day')}
         >
-          <Sparkles size={16} aria-hidden /> 오늘 한줄
+          <Sparkles size={16} aria-hidden /> 하루 스토리
         </button>
       </header>
 
@@ -1530,7 +1766,7 @@ function CashlogApp() {
               <div className="timeline-empty-moment">
                 <div className="timeline-empty-photo">
                   <img src="/cafe-receipt-moment.png" alt="아이스 아메리카노와 영수증 기록 예시" />
-                  <span><Sparkles size={14} aria-hidden /> AI 기록 예시</span>
+                  <span><Camera size={14} aria-hidden /> 사진 기록 예시</span>
                 </div>
                 <div>
                   <p className="empty-question">오늘 첫 장면, 나랑 찍어볼까?</p>
@@ -1540,42 +1776,26 @@ function CashlogApp() {
                 </div>
               </div>
             ) : (
-              selectedExpenses.map((expense) => {
-                const accent = ledgerAccentColor(expense)
-                const isPhoto = Boolean(expense.imageUrl || expense.videoUrl)
-                return (
-                  <article className={`timeline-entry${isPhoto ? ' timeline-entry-photo' : ''}`} key={expense.id}>
-                    <time dateTime={expense.dateTime}>
-                      {new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(expense.dateTime))}
-                    </time>
-                    <span className="timeline-node" style={{ backgroundColor: accent }} aria-hidden>
-                      {isPhoto ? <Camera size={18} /> : expense.kind === 'income' ? <Sparkles size={18} /> : <Utensils size={18} />}
-                    </span>
-                    <div className="timeline-entry-body">
-                      {expense.videoUrl ? (
-                        <video className="timeline-photo" src={expense.videoUrl} poster={expense.imageUrl} muted loop playsInline autoPlay />
-                      ) : expense.imageUrl ? (
-                        <img src={expense.imageUrl} alt={`${expense.title} 사진 기록`} className="timeline-photo" />
-                      ) : null}
-                      <span className="entry-category">{formatLedgerCategory(expense)}</span>
-                      <div className="entry-title-row">
-                        <h3>{expense.title}</h3>
-                        <strong className={expense.kind === 'income' ? 'amount-income' : undefined}>
-                          {expense.kind === 'income' ? '+' : ''}{formatCurrency(expense.amount)}
-                        </strong>
-                      </div>
-                      {expense.moodScore && (
-                        <span className="entry-mood" aria-label={`기분 ${expense.moodScore}점, ${getMoodOption(expense.moodScore).label}`}>
-                          <span aria-hidden>{getMoodOption(expense.moodScore).face}</span>
-                          {expense.moodScore}/5 · {getMoodOption(expense.moodScore).label}
-                        </span>
-                      )}
-                      {expense.memo && <p>{expense.memo}</p>}
-                      <Check className="entry-check" size={18} aria-label="기록 완료" />
+              selectedExpenseGroups.map((group) => (
+                <section className="timeline-daypart" key={group.part.id}>
+                  <header className="timeline-daypart-heading">
+                    <div>
+                      <span aria-hidden>{group.part.icon}</span>
+                      <strong>{group.part.label}</strong>
+                      <small>{group.part.rangeLabel}</small>
                     </div>
-                  </article>
-                )
-              })
+                    <p>
+                      {group.expenses.length}개 · {formatCurrency(group.spent)}
+                      {group.earned > 0 ? ` · +${formatCurrency(group.earned)}` : ''}
+                    </p>
+                  </header>
+                  <div className="timeline-daypart-entries">
+                    {group.expenses.map((expense) => (
+                      <TimelineExpenseEntry key={expense.id} expense={expense} />
+                    ))}
+                  </div>
+                </section>
+              ))
             )}
           </div>
 
@@ -1683,6 +1903,7 @@ function CashlogApp() {
               </button>
             </div>
 
+            <div className="add-sheet-scroll">
             {addMode === 'choice' && (
               <div className="choice-grid">
                 <button
@@ -1710,52 +1931,48 @@ function CashlogApp() {
 
             {addMode === 'photo' && (
               <div className="photo-flow">
-                <div className="capture-kind-toggle" role="group" aria-label="사진 또는 영상">
-                  <button
-                    type="button"
-                    className={captureKind === 'photo' ? 'active' : ''}
-                    aria-pressed={captureKind === 'photo'}
-                    onClick={() => handleCaptureKindChange('photo')}
-                  >
-                    <Camera size={17} aria-hidden /> 사진
-                  </button>
-                  <button
-                    type="button"
-                    className={captureKind === 'video' ? 'active' : ''}
-                    aria-pressed={captureKind === 'video'}
-                    onClick={() => handleCaptureKindChange('video')}
-                  >
-                    영상
-                  </button>
-                </div>
-                <div className="photo-source-row" role="group" aria-label="미디어 가져오기">
-                  <button type="button" className="camera-start-button" onClick={startCamera}>
-                    <Camera size={20} aria-hidden />
-                    {captureKind === 'video' ? '카메라로 녹화' : '카메라 촬영'}
-                  </button>
-                  <label className="file-picker file-picker-inline">
-                    <ImageIcon size={20} aria-hidden /> 갤러리에서 선택
-                    <input
-                      type="file"
-                      accept={captureKind === 'video' ? 'video/*' : 'image/*'}
-                      onChange={handleGalleryPick}
-                      aria-label="갤러리에서 미디어 선택"
-                    />
-                  </label>
-                </div>
-                <p className="camera-permission-note">
-                  {captureKind === 'video' ? (
-                    <>
-                      <strong>영상 녹화</strong>는 카메라·마이크 권한이 필요해요 (HTTPS 또는
-                      localhost). 녹화가 끝나면 첫 장면을 표지로 잡아 자동 분석해요.
-                    </>
-                  ) : (
-                    <>
-                      <strong>카메라 촬영</strong>은 카메라 권한이 필요해요 (HTTPS 또는 localhost).{' '}
-                      <strong>갤러리 선택</strong>은 기기에 저장된 사진을 바로 올릴 수 있어요.
-                    </>
-                  )}
-                </p>
+                {!photoPreview && !videoPreview && !cameraStream && (
+                  <div className="media-source-step">
+                    <div className="capture-kind-toggle" role="group" aria-label="사진 또는 영상">
+                      <button
+                        type="button"
+                        className={captureKind === 'photo' ? 'active' : ''}
+                        aria-pressed={captureKind === 'photo'}
+                        onClick={() => handleCaptureKindChange('photo')}
+                      >
+                        <Camera size={17} aria-hidden /> 사진
+                      </button>
+                      <button
+                        type="button"
+                        className={captureKind === 'video' ? 'active' : ''}
+                        aria-pressed={captureKind === 'video'}
+                        onClick={() => handleCaptureKindChange('video')}
+                      >
+                        영상
+                      </button>
+                    </div>
+                    <div className="photo-source-row" role="group" aria-label="미디어 가져오기">
+                      <button type="button" className="camera-start-button" onClick={startCamera}>
+                        <Camera size={20} aria-hidden />
+                        {captureKind === 'video' ? '카메라로 녹화' : '카메라 촬영'}
+                      </button>
+                      <label className="file-picker file-picker-inline">
+                        <ImageIcon size={20} aria-hidden /> 갤러리에서 선택
+                        <input
+                          type="file"
+                          accept={captureKind === 'video' ? 'video/*' : 'image/*'}
+                          onChange={handleGalleryPick}
+                          aria-label="갤러리에서 미디어 선택"
+                        />
+                      </label>
+                    </div>
+                    <p className="camera-permission-note">
+                      {captureKind === 'video'
+                        ? '녹화를 시작할 때 카메라와 마이크 권한을 확인해요.'
+                        : '촬영할 때만 카메라 권한을 확인해요. 갤러리 사진도 바로 쓸 수 있어요.'}
+                    </p>
+                  </div>
+                )}
                 {cameraError && <p className="camera-error">{cameraError}</p>}
                 {cameraStream && (
                   <div className="camera-live-wrap">
@@ -1807,36 +2024,60 @@ function CashlogApp() {
                     </div>
                   </div>
                 )}
-                {videoPreview && !cameraStream && (
-                  <video
-                    className="preview-image"
-                    src={videoPreview}
-                    poster={photoPreview || undefined}
-                    controls
-                    playsInline
-                    muted
-                    loop
-                    autoPlay
-                  />
+                {(photoPreview || videoPreview) && !cameraStream && (
+                  <div className="media-review-card">
+                    {videoPreview ? (
+                      <video
+                        className="preview-image"
+                        src={videoPreview}
+                        poster={photoPreview || undefined}
+                        playsInline
+                        muted
+                        loop
+                        autoPlay
+                      />
+                    ) : (
+                      <img src={photoPreview} alt="선택한 기록 사진" className="preview-image" />
+                    )}
+                    <div className="media-review-copy">
+                      <span>장면 준비 완료</span>
+                      <strong>아래 내용만 확인하면 저장돼요</strong>
+                      <div className="media-review-actions">
+                        <label>
+                          <ImageIcon size={15} aria-hidden /> 바꾸기
+                          <input
+                            type="file"
+                            accept={captureKind === 'video' ? 'video/*' : 'image/*'}
+                            onChange={handleGalleryPick}
+                            aria-label="다른 미디어 선택"
+                          />
+                        </label>
+                        <button type="button" onClick={startCamera}>
+                          <Camera size={15} aria-hidden /> 다시 촬영
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 )}
-                {photoPreview && !videoPreview && !cameraStream && (
-                  <img src={photoPreview} alt="" className="preview-image" />
+                {isAnalyzingPhoto && (
+                  <p className="photo-assist-hint is-loading" role="status">
+                    <span aria-hidden /> 사진에서 기록할 내용을 정리하는 중...
+                  </p>
+                )}
+                {photoAssistMessage && (
+                  <p className="photo-assist-hint" role="status">
+                    <Check size={15} aria-hidden /> {photoAssistMessage}
+                  </p>
                 )}
                 {analysis && (
-                  <div className="analysis-note">
-                    <span className="analysis-status"><Sparkles size={15} aria-hidden /> AI 임시 기록</span>
-                    <p>
-                      {(analysis.model ?? (analysis.engine === 'openai' ? 'Vision' : '목(mock)'))}
-                      {' '}분석 신뢰도 {Math.round(analysis.confidence * 100)}% ·{' '}
-                      {analysis.categoryReason ?? analysis.rawText}
-                      {analysis.needUserCheck ? ' · 확인 필요' : ''}
-                    </p>
+                  <div className="analysis-note analysis-note-compact">
+                    <span className="analysis-status"><Check size={15} aria-hidden /> 사진에서 먼저 정리했어요</span>
+                    <p>{analysis.categoryReason ?? analysis.rawText}</p>
                     {analysis.detectedItems?.length ? (
                       <div className="shopping-moment-summary">
                         <strong>{analysis.detectedItems.length}개 상품을 한 장면으로 묶었어요</strong>
-                        <p>하나씩 적지 않아도 괜찮아요. 총 결제와 대표 분위기만 확인해 주세요.</p>
                         <details>
-                          <summary>AI가 발견한 항목 보기</summary>
+                          <summary>사진에서 찾은 항목 보기</summary>
                           <div className="detected-item-list" aria-label="탐지 상품 목록">
                             {analysis.detectedItems.slice(0, 8).map((item) => (
                               <span key={`${item.name}-${item.category}`}>{item.displayName}</span>
@@ -1848,7 +2089,7 @@ function CashlogApp() {
                     ) : analysis.detectedObjects?.length ? (
                       <small>단서: {analysis.detectedObjects.slice(0, 3).join(', ')}</small>
                     ) : null}
-                    <div className="pet-context-question">
+                    <div className="pet-context-question pet-context-question-compact">
                       <PetPortrait kind={petState.selectedKind} name={selectedPetName} className="question-pet" />
                       <div>
                         <strong>친구랑 함께한 장면이야?</strong>
@@ -1858,24 +2099,26 @@ function CashlogApp() {
                         </div>
                       </div>
                     </div>
-                    <label className="training-consent">
-                      <input
-                        type="checkbox"
-                        checked={trainingImageConsent}
-                        onChange={(event) => setTrainingImageConsent(event.target.checked)}
-                      />
-                      <span>
-                        <strong>[선택]</strong> 이 사진을 모델 학습·평가 후보로 추가
-                        보관하는 데 동의합니다.
-                      </span>
-                    </label>
-                    <small className="training-consent-note">
-                      동의하지 않으면 사진은 학습 후보가 되지 않으며, 확정 카테고리만
-                      추천 품질 통계로 기록됩니다.
-                    </small>
+                    <details className="photo-use-settings">
+                      <summary>사진 활용 설정</summary>
+                      <label className="training-consent">
+                        <input
+                          type="checkbox"
+                          checked={trainingImageConsent}
+                          onChange={(event) => setTrainingImageConsent(event.target.checked)}
+                        />
+                        <span>
+                          <strong>[선택]</strong> 추천 품질 개선을 위한 학습·평가 후보로 보관
+                        </span>
+                      </label>
+                      <small className="training-consent-note">
+                        선택하지 않아도 기록과 사진 보관에는 영향이 없어요.
+                      </small>
+                    </details>
                   </div>
                 )}
                 <ExpenseEditor
+                  formId="cashlog-photo-form"
                   form={form}
                   onChange={updateForm}
                   onLedgerKindChange={handleLedgerKindChange}
@@ -1884,18 +2127,53 @@ function CashlogApp() {
                   assistantMode
                   detectedItemCount={analysis?.detectedItems?.length ?? 0}
                   petName={selectedPetName}
+                  suggestedCategories={photoSuggestedCategories}
+                  entryTime={entryTime}
+                  onEntryTimeChange={setEntryTime}
+                  location={locationDraft}
+                  locationStatus={locationStatus}
+                  locationMessage={locationMessage}
+                  onRequestLocation={handleUseCurrentLocation}
+                  onClearLocation={handleClearLocation}
                 />
               </div>
             )}
 
             {addMode === 'manual' && (
               <ExpenseEditor
+                formId="cashlog-manual-form"
                 form={form}
                 onChange={updateForm}
                 onLedgerKindChange={handleLedgerKindChange}
                 onSubmit={handleSave}
                 isSaving={isSaving}
+                entryTime={entryTime}
+                onEntryTimeChange={setEntryTime}
+                location={locationDraft}
+                locationStatus={locationStatus}
+                locationMessage={locationMessage}
+                onRequestLocation={handleUseCurrentLocation}
+                onClearLocation={handleClearLocation}
               />
+            )}
+            </div>
+            {(addMode === 'photo' || addMode === 'manual') && (
+              <div className="sheet-action-footer">
+                <button
+                  type="submit"
+                  form={addMode === 'photo' ? 'cashlog-photo-form' : 'cashlog-manual-form'}
+                  className="primary-button"
+                  disabled={isSaving || !canSaveDraft}
+                >
+                  {isSaving
+                    ? addMode === 'photo'
+                      ? '사진 보관 중...'
+                      : '저장 중...'
+                    : addMode === 'photo'
+                      ? '이 장면으로 저장'
+                      : '저장하기'}
+                </button>
+              </div>
             )}
             </>
             )}
@@ -1908,8 +2186,8 @@ function CashlogApp() {
       {storyMode === 'day' && dayStorySlides.length > 0 && (
         <StoryReel
           key={`story-day-${selectedDate}-${dayStorySlides.map((s) => s.id).join()}`}
-          title={`${selectedDate} 기록`}
-          aggregateLabel="선택일"
+          title={`${selectedDateLabel} 스토리`}
+          aggregateLabel="오늘"
           slides={dayStorySlides}
           onClose={closeStory}
         />
@@ -1927,7 +2205,78 @@ function CashlogApp() {
   )
 }
 
+function TimelineExpenseEntry({ expense }: { expense: Expense }) {
+  const accent = ledgerAccentColor(expense)
+  const isPhoto = Boolean(expense.imageUrl || expense.videoUrl)
+  const locationTitle = expense.location
+    ? `${expense.location.latitude.toFixed(4)}, ${expense.location.longitude.toFixed(4)}`
+    : undefined
+
+  return (
+    <article className={`timeline-entry${isPhoto ? ' timeline-entry-photo' : ''}`}>
+      <time dateTime={expense.dateTime}>
+        {formatExpenseClock(expense.dateTime, expense.timeZone)}
+      </time>
+      <span className="timeline-node" style={{ backgroundColor: accent }} aria-hidden>
+        {isPhoto ? (
+          <Camera size={18} />
+        ) : expense.kind === 'income' ? (
+          <Sparkles size={18} />
+        ) : (
+          <Utensils size={18} />
+        )}
+      </span>
+      <div className="timeline-entry-body">
+        {expense.videoUrl ? (
+          <video
+            className="timeline-photo"
+            src={expense.videoUrl}
+            poster={expense.imageUrl}
+            muted
+            loop
+            playsInline
+            autoPlay
+          />
+        ) : expense.imageUrl ? (
+          <img
+            src={expense.imageUrl}
+            alt={`${expense.title} 사진 기록`}
+            className="timeline-photo"
+          />
+        ) : null}
+        <div className="entry-meta-row">
+          <span className="entry-category">{formatLedgerCategory(expense)}</span>
+          {expense.location && (
+            <span className="entry-location" title={locationTitle}>
+              <MapPin size={12} aria-hidden /> 위치 포함
+            </span>
+          )}
+        </div>
+        <div className="entry-title-row">
+          <h3>{expense.title}</h3>
+          <strong className={expense.kind === 'income' ? 'amount-income' : undefined}>
+            {expense.kind === 'income' ? '+' : ''}
+            {formatCurrency(expense.amount)}
+          </strong>
+        </div>
+        {expense.moodScore && (
+          <span
+            className="entry-mood"
+            aria-label={`기분 ${expense.moodScore}점, ${getMoodOption(expense.moodScore).label}`}
+          >
+            <span aria-hidden>{getMoodOption(expense.moodScore).face}</span>
+            {expense.moodScore}/5 · {getMoodOption(expense.moodScore).label}
+          </span>
+        )}
+        {expense.memo && <p>{expense.memo}</p>}
+        <Check className="entry-check" size={18} aria-label="기록 완료" />
+      </div>
+    </article>
+  )
+}
+
 function ExpenseEditor({
+  formId,
   form,
   onChange,
   onLedgerKindChange,
@@ -1936,7 +2285,16 @@ function ExpenseEditor({
   assistantMode = false,
   detectedItemCount = 0,
   petName,
+  suggestedCategories = [],
+  entryTime,
+  onEntryTimeChange,
+  location,
+  locationStatus,
+  locationMessage,
+  onRequestLocation,
+  onClearLocation,
 }: {
+  formId: string
   form: ExpenseForm
   onChange: ExpenseFormChange
   onLedgerKindChange: (kind: LedgerKind) => void
@@ -1945,17 +2303,28 @@ function ExpenseEditor({
   assistantMode?: boolean
   detectedItemCount?: number
   petName?: string
+  suggestedCategories?: CategoryId[]
+  entryTime: string
+  onEntryTimeChange: (time: string) => void
+  location: ExpenseLocation | null
+  locationStatus: LocationStatus
+  locationMessage: string
+  onRequestLocation: () => void
+  onClearLocation: () => void
 }) {
-  const canSubmit = Boolean(form.title.trim()) && Number(form.amount) > 0
-
   return (
-    <form className={`expense-form${assistantMode ? ' assistant-expense-form' : ''}`} onSubmit={onSubmit}>
+    <form
+      id={formId}
+      className={`expense-form${assistantMode ? ' assistant-expense-form' : ''}`}
+      onSubmit={onSubmit}
+      aria-busy={isSaving}
+    >
       {assistantMode && (
         <div className="memory-first-intro">
-          <Sparkles size={18} aria-hidden />
+          <Check size={18} aria-hidden />
           <div>
-            <strong>{detectedItemCount > 1 ? `${detectedItemCount}개 항목, 한 번만 확인하면 끝!` : `${petName ?? '친구'}가 먼저 채워뒀어요`}</strong>
-            <p>틀린 부분만 고치고 이 장면으로 저장해도 충분해요.</p>
+            <strong>{detectedItemCount > 1 ? `${detectedItemCount}개 항목을 한 번에 묶었어요` : `${petName ?? '친구'}와 빠르게 확인해요`}</strong>
+            <p>금액과 카테고리만 맞으면 바로 저장할 수 있어요.</p>
           </div>
         </div>
       )}
@@ -1991,22 +2360,97 @@ function ExpenseEditor({
           }
         />
       </label>
-      <CategoryEditor form={form} onChange={onChange} />
-      <MoodScoreEditor form={form} onChange={onChange} />
+      <EntryContextEditor
+        entryTime={entryTime}
+        onEntryTimeChange={onEntryTimeChange}
+        location={location}
+        locationStatus={locationStatus}
+        locationMessage={locationMessage}
+        onRequestLocation={onRequestLocation}
+        onClearLocation={onClearLocation}
+      />
+      <CategoryEditor
+        form={form}
+        onChange={onChange}
+        assistantMode={assistantMode}
+        suggestedCategories={suggestedCategories}
+      />
       {assistantMode ? (
         <details className="expense-more-details">
-          <summary>메모 더 남기기</summary>
+          <summary>기분과 메모 더 남기기</summary>
           <div className="expense-more-fields">
+            <MoodScoreEditor form={form} onChange={onChange} />
             <MemoEditor form={form} onChange={onChange} />
           </div>
         </details>
       ) : (
-        <MemoEditor form={form} onChange={onChange} />
+        <>
+          <MoodScoreEditor form={form} onChange={onChange} />
+          <MemoEditor form={form} onChange={onChange} />
+        </>
       )}
-      <button type="submit" className="primary-button" disabled={isSaving || !canSubmit}>
-        {isSaving ? '사진 보관 중...' : assistantMode ? '이 장면으로 저장' : '저장하기'}
-      </button>
     </form>
+  )
+}
+
+function EntryContextEditor({
+  entryTime,
+  onEntryTimeChange,
+  location,
+  locationStatus,
+  locationMessage,
+  onRequestLocation,
+  onClearLocation,
+}: {
+  entryTime: string
+  onEntryTimeChange: (time: string) => void
+  location: ExpenseLocation | null
+  locationStatus: LocationStatus
+  locationMessage: string
+  onRequestLocation: () => void
+  onClearLocation: () => void
+}) {
+  return (
+    <section className="entry-context-editor" aria-label="기록 시간과 위치">
+      <label className="entry-time-field">
+        <span><Clock size={16} aria-hidden /> 기록 시간</span>
+        <input
+          type="time"
+          value={entryTime}
+          onChange={(event) => onEntryTimeChange(event.target.value)}
+          aria-label="기록 시간"
+        />
+      </label>
+      <div className="entry-location-field">
+        {location ? (
+          <div className="location-ready">
+            <span><MapPin size={16} aria-hidden /> 위치 포함</span>
+            <button type="button" onClick={onClearLocation} aria-label="기록 위치 지우기">
+              <X size={15} aria-hidden />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="location-request"
+            onClick={onRequestLocation}
+            disabled={locationStatus === 'loading'}
+          >
+            <LocateFixed size={16} aria-hidden />
+            {locationStatus === 'loading' ? '위치 확인 중' : '현재 위치 추가'}
+          </button>
+        )}
+      </div>
+      {locationMessage && (
+        <small
+          className={`entry-context-message${locationStatus === 'error' ? ' is-error' : ''}`}
+          role="status"
+        >
+          {locationMessage}
+          {location?.accuracyMeters ? ` · 약 ${location.accuracyMeters}m 범위` : ''}
+        </small>
+      )}
+    </section>
   )
 }
 
@@ -2113,15 +2557,129 @@ function MoodScoreEditor({ form, onChange }: {
   )
 }
 
-function CategoryEditor({ form, onChange }: {
+function CategoryEditor({
+  form,
+  onChange,
+  assistantMode = false,
+  suggestedCategories = [],
+}: {
   form: ExpenseForm
   onChange: ExpenseFormChange
+  assistantMode?: boolean
+  suggestedCategories?: CategoryId[]
 }) {
   const expenseMeta = getCategoryMeta(form.category as CategoryId)
   const incomeMeta = getIncomeCategoryMeta(form.category as IncomeCategoryId)
   const activeGroup = form.kind === 'expense' ? expenseMeta.group : incomeMeta.group
   const activeLeaf = form.kind === 'expense' ? expenseMeta.leaf : incomeMeta.leaf
-  return <fieldset className="category-fieldset">
+  const treeControls = form.kind === 'expense' ? (
+    <>
+      <div className="category-step-heading">
+        <span>1</span>
+        <strong>대분류</strong>
+      </div>
+      <div className="category-groups" role="group" aria-label="대분류">
+        {categoryTree.map((group) => (
+          <button
+            key={group.id}
+            type="button"
+            className={
+              group.id === expenseMeta.group.id ? 'category-pill active' : 'category-pill'
+            }
+            aria-pressed={group.id === expenseMeta.group.id}
+            aria-label={`대분류: ${group.name}`}
+            style={{ '--category-accent': group.color } as CSSProperties}
+            onClick={() => {
+              onChange('category', group.leaves[0].id)
+              signalSoftImpact()
+            }}
+          >
+            <span aria-hidden>{group.icon}</span>
+            <strong>{group.name}</strong>
+            {group.id === expenseMeta.group.id && <Check size={14} aria-hidden />}
+          </button>
+        ))}
+      </div>
+      <div className="category-step-heading category-leaf-heading">
+        <span>2</span>
+        <strong>소분류</strong>
+        <small>{expenseMeta.group.name}</small>
+      </div>
+      <div className="category-leaves" role="group" aria-label="소분류">
+        {expenseMeta.group.leaves.map((leaf) => (
+          <button
+            key={leaf.id}
+            type="button"
+            className={leaf.id === form.category ? 'category-leaf active' : 'category-leaf'}
+            aria-pressed={leaf.id === form.category}
+            aria-label={`소분류: ${leaf.name}`}
+            onClick={() => {
+              onChange('category', leaf.id)
+              signalSoftImpact()
+            }}
+          >
+            {leaf.name}
+            {leaf.id === form.category && <Check size={15} aria-hidden />}
+          </button>
+        ))}
+      </div>
+    </>
+  ) : (
+    <>
+      <div className="category-step-heading">
+        <span>1</span>
+        <strong>대분류</strong>
+      </div>
+      <div className="category-groups" role="group" aria-label="수입 대분류">
+        {incomeCategoryTree.map((group) => (
+          <button
+            key={group.id}
+            type="button"
+            className={
+              group.id === incomeMeta.group.id ? 'category-pill active' : 'category-pill'
+            }
+            aria-pressed={group.id === incomeMeta.group.id}
+            aria-label={`수입 대분류: ${group.name}`}
+            style={{ '--category-accent': group.color } as CSSProperties}
+            onClick={() => {
+              onChange('category', group.leaves[0].id)
+              signalSoftImpact()
+            }}
+          >
+            <span aria-hidden>{group.icon}</span>
+            <strong>{group.name}</strong>
+            {group.id === incomeMeta.group.id && <Check size={14} aria-hidden />}
+          </button>
+        ))}
+      </div>
+      <div className="category-step-heading category-leaf-heading">
+        <span>2</span>
+        <strong>소분류</strong>
+        <small>{incomeMeta.group.name}</small>
+      </div>
+      <div className="category-leaves" role="group" aria-label="수입 소분류">
+        {incomeMeta.group.leaves.map((leaf) => (
+          <button
+            key={leaf.id}
+            type="button"
+            className={leaf.id === form.category ? 'category-leaf active' : 'category-leaf'}
+            aria-pressed={leaf.id === form.category}
+            aria-label={`수입 소분류: ${leaf.name}`}
+            onClick={() => {
+              onChange('category', leaf.id)
+              signalSoftImpact()
+            }}
+          >
+            {leaf.name}
+            {leaf.id === form.category && <Check size={15} aria-hidden />}
+          </button>
+        ))}
+      </div>
+    </>
+  )
+
+  return (
+    <fieldset className={`category-fieldset${assistantMode ? ' category-fieldset-compact' : ''}`}>
         <legend>카테고리</legend>
         <div className="category-selection-path" aria-live="polite">
           <span aria-hidden>{activeGroup.icon}</span>
@@ -2129,112 +2687,39 @@ function CategoryEditor({ form, onChange }: {
           <ArrowRight size={14} aria-hidden />
           <b>{activeLeaf.name}</b>
         </div>
-        <div className="category-step-heading">
-          <span>1</span>
-          <strong>대분류</strong>
-        </div>
-        {form.kind === 'expense' ? (
-          <>
-            <div className="category-groups" role="group" aria-label="대분류">
-              {categoryTree.map((group) => (
+        {assistantMode && form.kind === 'expense' && suggestedCategories.length > 0 && (
+          <div className="category-suggestions" role="group" aria-label="사진과 가까운 카테고리">
+            <span>빠른 선택</span>
+            {suggestedCategories.map((category) => {
+              const meta = getCategoryMeta(category)
+              return (
                 <button
-                  key={group.id}
+                  key={category}
                   type="button"
-                  className={
-                    group.id === expenseMeta.group.id ? 'category-pill active' : 'category-pill'
-                  }
-                  aria-pressed={group.id === expenseMeta.group.id}
-                  aria-label={`대분류: ${group.name}`}
-                  style={{ '--category-accent': group.color } as CSSProperties}
+                  className={category === form.category ? 'active' : ''}
+                  aria-pressed={category === form.category}
                   onClick={() => {
-                    onChange('category', group.leaves[0].id)
+                    onChange('category', category)
                     signalSoftImpact()
                   }}
                 >
-                  <span aria-hidden>{group.icon}</span>
-                  <strong>{group.name}</strong>
-                  {group.id === expenseMeta.group.id && <Check size={14} aria-hidden />}
+                  <span aria-hidden>{meta.group.icon}</span>
+                  {meta.leaf.name}
                 </button>
-              ))}
-            </div>
-            <div className="category-step-heading category-leaf-heading">
-              <span>2</span>
-              <strong>소분류</strong>
-              <small>{expenseMeta.group.name}</small>
-            </div>
-            <div className="category-leaves" role="group" aria-label="소분류">
-              {expenseMeta.group.leaves.map((leaf) => (
-                <button
-                  key={leaf.id}
-                  type="button"
-                  className={
-                    leaf.id === form.category ? 'category-leaf active' : 'category-leaf'
-                  }
-                  aria-pressed={leaf.id === form.category}
-                  aria-label={`소분류: ${leaf.name}`}
-                  onClick={() => {
-                    onChange('category', leaf.id)
-                    signalSoftImpact()
-                  }}
-                >
-                  {leaf.name}
-                  {leaf.id === form.category && <Check size={15} aria-hidden />}
-                </button>
-              ))}
-            </div>
-          </>
+              )
+            })}
+          </div>
+        )}
+        {assistantMode ? (
+          <details className="category-all-details">
+            <summary>전체 카테고리에서 바꾸기</summary>
+            <div className="category-all-controls">{treeControls}</div>
+          </details>
         ) : (
-          <>
-            <div className="category-groups" role="group" aria-label="수입 대분류">
-              {incomeCategoryTree.map((group) => (
-                <button
-                  key={group.id}
-                  type="button"
-                  className={
-                    group.id === incomeMeta.group.id ? 'category-pill active' : 'category-pill'
-                  }
-                  aria-pressed={group.id === incomeMeta.group.id}
-                  aria-label={`수입 대분류: ${group.name}`}
-                  style={{ '--category-accent': group.color } as CSSProperties}
-                  onClick={() => {
-                    onChange('category', group.leaves[0].id)
-                    signalSoftImpact()
-                  }}
-                >
-                  <span aria-hidden>{group.icon}</span>
-                  <strong>{group.name}</strong>
-                  {group.id === incomeMeta.group.id && <Check size={14} aria-hidden />}
-                </button>
-              ))}
-            </div>
-            <div className="category-step-heading category-leaf-heading">
-              <span>2</span>
-              <strong>소분류</strong>
-              <small>{incomeMeta.group.name}</small>
-            </div>
-            <div className="category-leaves" role="group" aria-label="수입 소분류">
-              {incomeMeta.group.leaves.map((leaf) => (
-                <button
-                  key={leaf.id}
-                  type="button"
-                  className={
-                    leaf.id === form.category ? 'category-leaf active' : 'category-leaf'
-                  }
-                  aria-pressed={leaf.id === form.category}
-                  aria-label={`수입 소분류: ${leaf.name}`}
-                  onClick={() => {
-                    onChange('category', leaf.id)
-                    signalSoftImpact()
-                  }}
-                >
-                  {leaf.name}
-                  {leaf.id === form.category && <Check size={15} aria-hidden />}
-                </button>
-              ))}
-            </div>
-          </>
+          treeControls
         )}
       </fieldset>
+  )
 }
 
 function MemoEditor({ form, onChange }: {
