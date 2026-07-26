@@ -17,6 +17,7 @@ import {
   type OutfitId,
   type PetKind,
   type PetPaletteId,
+  type PigBreedId,
 } from '../domain/pet'
 import { signalSoftImpact } from '../motion/haptics'
 import { getPetAssetPath } from './petAssets'
@@ -28,7 +29,7 @@ type InteractivePet3DProps = {
   name: string
   palette: PetPaletteId
   outfit: OutfitId
-  breed: CatBreedId | DogBreedId
+  breed: CatBreedId | DogBreedId | PigBreedId
   compact?: boolean
   className?: string
   cheer?: boolean

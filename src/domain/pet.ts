@@ -1,6 +1,6 @@
-/** 펫(고양이·강아지) 성장·코디 도메인 — 기록 개수로 함께 레벨업 */
+/** 펫 성장·코디 도메인 — 기록 개수로 함께 레벨업 */
 
-export type PetKind = 'cat' | 'dog'
+export type PetKind = 'cat' | 'dog' | 'pig'
 
 export type CatBreedId =
   | 'korean_short'
@@ -22,8 +22,12 @@ export type DogBreedId =
   | 'border_collie'
   | 'corgi'
 
+export type PigBreedId = 'pink_pig' | 'mini_pig' | 'spotted_pig' | 'black_pig'
+
+export type PetBreedId = CatBreedId | DogBreedId | PigBreedId
+
 export type PetBreed = {
-  id: CatBreedId | DogBreedId
+  id: PetBreedId
   kind: PetKind
   name: string
   vibe: string
@@ -51,12 +55,21 @@ export const dogBreeds: PetBreed[] = [
   { id: 'corgi', kind: 'dog', name: '웰시코기', vibe: '발랄한 짧은 다리' },
 ]
 
-export const petBreeds = [...catBreeds, ...dogBreeds]
+export const pigBreeds: PetBreed[] = [
+  { id: 'pink_pig', kind: 'pig', name: '핑크피그', vibe: '복숭아빛 말랑 친구' },
+  { id: 'mini_pig', kind: 'pig', name: '미니피그', vibe: '작고 야무진 호기심쟁이' },
+  { id: 'spotted_pig', kind: 'pig', name: '점박이', vibe: '한눈에 기억되는 포인트' },
+  { id: 'black_pig', kind: 'pig', name: '까망돼지', vibe: '윤기 나는 행운 친구' },
+]
+
+export const petBreeds = [...catBreeds, ...dogBreeds, ...pigBreeds]
 
 export function getPetBreed(kind: 'cat', id: CatBreedId): PetBreed
 export function getPetBreed(kind: 'dog', id: DogBreedId): PetBreed
-export function getPetBreed(kind: PetKind, id: CatBreedId | DogBreedId): PetBreed {
-  const list = kind === 'cat' ? catBreeds : dogBreeds
+export function getPetBreed(kind: 'pig', id: PigBreedId): PetBreed
+export function getPetBreed(kind: PetKind, id: PetBreedId): PetBreed
+export function getPetBreed(kind: PetKind, id: PetBreedId): PetBreed {
+  const list = kind === 'cat' ? catBreeds : kind === 'dog' ? dogBreeds : pigBreeds
   return list.find((breed) => breed.id === id) ?? list[0]
 }
 
@@ -170,24 +183,59 @@ export type PetState = {
   selectedKind: PetKind
   catName: string
   dogName: string
+  pigName: string
   catBreed: CatBreedId
   dogBreed: DogBreedId
+  pigBreed: PigBreedId
   catOutfit: OutfitId
   dogOutfit: OutfitId
+  pigOutfit: OutfitId
   catPalette: PetPaletteId
   dogPalette: PetPaletteId
+  pigPalette: PetPaletteId
 }
 
 export const defaultPetState: PetState = {
   selectedKind: 'cat',
   catName: '나비',
   dogName: '초코',
+  pigName: '몽이',
   catBreed: 'korean_short',
   dogBreed: 'maltese',
+  pigBreed: 'pink_pig',
   catOutfit: 'none',
   dogOutfit: 'none',
+  pigOutfit: 'none',
   catPalette: 'cream',
   dogPalette: 'cream',
+  pigPalette: 'strawberry',
+}
+
+export function getPetName(state: PetState, kind: PetKind = state.selectedKind): string {
+  if (kind === 'cat') return state.catName
+  if (kind === 'dog') return state.dogName
+  return state.pigName
+}
+
+export function getPetBreedId(state: PetState, kind: PetKind = state.selectedKind): PetBreedId {
+  if (kind === 'cat') return state.catBreed
+  if (kind === 'dog') return state.dogBreed
+  return state.pigBreed
+}
+
+export function getPetOutfitId(state: PetState, kind: PetKind = state.selectedKind): OutfitId {
+  if (kind === 'cat') return state.catOutfit
+  if (kind === 'dog') return state.dogOutfit
+  return state.pigOutfit
+}
+
+export function getPetPaletteId(
+  state: PetState,
+  kind: PetKind = state.selectedKind,
+): PetPaletteId {
+  if (kind === 'cat') return state.catPalette
+  if (kind === 'dog') return state.dogPalette
+  return state.pigPalette
 }
 
 /** 저장된 값 보정 (알 수 없는 outfit → none) */
@@ -196,21 +244,28 @@ export function normalizePetState(raw: Partial<PetState> | null | undefined): Pe
     outfits.some((o) => o.id === v) ? (v as OutfitId) : 'none'
   const validPalette = (v: unknown): PetPaletteId =>
     petPalettes.some((p) => p.id === v) ? (v as PetPaletteId) : 'cream'
-  const validKind = (v: unknown): PetKind => (v === 'dog' || v === 'cat' ? v : 'cat')
+  const validKind = (v: unknown): PetKind =>
+    v === 'dog' || v === 'cat' || v === 'pig' ? v : 'cat'
   const validCatBreed = (v: unknown): CatBreedId =>
     catBreeds.some((breed) => breed.id === v) ? (v as CatBreedId) : 'korean_short'
   const validDogBreed = (v: unknown): DogBreedId =>
     dogBreeds.some((breed) => breed.id === v) ? (v as DogBreedId) : 'maltese'
+  const validPigBreed = (v: unknown): PigBreedId =>
+    pigBreeds.some((breed) => breed.id === v) ? (v as PigBreedId) : 'pink_pig'
   return {
     selectedKind: validKind(raw?.selectedKind),
     catName: (raw?.catName ?? '').toString().trim() || defaultPetState.catName,
     dogName: (raw?.dogName ?? '').toString().trim() || defaultPetState.dogName,
+    pigName: (raw?.pigName ?? '').toString().trim() || defaultPetState.pigName,
     catBreed: validCatBreed(raw?.catBreed),
     dogBreed: validDogBreed(raw?.dogBreed),
+    pigBreed: validPigBreed(raw?.pigBreed),
     catOutfit: validOutfit(raw?.catOutfit),
     dogOutfit: validOutfit(raw?.dogOutfit),
+    pigOutfit: validOutfit(raw?.pigOutfit),
     catPalette: validPalette(raw?.catPalette),
     dogPalette: validPalette(raw?.dogPalette),
+    pigPalette: validPalette(raw?.pigPalette ?? defaultPetState.pigPalette),
   }
 }
 

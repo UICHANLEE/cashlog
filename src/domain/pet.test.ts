@@ -60,18 +60,23 @@ describe('pet growth domain', () => {
       selectedKind: 'cat',
       catName: '나비',
       dogName: '초코',
+      pigName: '몽이',
       catBreed: 'korean_short',
       dogBreed: 'maltese',
+      pigBreed: 'pink_pig',
       catOutfit: 'none',
       dogOutfit: 'none',
+      pigOutfit: 'none',
       catPalette: 'cream',
       dogPalette: 'cream',
+      pigPalette: 'strawberry',
     })
     expect(
       normalizePetState({
         selectedKind: 'dog',
         catBreed: 'calico',
         dogBreed: 'corgi',
+        pigBreed: 'mini_pig',
         catOutfit: 'crown',
         dogOutfit: 'bogus' as never,
         catPalette: 'mint',
@@ -81,6 +86,7 @@ describe('pet growth domain', () => {
       selectedKind: 'dog',
       catBreed: 'calico',
       dogBreed: 'corgi',
+      pigBreed: 'mini_pig',
       catOutfit: 'crown',
       dogOutfit: 'none',
       catPalette: 'mint',
@@ -94,11 +100,13 @@ describe('pet growth domain', () => {
         selectedKind: 'rabbit' as never,
         catBreed: 'lynx' as never,
         dogBreed: 'wolf' as never,
+        pigBreed: 'boar' as never,
       }),
     ).toMatchObject({
       selectedKind: 'cat',
       catBreed: 'korean_short',
       dogBreed: 'maltese',
+      pigBreed: 'pink_pig',
     })
   })
 })

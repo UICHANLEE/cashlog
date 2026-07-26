@@ -82,9 +82,12 @@ import type { StorySlide } from './story/StoryReel'
 import { PetPortrait } from './components/PetPortrait'
 import {
   defaultPetState,
+  getPetName,
+  getPetOutfitId,
   normalizePetState,
   type CatBreedId,
   type DogBreedId,
+  type PigBreedId,
   type OutfitId,
   type PetPaletteId,
   type PetKind,
@@ -606,15 +609,19 @@ function CashlogApp() {
   }, [authClient])
 
   const handleOutfitChange = useCallback((kind: PetKind, outfit: OutfitId) => {
-    setPetState((prev) =>
-      kind === 'cat' ? { ...prev, catOutfit: outfit } : { ...prev, dogOutfit: outfit },
-    )
+    setPetState((prev) => {
+      if (kind === 'cat') return { ...prev, catOutfit: outfit }
+      if (kind === 'dog') return { ...prev, dogOutfit: outfit }
+      return { ...prev, pigOutfit: outfit }
+    })
   }, [])
 
   const handlePaletteChange = useCallback((kind: PetKind, palette: PetPaletteId) => {
-    setPetState((prev) =>
-      kind === 'cat' ? { ...prev, catPalette: palette } : { ...prev, dogPalette: palette },
-    )
+    setPetState((prev) => {
+      if (kind === 'cat') return { ...prev, catPalette: palette }
+      if (kind === 'dog') return { ...prev, dogPalette: palette }
+      return { ...prev, pigPalette: palette }
+    })
   }, [])
 
   const handlePetKindChange = useCallback((kind: PetKind) => {
@@ -622,12 +629,16 @@ function CashlogApp() {
   }, [])
 
   const handleBreedChange = useCallback(
-    (kind: 'cat' | 'dog', breed: CatBreedId | DogBreedId) => {
-      setPetState((prev) =>
-        kind === 'cat'
-          ? { ...prev, catBreed: breed as CatBreedId, selectedKind: 'cat' }
-          : { ...prev, dogBreed: breed as DogBreedId, selectedKind: 'dog' },
-      )
+    (kind: PetKind, breed: CatBreedId | DogBreedId | PigBreedId) => {
+      setPetState((prev) => {
+        if (kind === 'cat') {
+          return { ...prev, catBreed: breed as CatBreedId, selectedKind: 'cat' }
+        }
+        if (kind === 'dog') {
+          return { ...prev, dogBreed: breed as DogBreedId, selectedKind: 'dog' }
+        }
+        return { ...prev, pigBreed: breed as PigBreedId, selectedKind: 'pig' }
+      })
     },
     [],
   )
@@ -655,7 +666,7 @@ function CashlogApp() {
     () => `${visibleMonth.year}-${String(visibleMonth.month + 1).padStart(2, '0')}`,
     [visibleMonth.year, visibleMonth.month],
   )
-  const selectedPetName = petState.selectedKind === 'cat' ? petState.catName : petState.dogName
+  const selectedPetName = getPetName(petState)
   const selectedDaySpent = dayExpenseTotal(selectedExpenses)
   const selectedDayEarned = dayIncomeTotal(selectedExpenses)
   const selectedDayPhotos = selectedExpenses.filter((expense) => expense.imageUrl).slice(0, 3)
@@ -1744,7 +1755,7 @@ function CashlogApp() {
               <PetPortrait
                 kind={petState.selectedKind}
                 name={selectedPetName}
-                outfit={petState.selectedKind === 'cat' ? petState.catOutfit : petState.dogOutfit}
+                outfit={getPetOutfitId(petState)}
               />
             </section>
           )}
