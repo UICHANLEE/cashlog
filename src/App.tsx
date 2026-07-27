@@ -240,6 +240,7 @@ function CashlogApp() {
   const [trainingImageConsent, setTrainingImageConsent] = useState(false)
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
   const [cameraError, setCameraError] = useState<string | null>(null)
+  const [cameraAspectRatio, setCameraAspectRatio] = useState(4 / 3)
   const [photoAssistMessage, setPhotoAssistMessage] = useState('')
   const [isAnalyzingPhoto, setIsAnalyzingPhoto] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -1120,6 +1121,7 @@ function CashlogApp() {
       return
     }
     setCameraError(null)
+    setCameraAspectRatio(4 / 3)
     stopCamera()
     const wantAudio = captureKind === 'video'
     try {
@@ -2090,13 +2092,26 @@ function CashlogApp() {
                 {cameraError && <p className="camera-error">{cameraError}</p>}
                 {cameraStream && (
                   <div className="camera-live-wrap">
-                    <video
-                      ref={videoRef}
-                      className={`camera-live${isRecording ? ' is-recording' : ''}`}
-                      playsInline
-                      muted
-                      autoPlay
-                    />
+                    <div
+                      className={`camera-live-frame${isRecording ? ' is-recording' : ''}`}
+                      style={{ aspectRatio: cameraAspectRatio }}
+                    >
+                      <video
+                        ref={videoRef}
+                        className="camera-live"
+                        playsInline
+                        muted
+                        autoPlay
+                        aria-label="카메라 전체 화면 미리보기"
+                        onLoadedMetadata={(event) => {
+                          const { videoWidth, videoHeight } = event.currentTarget
+                          if (!videoWidth || !videoHeight) return
+                          setCameraAspectRatio(
+                            Math.min(2.4, Math.max(0.4, videoWidth / videoHeight)),
+                          )
+                        }}
+                      />
+                    </div>
                     {isRecording && (
                       <p className="record-indicator" aria-live="polite">
                         <span className="record-dot" aria-hidden /> 녹화 중 {formatRecordClock(recordSeconds)}
