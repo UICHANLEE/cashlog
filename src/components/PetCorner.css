@@ -148,9 +148,12 @@
   grid-area: preview;
   width: 92px;
   height: 92px;
-  filter: drop-shadow(0 8px 10px rgba(42, 37, 31, 0.16));
   position: relative;
   z-index: 1;
+}
+
+.pet-kind-preview > img {
+  filter: drop-shadow(0 8px 10px rgba(42, 37, 31, 0.16));
 }
 
 .pet-kind-card > span:not(.pet-kind-selection) {
@@ -208,15 +211,15 @@
 
 .pet-stage.pet-stage-3d {
   display: block;
-  min-height: 410px;
+  min-height: 430px;
   padding: 0;
   border: 0;
-  overflow: visible;
+  overflow: clip;
   background: transparent;
 }
 
 .pet-stage-3d > .interactive-pet-3d {
-  min-height: 410px;
+  min-height: 430px;
 }
 
 .pet-character-stage {
@@ -619,9 +622,11 @@
 
 .breed-card {
   display: grid;
+  grid-template-rows: 132px auto auto;
   gap: 3px;
-  min-height: 78px;
-  padding: 10px 11px;
+  min-width: 0;
+  min-height: 202px;
+  padding: 7px;
   border: 2px solid var(--line);
   border-radius: 14px 6px 14px 6px;
   background: var(--paper-card);
@@ -635,13 +640,31 @@
     background-color var(--motion-control) var(--ease-out);
 }
 
+.breed-card-preview {
+  width: 100%;
+  height: 132px;
+  border-radius: 10px 4px 10px 4px;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(255, 255, 255, 0.96), transparent 62%),
+    color-mix(in srgb, var(--crayon-mint) 30%, var(--paper-soft));
+}
+
+.breed-card-preview > img {
+  padding: 4px;
+  filter: drop-shadow(0 7px 8px rgba(54, 39, 30, 0.12));
+  transition: transform var(--motion-control) var(--ease-out);
+}
+
 .breed-card strong {
+  padding: 5px 5px 0;
   font-family: var(--font-hand);
   font-size: 17px;
   color: var(--ink);
 }
 
 .breed-card small {
+  min-height: 34px;
+  padding: 0 5px 5px;
   font-family: var(--font-hand);
   font-size: 13px;
   color: var(--ink-soft);
@@ -652,6 +675,10 @@
   background: var(--crayon-mint);
   transform: translate(2px, 2px);
   box-shadow: 1px 1px 0 var(--line);
+}
+
+.breed-card.active .breed-card-preview > img {
+  transform: translateY(-3px) scale(1.04);
 }
 
 .breed-card:active {
@@ -750,11 +777,10 @@
     color-mix(in srgb, var(--crayon-pink) 24%, var(--paper-soft));
 }
 
-.outfit-chip-preview img {
+.outfit-chip-preview .pet-portrait-3d {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: contain;
   transform: scale(1.03);
   transform-origin: center bottom;
   transition:
@@ -762,6 +788,10 @@
     filter var(--motion-control) var(--ease-out),
     opacity var(--motion-control) var(--ease-out);
   user-select: none;
+}
+
+.outfit-chip-preview .pet-portrait-3d > img {
+  padding: 2px;
 }
 
 .outfit-chip-copy {
@@ -836,7 +866,7 @@
     color-mix(in srgb, var(--crayon-sun) 62%, white);
 }
 
-.outfit-chip.active .outfit-chip-preview img {
+.outfit-chip.active .outfit-chip-preview .pet-portrait-3d {
   transform: translateY(-2px) scale(1.07);
 }
 
@@ -849,7 +879,7 @@
   cursor: not-allowed;
 }
 
-.outfit-chip.locked .outfit-chip-preview img {
+.outfit-chip.locked .outfit-chip-preview .pet-portrait-3d {
   filter: saturate(0.35);
   opacity: 0.62;
 }
@@ -871,14 +901,14 @@
 
 .palette-chip {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: 62px minmax(0, 1fr);
   grid-template-areas:
     'icon name'
     'icon state';
   align-items: center;
   column-gap: 8px;
-  min-height: 64px;
-  padding: 9px 10px;
+  min-height: 82px;
+  padding: 7px 9px 7px 6px;
   border: 2px solid var(--line);
   border-radius: 14px 6px 14px 6px;
   background: var(--paper-card);
@@ -894,11 +924,10 @@
     background-color var(--motion-control) var(--ease-out);
 }
 
-.palette-chip > span {
+.palette-chip > .palette-pet-preview {
   grid-area: icon;
-  display: grid;
-  place-items: center;
-  align-items: center;
+  width: 62px;
+  height: 68px;
 }
 
 .palette-chip strong {
@@ -922,25 +951,14 @@
   background: #fffdf7;
 }
 
-.palette-chip span {
-  width: 34px;
-  height: 34px;
-  flex: 0 0 auto;
-  border: 2px solid var(--line);
-  border-radius: 999px;
-}
-
 .palette-chip.active {
   background: var(--crayon-sun);
   transform: translate(2px, 2px);
   box-shadow: 1px 1px 0 var(--line);
 }
 
-.palette-chip.active > span {
-  border-style: solid;
-  border-color: color-mix(in srgb, var(--accent) 62%, var(--line));
-  background: rgba(255, 255, 255, 0.84);
-  box-shadow: 0 4px 12px rgba(72, 47, 35, 0.1);
+.palette-chip.active .palette-pet-preview > img {
+  transform: translateY(-2px) scale(1.04);
 }
 
 .palette-chip:active {
@@ -966,8 +984,12 @@
     background: var(--crayon-sun);
   }
 
-  .outfit-chip:not(:disabled):hover .outfit-chip-preview img {
+  .outfit-chip:not(:disabled):hover .outfit-chip-preview .pet-portrait-3d {
     transform: translateY(-2px) scale(1.07);
+  }
+
+  .breed-card:hover .breed-card-preview > img {
+    transform: translateY(-3px) scale(1.04);
   }
 
   .pet-kind-card:hover {
@@ -978,9 +1000,13 @@
 
 @media (max-width: 640px) {
   .pet-card {
-    padding: 18px;
+    padding: 12px 18px 18px;
     border-radius: 22px 9px 22px 9px;
     transform: none;
+  }
+
+  .pet-play-btn {
+    display: none;
   }
 
   .pet-level-head strong {
@@ -989,6 +1015,9 @@
 
   .pet-kind-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin: 10px 0;
+    padding: 4px;
+    border-radius: 18px;
   }
 
   .pet-kind-card {
@@ -998,41 +1027,50 @@
       'label'
       'breed';
     justify-items: center;
-    min-height: 148px;
-    padding: 8px 5px;
+    min-height: 108px;
+    padding: 5px 3px;
     text-align: center;
   }
 
   .pet-kind-preview {
-    width: 72px;
-    height: 72px;
+    width: 58px;
+    height: 58px;
   }
 
   .pet-kind-card strong {
-    font-size: 18px;
+    max-width: 100%;
+    font-size: 15px;
+    line-height: 1.05;
   }
 
   .pet-kind-card > span:not(.pet-kind-selection) {
-    font-size: 13px;
+    font-size: 12px;
   }
 
   .zodiac-friend {
-    grid-template-columns: 88px minmax(0, 1fr);
-    min-height: 102px;
-    padding-right: 12px;
+    grid-template-columns: 62px minmax(0, 1fr);
+    gap: 9px;
+    min-height: 72px;
+    margin: 9px 0 8px;
+    padding: 5px 10px 5px 5px;
+    border-radius: 15px 6px 15px 6px;
   }
 
   .zodiac-friend-portrait {
-    width: 88px;
-    height: 88px;
+    width: 62px;
+    height: 62px;
   }
 
   .zodiac-friend strong {
-    font-size: 24px;
+    font-size: 21px;
   }
 
   .zodiac-friend > div:last-child > span {
-    font-size: 14px;
+    overflow: hidden;
+    display: -webkit-box;
+    font-size: 12px;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
   }
 
   .breed-grid {
@@ -1051,17 +1089,28 @@
 
   .pet-stage.pet-stage-3d,
   .pet-stage-3d > .interactive-pet-3d {
-    min-height: 360px;
+    min-height: 300px;
   }
 
   .pet-stage-3d .pet-stage-copy {
-    left: 10px;
+    left: 6px;
     right: auto;
-    top: auto;
-    bottom: 12px;
-    min-width: 108px;
-    max-width: 138px;
-    padding: 9px 11px;
+    top: 80px;
+    bottom: auto;
+    min-width: 94px;
+    max-width: 116px;
+    padding: 7px 9px;
+  }
+
+  .pet-stage-copy .pet-bond,
+  .pet-stage-copy > small,
+  .pet-stage-copy .pet-look-summary,
+  .pet-stage-copy .pet-recent-mood {
+    display: none;
+  }
+
+  .pet-stage-copy strong {
+    font-size: 17px;
   }
 
   .pet-action-row {
@@ -1091,7 +1140,7 @@
     transition: opacity 160ms var(--ease-out);
   }
 
-  .outfit-chip-preview img {
+  .outfit-chip-preview .pet-portrait-3d {
     transition: opacity 160ms var(--ease-out);
   }
 }

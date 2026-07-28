@@ -1,8 +1,17 @@
-import type { OutfitId, PetKind } from '../domain/pet'
+import type { OutfitId, PetBreedId, PetKind } from '../domain/pet'
 
-export function getPetAssetPath(kind: PetKind, outfit: OutfitId = 'none'): string {
-  if (kind === 'pig') return '/pets/pig-3d.webp'
-  return outfit === 'none'
-    ? `/pets/${kind}-3d.png`
-    : `/pets/costumes/${kind}/${outfit}.webp`
+const defaultBreedByKind: Record<PetKind, PetBreedId> = {
+  cat: 'korean_short',
+  dog: 'maltese',
+  pig: 'pink_pig',
+}
+
+export function getPetAssetPath(
+  kind: PetKind,
+  outfit: OutfitId = 'none',
+  breed: PetBreedId = defaultBreedByKind[kind],
+): string {
+  if (outfit === 'none') return `/pets/breeds/${kind}/${breed}.webp`
+  if (kind === 'pig') return `/pets/breeds/pig/${breed}.webp`
+  return `/pets/costumes/${kind}/${outfit}.webp`
 }

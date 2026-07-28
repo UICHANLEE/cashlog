@@ -45,7 +45,7 @@ export const zodiacCharacters: ZodiacCharacter[] = [
     characterName: '초코',
     emoji: '🐶',
     message: '곁에서 든든하게 기록을 지켜요',
-    assetPath: '/pets/dog-3d.png',
+    assetPath: '/pets/breeds/dog/shiba.webp',
   },
   {
     id: 'pig',
@@ -53,7 +53,7 @@ export const zodiacCharacters: ZodiacCharacter[] = [
     characterName: '몽이',
     emoji: '🐷',
     message: '복이 되는 기록을 말랑하게 모아요',
-    assetPath: '/pets/pig-3d.webp',
+    assetPath: '/pets/breeds/pig/pink_pig.webp',
   },
 ]
 

@@ -5,22 +5,19 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent,
+  type PointerEvent,
 } from 'react'
 import { Sparkles } from 'lucide-react'
-import * as THREE from 'three'
 import type { MoodScore } from '../domain/cashlog'
 import {
-  getPetPalette,
   getOutfit,
-  type CatBreedId,
-  type DogBreedId,
+  getPetPalette,
+  type PetBreedId,
   type OutfitId,
   type PetKind,
   type PetPaletteId,
-  type PigBreedId,
 } from '../domain/pet'
 import { signalSoftImpact } from '../motion/haptics'
-import { getPetAssetPath } from './petAssets'
 import { PetPortrait } from './PetPortrait'
 import './InteractivePet3D.css'
 
@@ -29,7 +26,7 @@ type InteractivePet3DProps = {
   name: string
   palette: PetPaletteId
   outfit: OutfitId
-  breed: CatBreedId | DogBreedId | PigBreedId
+  breed: PetBreedId
   compact?: boolean
   className?: string
   cheer?: boolean
@@ -60,16 +57,13 @@ export function InteractivePet3D({
   actionRequest = 0,
   moodScore = 3,
 }: InteractivePet3DProps) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const hostRef = useRef<HTMLDivElement | null>(null)
-  const triggerRef = useRef<((nextAction: PetAction) => void) | null>(null)
   const reactionTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [canvasReady, setCanvasReady] = useState(false)
-  const [assetReady, setAssetReady] = useState(false)
+  const actionTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [reaction, setReaction] = useState(`${name}가 편안하게 바라보고 있어요`)
+  const [activeAction, setActiveAction] = useState<PetAction | null>(null)
   const colors = getPetPalette(palette)
   const currentOutfit = getOutfit(outfit)
-  const petAssetPath = getPetAssetPath(kind, outfit)
 
   const announce = useCallback((message: string) => {
     setReaction(message)
@@ -80,14 +74,25 @@ export function InteractivePet3D({
     )
   }, [name])
 
+  const play = useCallback((nextAction: PetAction) => {
+    setActiveAction(null)
+    if (actionTimer.current) clearTimeout(actionTimer.current)
+    requestAnimationFrame(() => setActiveAction(nextAction))
+    actionTimer.current = setTimeout(
+      () => setActiveAction(null),
+      nextAction === 'dance' ? 1450 : 1050,
+    )
+  }, [])
+
   const interact = useCallback(() => {
     signalSoftImpact()
-    triggerRef.current?.('pet')
+    play('pet')
     announce(actionMessages(name).pet)
-  }, [announce, name])
+  }, [announce, name, play])
 
   useEffect(() => () => {
     if (reactionTimer.current) clearTimeout(reactionTimer.current)
+    if (actionTimer.current) clearTimeout(actionTimer.current)
   }, [])
 
   useEffect(() => {
@@ -99,230 +104,38 @@ export function InteractivePet3D({
   }, [name])
 
   useEffect(() => {
-    if (!cheer) return
-    triggerRef.current?.('dance')
-  }, [cheer])
-
-  useEffect(() => {
-    if (actionRequest === 0) return
-    triggerRef.current?.(action)
-    const timer = window.setTimeout(
-      () => announce(actionMessages(name)[action]),
-      0,
-    )
+    if (!cheer) return undefined
+    const timer = window.setTimeout(() => play('dance'), 0)
     return () => window.clearTimeout(timer)
-  }, [action, actionRequest, announce, name])
+  }, [cheer, play])
 
   useEffect(() => {
-    const canvas = canvasRef.current
+    if (actionRequest === 0) return undefined
+    const timer = window.setTimeout(() => {
+      play(action)
+      announce(actionMessages(name)[action])
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [action, actionRequest, announce, name, play])
+
+  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
     const host = hostRef.current
-    if (!canvas || !host || navigator.userAgent.includes('jsdom')) return undefined
+    if (!host) return
+    const rect = host.getBoundingClientRect()
+    const x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1
+    const y = ((event.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1
+    host.style.setProperty('--pet-rotate-y', `${x * 5}deg`)
+    host.style.setProperty('--pet-rotate-x', `${y * -2.5}deg`)
+    host.style.setProperty('--pet-shift-x', `${x * 5}px`)
+  }
 
-    let renderer: THREE.WebGLRenderer
-    try {
-      renderer = new THREE.WebGLRenderer({
-        canvas,
-        alpha: true,
-        antialias: true,
-        premultipliedAlpha: true,
-      })
-    } catch {
-      return undefined
-    }
-
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    renderer.outputColorSpace = THREE.SRGBColorSpace
-    renderer.setClearColor(0x000000, 0)
-
-    const scene = new THREE.Scene()
-    const camera = new THREE.OrthographicCamera(-3, 3, 3, -3, 0.1, 30)
-    camera.position.set(0, 0, 10)
-
-    const character = new THREE.Group()
-    character.position.y = compact ? -0.12 : -0.02
-    scene.add(character)
-
-    const shadowMaterial = new THREE.MeshBasicMaterial({
-      color: 0x4b3529,
-      transparent: true,
-      opacity: 0.13,
-      depthWrite: false,
-    })
-    const shadow = new THREE.Mesh(new THREE.CircleGeometry(1, 64), shadowMaterial)
-    shadow.position.set(0, compact ? -2.28 : -2.38, -0.2)
-    shadow.scale.set(1.46, 0.24, 1)
-    scene.add(shadow)
-
-    let portrait: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> | null = null
-    let tintOverlay: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> | null = null
-    let texture: THREE.Texture | null = null
-    let disposed = false
-
-    const loader = new THREE.TextureLoader()
-    loader.load(
-      petAssetPath,
-      (loadedTexture) => {
-        if (disposed) {
-          loadedTexture.dispose()
-          return
-        }
-        texture = loadedTexture
-        texture.colorSpace = THREE.SRGBColorSpace
-        texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy())
-        const geometry = new THREE.PlaneGeometry(5.15, 5.15)
-        const material = new THREE.MeshBasicMaterial({
-          map: texture,
-          transparent: true,
-          alphaTest: 0.015,
-          depthTest: false,
-          depthWrite: false,
-          toneMapped: false,
-        })
-        portrait = new THREE.Mesh(geometry, material)
-        portrait.position.z = 0.2
-        portrait.renderOrder = 1
-        character.add(portrait)
-
-        if (palette !== 'cream' && outfit === 'none') {
-          const tintMaterial = new THREE.MeshBasicMaterial({
-            map: texture,
-            color: new THREE.Color(colors.body),
-            transparent: true,
-            opacity: 0.24,
-            depthTest: false,
-            depthWrite: false,
-            toneMapped: false,
-          })
-          tintOverlay = new THREE.Mesh(geometry, tintMaterial)
-          tintOverlay.position.z = 0.22
-          tintOverlay.renderOrder = 2
-          character.add(tintOverlay)
-        }
-
-        setAssetReady(true)
-        setCanvasReady(true)
-      },
-      undefined,
-      () => {
-        setAssetReady(false)
-        setCanvasReady(false)
-      },
-    )
-
-    const pointer = { x: 0, y: 0 }
-    let activeAction: PetAction | null = null
-    let actionUntil = 0
-    let frame = 0
-    let previousTime = performance.now()
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const moodEnergy = 0.82 + (moodScore - 1) * 0.055
-
-    triggerRef.current = (nextAction) => {
-      activeAction = nextAction
-      actionUntil = performance.now() + (nextAction === 'dance' ? 1450 : 1050)
-    }
-
-    const resize = () => {
-      const rect = host.getBoundingClientRect()
-      const width = Math.max(1, rect.width)
-      const height = Math.max(1, rect.height)
-      const aspect = width / height
-      const viewHeight = compact ? 5.75 : 5.85
-      camera.left = (-viewHeight * aspect) / 2
-      camera.right = (viewHeight * aspect) / 2
-      camera.top = viewHeight / 2
-      camera.bottom = -viewHeight / 2
-      camera.updateProjectionMatrix()
-      renderer.setSize(width, height, false)
-    }
-
-    const onPointerMove = (event: PointerEvent) => {
-      const rect = canvas.getBoundingClientRect()
-      pointer.x = THREE.MathUtils.clamp(
-        ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1,
-        -1,
-        1,
-      )
-      pointer.y = THREE.MathUtils.clamp(
-        ((event.clientY - rect.top) / Math.max(1, rect.height)) * 2 - 1,
-        -1,
-        1,
-      )
-    }
-
-    const onPointerLeave = () => {
-      pointer.x = 0
-      pointer.y = 0
-    }
-
-    resize()
-    const observer = new ResizeObserver(resize)
-    observer.observe(host)
-    canvas.addEventListener('pointermove', onPointerMove)
-    canvas.addEventListener('pointerleave', onPointerLeave)
-
-    const animate = (time: number) => {
-      const delta = Math.min(0.032, Math.max(0.001, (time - previousTime) / 1000))
-      previousTime = time
-      const t = time * 0.001
-      const playing = time < actionUntil ? activeAction : null
-      const idle = reducedMotion ? 0 : Math.sin(t * 1.55) * 0.026 * moodEnergy
-      const breathe = reducedMotion ? 1 : 1 + Math.sin(t * 1.9) * 0.0045
-      const danceSway = playing === 'dance' && !reducedMotion ? Math.sin(t * 5.4) * 0.055 : 0
-      const greetingTilt = playing === 'highfive' && !reducedMotion ? Math.sin(t * 7.2) * 0.028 - 0.035 : 0
-      const treatLift = playing === 'treat' && !reducedMotion
-        ? Math.abs(Math.sin(t * 7.2)) * 0.09
-        : 0
-      const petSquish = playing === 'pet' && !reducedMotion ? 0.018 : 0
-      const highfiveLean = playing === 'highfive' && !reducedMotion ? 0.035 : 0
-      const danceScale = playing === 'dance' && !reducedMotion
-        ? Math.abs(Math.sin(t * 5.4)) * 0.018
-        : 0
-
-      character.position.y += (
-        (compact ? -0.12 : -0.02) + idle + treatLift - character.position.y
-      ) * Math.min(1, delta * 8)
-      character.rotation.y += (
-        pointer.x * 0.045 - character.rotation.y
-      ) * Math.min(1, delta * 7)
-      character.rotation.x += (
-        -pointer.y * 0.018 + highfiveLean - character.rotation.x
-      ) * Math.min(1, delta * 7)
-      character.rotation.z += (
-        danceSway + greetingTilt - character.rotation.z
-      ) * Math.min(1, delta * 9)
-      character.scale.x += (
-        breathe + petSquish + danceScale - character.scale.x
-      ) * Math.min(1, delta * 9)
-      character.scale.y += (
-        breathe - petSquish + danceScale - character.scale.y
-      ) * Math.min(1, delta * 9)
-      shadow.scale.x += (
-        1.46 - idle * 1.1 - shadow.scale.x
-      ) * Math.min(1, delta * 7)
-      shadowMaterial.opacity = 0.13 - idle * 0.5
-
-      renderer.render(scene, camera)
-      frame = requestAnimationFrame(animate)
-    }
-    frame = requestAnimationFrame(animate)
-
-    return () => {
-      disposed = true
-      triggerRef.current = null
-      cancelAnimationFrame(frame)
-      observer.disconnect()
-      canvas.removeEventListener('pointermove', onPointerMove)
-      canvas.removeEventListener('pointerleave', onPointerLeave)
-      portrait?.geometry.dispose()
-      portrait?.material.dispose()
-      tintOverlay?.material.dispose()
-      texture?.dispose()
-      shadow.geometry.dispose()
-      shadowMaterial.dispose()
-      renderer.dispose()
-    }
-  }, [colors, compact, moodScore, outfit, palette, petAssetPath])
+  const resetPointer = () => {
+    const host = hostRef.current
+    if (!host) return
+    host.style.setProperty('--pet-rotate-y', '0deg')
+    host.style.setProperty('--pet-rotate-x', '0deg')
+    host.style.setProperty('--pet-shift-x', '0px')
+  }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -334,31 +147,38 @@ export function InteractivePet3D({
   const style = {
     '--pet-accent': colors.accent,
     '--pet-body': colors.body,
+    '--pet-body-alt': colors.bodyAlt,
+    '--pet-mood-energy': 0.88 + (moodScore - 1) * 0.03,
   } as CSSProperties
 
   return (
     <div
       ref={hostRef}
-      className={`interactive-pet-3d${compact ? ' is-compact' : ''}${canvasReady ? ' is-canvas-ready' : ''} ${className}`.trim()}
+      className={`interactive-pet-3d${compact ? ' is-compact' : ''}${activeAction ? ` is-${activeAction}` : ''} ${className}`.trim()}
       style={style}
       data-breed={breed}
       data-outfit={outfit}
-      data-costume-rendered={outfit !== 'none'}
-      data-costume-ready={outfit === 'none' || assetReady}
       role="button"
       tabIndex={0}
       aria-label={`${name} 캐릭터. 누르면 다정하게 인사해요.`}
       title={`${name}에게 인사하기`}
       onKeyDown={handleKeyDown}
       onClick={interact}
+      onPointerMove={handlePointerMove}
+      onPointerLeave={resetPointer}
+      onPointerCancel={resetPointer}
     >
-      <PetPortrait
-        kind={kind}
-        name={name}
-        outfit={outfit}
-        className="interactive-pet-fallback"
-      />
-      <canvas ref={canvasRef} aria-hidden="true" />
+      <div className="pet-portrait-stage" aria-hidden="true">
+        <PetPortrait
+          kind={kind}
+          name={name}
+          outfit={outfit}
+          breed={breed}
+          palette={palette}
+          className="interactive-pet-portrait"
+        />
+        <span className="pet-ground-shadow" />
+      </div>
       <div className="pet-3d-reaction" aria-live="polite">
         <Sparkles size={15} aria-hidden="true" />
         <span>{reaction}</span>

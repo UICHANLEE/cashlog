@@ -42,7 +42,6 @@ import { getZodiacCharacter } from '../domain/zodiac'
 import { signalSoftImpact } from '../motion/haptics'
 import type { PetAction } from './InteractivePet3D'
 import { PetPortrait } from './PetPortrait'
-import { getPetAssetPath } from './petAssets'
 import './PetCorner.css'
 
 const InteractivePet3D = lazy(() =>
@@ -128,6 +127,12 @@ export function PetCorner({
 
   useEffect(() => clearCheer, [clearCheer])
 
+  useEffect(() => {
+    if (petState.selectedKind !== 'pig' || wardrobeTab !== 'outfits') return undefined
+    const timer = window.setTimeout(() => setWardrobeTab('colors'), 0)
+    return () => window.clearTimeout(timer)
+  }, [petState.selectedKind, wardrobeTab])
+
   const selectWardrobeTab = useCallback((nextTab: WardrobeTab) => {
     if (nextTab === wardrobeTab) return
     setWardrobeTab(nextTab)
@@ -191,10 +196,12 @@ export function PetCorner({
                 }}
               >
                 <span className="outfit-chip-preview" aria-hidden>
-                  <img
-                    src={getPetAssetPath(kind, o.id)}
-                    alt=""
-                    draggable={false}
+                  <PetPortrait
+                    kind={kind}
+                    name={label}
+                    outfit={o.id}
+                    breed={getPetBreedId(petState, kind)}
+                    palette={getPetPaletteId(petState, kind)}
                   />
                   {!unlocked && (
                     <span className="outfit-chip-lock">
@@ -220,8 +227,8 @@ export function PetCorner({
     const label = getPetName(petState, kind)
     return (
       <div className="pet-wardrobe-row" aria-labelledby="pet-color-label">
-        <span id="pet-color-label" className="pet-wardrobe-label">{label}의 컬러</span>
-        <div className="palette-chips" role="group" aria-label={`${label} 털색 고르기`}>
+        <span id="pet-color-label" className="pet-wardrobe-label">{label}의 무드 컬러</span>
+        <div className="palette-chips" role="group" aria-label={`${label} 무드 컬러 고르기`}>
           {petPalettes.map((palette) => {
             const active = palette.id === current
             return (
@@ -236,15 +243,16 @@ export function PetCorner({
                   play('dance')
                 }}
               >
-                <span
-                  aria-hidden
-                  style={{
-                    background: `linear-gradient(135deg, ${palette.body}, ${palette.bodyAlt})`,
-                    boxShadow: `inset 0 -6px 10px ${palette.shadow}55`,
-                  }}
+                <PetPortrait
+                  kind={kind}
+                  name={label}
+                  outfit={getPetOutfitId(petState, kind)}
+                  breed={getPetBreedId(petState, kind)}
+                  palette={palette.id}
+                  className="palette-pet-preview"
                 />
                 <strong>{palette.name}</strong>
-                <small>{active ? '사용 중' : '색칠하기'}</small>
+                <small>{active ? '사용 중' : '미리 보기'}</small>
               </button>
             )
           })}
@@ -268,12 +276,20 @@ export function PetCorner({
               className={`breed-card${active ? ' active' : ''}`}
               aria-pressed={active}
               onClick={() => {
+                onOutfitChange(activeKind, 'none')
                 if (activeKind === 'cat') onBreedChange('cat', breed.id as CatBreedId)
                 else if (activeKind === 'dog') onBreedChange('dog', breed.id as DogBreedId)
                 else onBreedChange('pig', breed.id as PigBreedId)
                 play('dance')
               }}
             >
+              <PetPortrait
+                kind={activeKind}
+                name={activeName}
+                breed={breed.id}
+                palette={activePalette}
+                className="breed-card-preview"
+              />
               <strong>{breed.name}</strong>
               <small>{breed.vibe}</small>
             </button>
@@ -336,6 +352,8 @@ export function PetCorner({
             kind="cat"
             name={petState.catName}
             outfit={petState.catOutfit}
+            breed={petState.catBreed}
+            palette={petState.catPalette}
             className="pet-kind-preview"
           />
           <span><Cat size={15} aria-hidden="true" /> 고양이</span>
@@ -363,6 +381,8 @@ export function PetCorner({
             kind="dog"
             name={petState.dogName}
             outfit={petState.dogOutfit}
+            breed={petState.dogBreed}
+            palette={petState.dogPalette}
             className="pet-kind-preview"
           />
           <span><Dog size={15} aria-hidden="true" /> 강아지</span>
@@ -391,6 +411,8 @@ export function PetCorner({
             kind="pig"
             name={petState.pigName}
             outfit={petState.pigOutfit}
+            breed={petState.pigBreed}
+            palette={petState.pigPalette}
             className="pet-kind-preview"
           />
           <span><PiggyBank size={15} aria-hidden="true" /> 돼지</span>
@@ -418,6 +440,8 @@ export function PetCorner({
                   kind={activeKind}
                   name={activeName}
                   outfit={activeOutfit}
+                  breed={getPetBreedId(petState)}
+                  palette={activePalette}
                   className="pet-character-loading"
                 />
               )}

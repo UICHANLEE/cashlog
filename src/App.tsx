@@ -82,8 +82,10 @@ import type { StorySlide } from './story/StoryReel'
 import { PetPortrait } from './components/PetPortrait'
 import {
   defaultPetState,
+  getPetBreedId,
   getPetName,
   getPetOutfitId,
+  getPetPaletteId,
   normalizePetState,
   type CatBreedId,
   type DogBreedId,
@@ -1766,6 +1768,8 @@ function CashlogApp() {
                 kind={petState.selectedKind}
                 name={selectedPetName}
                 outfit={getPetOutfitId(petState)}
+                breed={getPetBreedId(petState)}
+                palette={getPetPaletteId(petState)}
               />
             </section>
           )}
@@ -1794,6 +1798,8 @@ function CashlogApp() {
                 <PetPortrait
                   kind={petState.selectedKind}
                   name={selectedPetName}
+                  breed={getPetBreedId(petState)}
+                  palette={getPetPaletteId(petState)}
                   className="mini-companion"
                 />
               </div>
@@ -1876,7 +1882,13 @@ function CashlogApp() {
           </div>
 
           <div className="timeline-companion">
-            <PetPortrait kind={petState.selectedKind} name={selectedPetName} className="timeline-pet" />
+            <PetPortrait
+              kind={petState.selectedKind}
+              name={selectedPetName}
+              breed={getPetBreedId(petState)}
+              palette={getPetPaletteId(petState)}
+              className="timeline-pet"
+            />
             <p>
               <strong>{selectedPetName}</strong>가{' '}
               {selectedExpenses.length > 0
@@ -2235,7 +2247,13 @@ function CashlogApp() {
                       <small>단서: {analysis.detectedObjects.slice(0, 3).join(', ')}</small>
                     ) : null}
                     <div className="pet-context-question pet-context-question-compact">
-                      <PetPortrait kind={petState.selectedKind} name={selectedPetName} className="question-pet" />
+                      <PetPortrait
+                        kind={petState.selectedKind}
+                        name={selectedPetName}
+                        breed={getPetBreedId(petState)}
+                        palette={getPetPaletteId(petState)}
+                        className="question-pet"
+                      />
                       <div>
                         <strong>친구랑 함께한 장면이야?</strong>
                         <div role="group" aria-label="사진 속 상황">

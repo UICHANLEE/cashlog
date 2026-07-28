@@ -34,32 +34,24 @@ export type PetBreed = {
 }
 
 export const catBreeds: PetBreed[] = [
-  { id: 'korean_short', kind: 'cat', name: '코숏', vibe: '깔끔한 기본 친구' },
-  { id: 'cheese_tabby', kind: 'cat', name: '치즈태비', vibe: '밝고 장난스러운 무드' },
-  { id: 'tuxedo', kind: 'cat', name: '턱시도', vibe: '블랙&화이트 시크함' },
-  { id: 'calico', kind: 'cat', name: '삼색이', vibe: '알록달록 행운 느낌' },
-  { id: 'siamese', kind: 'cat', name: '샴', vibe: '포인트 컬러가 또렷함' },
-  { id: 'russian_blue', kind: 'cat', name: '러시안블루', vibe: '차분한 쿨톤' },
-  { id: 'persian', kind: 'cat', name: '페르시안', vibe: '복슬복슬 고급짐' },
-  { id: 'black_cat', kind: 'cat', name: '까망이', vibe: '밤하늘 같은 존재감' },
+  { id: 'korean_short', kind: 'cat', name: '크림 코숏', vibe: '포근한 살구빛 친구' },
+  { id: 'cheese_tabby', kind: 'cat', name: '치즈태비', vibe: '선명한 줄무늬 장난꾸러기' },
+  { id: 'tuxedo', kind: 'cat', name: '턱시도', vibe: '단정한 흑백 멋쟁이' },
+  { id: 'calico', kind: 'cat', name: '삼색이', vibe: '행운을 닮은 알록달록 무늬' },
 ]
 
 export const dogBreeds: PetBreed[] = [
-  { id: 'maltese', kind: 'dog', name: '말티즈', vibe: '작고 뽀얀 기본템' },
-  { id: 'toy_poodle', kind: 'dog', name: '토이푸들', vibe: '동글동글 곱슬 매력' },
-  { id: 'shiba', kind: 'dog', name: '시바견', vibe: '당당하고 귀여운 표정' },
-  { id: 'retriever', kind: 'dog', name: '리트리버', vibe: '든든한 햇살 친구' },
-  { id: 'dachshund', kind: 'dog', name: '닥스훈트', vibe: '짧은 다리 긴 매력' },
-  { id: 'pomeranian', kind: 'dog', name: '포메라니안', vibe: '복슬복슬 아이돌상' },
-  { id: 'border_collie', kind: 'dog', name: '보더콜리', vibe: '똑똑한 흑백 포인트' },
-  { id: 'corgi', kind: 'dog', name: '웰시코기', vibe: '발랄한 짧은 다리' },
+  { id: 'maltese', kind: 'dog', name: '말티즈', vibe: '솜사탕처럼 하얀 친구' },
+  { id: 'toy_poodle', kind: 'dog', name: '토이푸들', vibe: '보들보들 살구빛 곱슬' },
+  { id: 'shiba', kind: 'dog', name: '시바견', vibe: '씩씩한 여우상 미소' },
+  { id: 'corgi', kind: 'dog', name: '웰시코기', vibe: '큰 귀와 짧은 발의 매력' },
 ]
 
 export const pigBreeds: PetBreed[] = [
-  { id: 'pink_pig', kind: 'pig', name: '핑크피그', vibe: '복숭아빛 말랑 친구' },
+  { id: 'pink_pig', kind: 'pig', name: '복숭아 피그', vibe: '말랑한 복숭아빛 친구' },
   { id: 'mini_pig', kind: 'pig', name: '미니피그', vibe: '작고 야무진 호기심쟁이' },
-  { id: 'spotted_pig', kind: 'pig', name: '점박이', vibe: '한눈에 기억되는 포인트' },
-  { id: 'black_pig', kind: 'pig', name: '까망돼지', vibe: '윤기 나는 행운 친구' },
+  { id: 'spotted_pig', kind: 'pig', name: '점박이', vibe: '까만 점이 매력인 개성파' },
+  { id: 'black_pig', kind: 'pig', name: '까망돼지', vibe: '분홍 코가 돋보이는 행운 친구' },
 ]
 
 export const petBreeds = [...catBreeds, ...dogBreeds, ...pigBreeds]
