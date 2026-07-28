@@ -19,6 +19,7 @@ describe('Cashlog photo MVP', () => {
 
   afterEach(() => {
     window.history.pushState({}, '', '/')
+    vi.restoreAllMocks()
     vi.unstubAllEnvs()
     vi.unstubAllGlobals()
   })
@@ -150,6 +151,43 @@ describe('Cashlog photo MVP', () => {
     expect(screen.getAllByText('10,000원').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/교통 · 대중교통/).length).toBeGreaterThan(0)
     expect(screen.getByText(/5\/5 · 최고야/)).toBeInTheDocument()
+  })
+
+  it('keeps photo picking separate from the long expense form', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '+ 기록 추가' }))
+    await user.click(screen.getByRole('button', { name: '카메라로 촬영' }))
+
+    expect(screen.getByRole('heading', { name: '사진으로 기록' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '카메라 촬영' })).toBeInTheDocument()
+    expect(screen.getByLabelText('갤러리에서 미디어 선택')).toBeInTheDocument()
+    expect(screen.queryByLabelText('금액')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '이 장면으로 저장' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the live camera controls in a dedicated single-screen stage', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue()
+    const stop = vi.fn()
+    const getUserMedia = vi.fn(async () => ({
+      getTracks: () => [{ stop }],
+    } as unknown as MediaStream))
+    vi.stubGlobal('navigator', {
+      ...window.navigator,
+      mediaDevices: { getUserMedia },
+    })
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '사진으로 시작' }))
+
+    expect(await screen.findByRole('heading', { name: '장면 촬영' })).toBeInTheDocument()
+    expect(document.querySelector('.add-sheet')).toHaveClass('is-camera-live')
+    expect(screen.getByRole('button', { name: '촬영하기' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '카메라 끄기' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('금액')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '이 장면으로 저장' })).not.toBeInTheDocument()
   })
 
   it('does not request location when the account has not consented', async () => {

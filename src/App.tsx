@@ -1542,6 +1542,14 @@ function CashlogApp() {
       : { opacity: 0, x: direction * -28, scale: 0.992 },
   }
   const canSaveDraft = Boolean(form.title.trim()) && Number(form.amount) > 0
+  const hasPhotoMedia = Boolean(photoPreview || videoPreview)
+  const isCameraLive = addMode === 'photo' && Boolean(cameraStream)
+  const isPhotoReview = addMode === 'photo' && hasPhotoMedia && !cameraStream
+  const addSheetClassName = [
+    'add-sheet',
+    isCameraLive ? 'is-camera-live' : '',
+    isPhotoReview ? 'is-photo-review' : '',
+  ].filter(Boolean).join(' ')
 
   return (
     <main className="app-shell timeline-app-shell">
@@ -1987,7 +1995,7 @@ function CashlogApp() {
           }}
         >
           <motion.div
-            className="add-sheet"
+            className={addSheetClassName}
             initial={false}
             animate={
               addMode !== 'closed'
@@ -2007,7 +2015,15 @@ function CashlogApp() {
             <div className="sheet-header">
               <div>
                 <p className="eyebrow">PHOTO LOG</p>
-                <h2>{addMode === 'photo' ? '찍은 장면 정리하기' : '직접 기록하기'}</h2>
+                <h2>
+                  {isCameraLive
+                    ? '장면 촬영'
+                    : isPhotoReview
+                      ? '찍은 장면 확인'
+                      : addMode === 'photo'
+                        ? '사진으로 기록'
+                        : '직접 기록하기'}
+                </h2>
               </div>
               <button
                 type="button"
@@ -2246,26 +2262,28 @@ function CashlogApp() {
                     </details>
                   </div>
                 )}
-                <ExpenseEditor
-                  formId="cashlog-photo-form"
-                  form={form}
-                  onChange={updateForm}
-                  onLedgerKindChange={handleLedgerKindChange}
-                  onSubmit={handleSave}
-                  isSaving={isSaving}
-                  assistantMode
-                  detectedItemCount={analysis?.detectedItems?.length ?? 0}
-                  petName={selectedPetName}
-                  suggestedCategories={photoSuggestedCategories}
-                  entryTime={entryTime}
-                  onEntryTimeChange={setEntryTime}
-                  location={locationDraft}
-                  locationAllowed={locationCollectionConsent}
-                  locationStatus={locationStatus}
-                  locationMessage={locationMessage}
-                  onRequestLocation={handleUseCurrentLocation}
-                  onClearLocation={handleClearLocation}
-                />
+                {hasPhotoMedia && !cameraStream && (
+                  <ExpenseEditor
+                    formId="cashlog-photo-form"
+                    form={form}
+                    onChange={updateForm}
+                    onLedgerKindChange={handleLedgerKindChange}
+                    onSubmit={handleSave}
+                    isSaving={isSaving}
+                    assistantMode
+                    detectedItemCount={analysis?.detectedItems?.length ?? 0}
+                    petName={selectedPetName}
+                    suggestedCategories={photoSuggestedCategories}
+                    entryTime={entryTime}
+                    onEntryTimeChange={setEntryTime}
+                    location={locationDraft}
+                    locationAllowed={locationCollectionConsent}
+                    locationStatus={locationStatus}
+                    locationMessage={locationMessage}
+                    onRequestLocation={handleUseCurrentLocation}
+                    onClearLocation={handleClearLocation}
+                  />
+                )}
               </div>
             )}
 
@@ -2288,7 +2306,7 @@ function CashlogApp() {
               />
             )}
             </div>
-            {(addMode === 'photo' || addMode === 'manual') && (
+            {(isPhotoReview || addMode === 'manual') && (
               <div className="sheet-action-footer">
                 <button
                   type="submit"
