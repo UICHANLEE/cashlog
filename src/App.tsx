@@ -11,7 +11,6 @@ import {
   useState,
 } from 'react'
 import {
-  ArrowRight,
   BarChart3,
   CalendarDays,
   Camera,
@@ -21,7 +20,6 @@ import {
   Image as ImageIcon,
   LocateFixed,
   MapPin,
-  Mic,
   PawPrint,
   Pencil,
   Plus,
@@ -1052,16 +1050,6 @@ function CashlogApp() {
     yearMonth,
   ])
 
-  const openChoice = () => {
-    signalSoftImpact()
-    stopCamera()
-    revokeAndClearPreview()
-    setCaptureKind('photo')
-    setForm(emptyForm())
-    resetEntryContext()
-    setAddMode('choice')
-  }
-
   const openPhotoCapture = async () => {
     signalSoftImpact()
     stopCamera()
@@ -1945,12 +1933,12 @@ function CashlogApp() {
             <button type="button" className="camera-shutter" onClick={openPhotoCapture} aria-label="카메라로 바로 촬영">
               <Camera size={34} strokeWidth={2.2} aria-hidden />
             </button>
-            <button type="button" className="dock-secondary" onClick={openManual} aria-label="음성 또는 직접 입력">
-              <Mic size={23} aria-hidden />
-              <span>말하기</span>
+            <button type="button" className="dock-secondary" onClick={openManual} aria-label="빠른 직접 입력">
+              <Pencil size={23} aria-hidden />
+              <span>입력</span>
             </button>
           </div>
-          <button type="button" className="sr-only-action" onClick={openChoice}>+ 기록 추가</button>
+          <button type="button" className="sr-only-action" onClick={openManual}>+ 기록 추가</button>
         </section>
       )}
           </motion.div>
@@ -2026,7 +2014,7 @@ function CashlogApp() {
             <>
             <div className="sheet-header">
               <div>
-                <p className="eyebrow">PHOTO LOG</p>
+                <p className="eyebrow">{addMode === 'manual' ? 'QUICK LOG' : 'PHOTO LOG'}</p>
                 <h2>
                   {isCameraLive
                     ? '장면 촬영'
@@ -2034,7 +2022,7 @@ function CashlogApp() {
                       ? '찍은 장면 확인'
                       : addMode === 'photo'
                         ? '사진으로 기록'
-                        : '직접 기록하기'}
+                        : '빠른 기록'}
                 </h2>
               </div>
               <button
@@ -2233,15 +2221,12 @@ function CashlogApp() {
                     {analysis.detectedItems?.length ? (
                       <div className="shopping-moment-summary">
                         <strong>{analysis.detectedItems.length}개 상품을 한 장면으로 묶었어요</strong>
-                        <details>
-                          <summary>사진에서 찾은 항목 보기</summary>
-                          <div className="detected-item-list" aria-label="탐지 상품 목록">
-                            {analysis.detectedItems.slice(0, 8).map((item) => (
-                              <span key={`${item.name}-${item.category}`}>{item.displayName}</span>
-                            ))}
-                            {analysis.detectedItems.length > 8 && <span>+{analysis.detectedItems.length - 8}개</span>}
-                          </div>
-                        </details>
+                        <div className="detected-item-list" aria-label="탐지 상품 목록">
+                          {analysis.detectedItems.slice(0, 8).map((item) => (
+                            <span key={`${item.name}-${item.category}`}>{item.displayName}</span>
+                          ))}
+                          {analysis.detectedItems.length > 8 && <span>+{analysis.detectedItems.length - 8}개</span>}
+                        </div>
                       </div>
                     ) : analysis.detectedObjects?.length ? (
                       <small>단서: {analysis.detectedObjects.slice(0, 3).join(', ')}</small>
@@ -2262,22 +2247,6 @@ function CashlogApp() {
                         </div>
                       </div>
                     </div>
-                    <details className="photo-use-settings">
-                      <summary>사진 활용 설정</summary>
-                      <label className="training-consent">
-                        <input
-                          type="checkbox"
-                          checked={trainingImageConsent}
-                          onChange={(event) => setTrainingImageConsent(event.target.checked)}
-                        />
-                        <span>
-                          <strong>[선택]</strong> 추천 품질 개선을 위한 학습·평가 후보로 보관
-                        </span>
-                      </label>
-                      <small className="training-consent-note">
-                        선택하지 않아도 기록과 사진 보관에는 영향이 없어요.
-                      </small>
-                    </details>
                   </div>
                 )}
                 {hasPhotoMedia && !cameraStream && (
@@ -2488,7 +2457,7 @@ function ExpenseEditor({
   return (
     <form
       id={formId}
-      className={`expense-form${assistantMode ? ' assistant-expense-form' : ''}`}
+      className={`expense-form quick-entry-form${assistantMode ? ' assistant-expense-form' : ''}`}
       onSubmit={onSubmit}
       aria-busy={isSaving}
     >
@@ -2523,8 +2492,8 @@ function ExpenseEditor({
         </div>
       </fieldset>
       <AmountEditor form={form} onChange={onChange} assistantMode={assistantMode} />
-      <label>
-        {assistantMode ? '이 장면의 이름' : '제목'}
+      <label className="quick-title-field">
+        <span className="sr-only">{assistantMode ? '이 장면의 이름' : '제목'}</span>
         <input
           value={form.title}
           onChange={(event) => onChange('title', event.target.value)}
@@ -2533,6 +2502,13 @@ function ExpenseEditor({
           }
         />
       </label>
+      <CategoryEditor
+        form={form}
+        onChange={onChange}
+        assistantMode={assistantMode}
+        suggestedCategories={suggestedCategories}
+      />
+      <MoodScoreEditor form={form} onChange={onChange} />
       <EntryContextEditor
         entryTime={entryTime}
         onEntryTimeChange={onEntryTimeChange}
@@ -2543,26 +2519,6 @@ function ExpenseEditor({
         onRequestLocation={onRequestLocation}
         onClearLocation={onClearLocation}
       />
-      <CategoryEditor
-        form={form}
-        onChange={onChange}
-        assistantMode={assistantMode}
-        suggestedCategories={suggestedCategories}
-      />
-      {assistantMode ? (
-        <details className="expense-more-details">
-          <summary>기분과 메모 더 남기기</summary>
-          <div className="expense-more-fields">
-            <MoodScoreEditor form={form} onChange={onChange} />
-            <MemoEditor form={form} onChange={onChange} />
-          </div>
-        </details>
-      ) : (
-        <>
-          <MoodScoreEditor form={form} onChange={onChange} />
-          <MemoEditor form={form} onChange={onChange} />
-        </>
-      )}
     </form>
   )
 }
@@ -2750,8 +2706,6 @@ function CategoryEditor({
 }) {
   const expenseMeta = getCategoryMeta(form.category as CategoryId)
   const incomeMeta = getIncomeCategoryMeta(form.category as IncomeCategoryId)
-  const activeGroup = form.kind === 'expense' ? expenseMeta.group : incomeMeta.group
-  const activeLeaf = form.kind === 'expense' ? expenseMeta.leaf : incomeMeta.leaf
   const treeControls = form.kind === 'expense' ? (
     <>
       <div className="category-step-heading">
@@ -2859,14 +2813,8 @@ function CategoryEditor({
   )
 
   return (
-    <fieldset className={`category-fieldset${assistantMode ? ' category-fieldset-compact' : ''}`}>
-        <legend>카테고리</legend>
-        <div className="category-selection-path" aria-live="polite">
-          <span aria-hidden>{activeGroup.icon}</span>
-          <strong>{activeGroup.name}</strong>
-          <ArrowRight size={14} aria-hidden />
-          <b>{activeLeaf.name}</b>
-        </div>
+      <fieldset className={`category-fieldset${assistantMode ? ' category-fieldset-compact' : ''}`}>
+        <legend className="quick-entry-category-legend">카테고리</legend>
         {assistantMode && form.kind === 'expense' && suggestedCategories.length > 0 && (
           <div className="category-suggestions" role="group" aria-label="사진과 가까운 카테고리">
             <span>빠른 선택</span>
@@ -2890,31 +2838,8 @@ function CategoryEditor({
             })}
           </div>
         )}
-        {assistantMode ? (
-          <details className="category-all-details">
-            <summary>전체 카테고리에서 바꾸기</summary>
-            <div className="category-all-controls">{treeControls}</div>
-          </details>
-        ) : (
-          treeControls
-        )}
+        {treeControls}
       </fieldset>
-  )
-}
-
-function MemoEditor({ form, onChange }: {
-  form: ExpenseForm
-  onChange: ExpenseFormChange
-}) {
-  return (
-      <label>
-        메모
-        <textarea
-          value={form.memo}
-          onChange={(event) => onChange('memo', event.target.value)}
-          placeholder="기억하고 싶은 내용을 남겨보세요."
-        />
-      </label>
   )
 }
 

@@ -2280,6 +2280,237 @@ video.preview-image {
   resize: vertical;
 }
 
+/* One-pass entry: every decision stays visible, compact, and in the order it is made. */
+.quick-entry-form {
+  gap: 10px;
+}
+
+.quick-entry-form .ledger-kind-fieldset {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+
+.quick-entry-form .ledger-kind-fieldset legend {
+  flex: 0 0 auto;
+  margin: 0;
+  font-size: 15px;
+}
+
+.quick-entry-form .ledger-kind-toggle {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.quick-entry-form .ledger-kind-toggle button {
+  min-height: 38px;
+  padding: 5px 12px;
+  border-width: 2px;
+  font-size: 15px;
+}
+
+.quick-entry-form .amount-editor {
+  gap: 6px;
+  padding: 8px 0 10px;
+}
+
+.quick-entry-form .amount-editor-heading label {
+  font-size: 16px;
+}
+
+.quick-entry-form .amount-editor-heading output {
+  font-size: 13px;
+}
+
+.quick-entry-form .amount-input-shell input {
+  min-height: 50px;
+  padding-block: 6px;
+  font-size: 28px;
+}
+
+.quick-entry-form .amount-quick-actions {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) 36px;
+  gap: 5px;
+}
+
+.quick-entry-form .amount-quick-actions button {
+  min-height: 34px;
+  padding: 4px 3px;
+  font-size: 12px;
+  box-shadow: 1px 1px 0 var(--line);
+}
+
+.quick-entry-form > label {
+  gap: 5px;
+  font-size: 15px;
+}
+
+.quick-entry-form > label > input {
+  min-height: 44px;
+  padding: 9px 11px;
+}
+
+.quick-entry-form .quick-title-field {
+  gap: 0;
+}
+
+.quick-entry-form .quick-entry-category-legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.quick-entry-form .category-fieldset {
+  padding: 7px 0 0;
+}
+
+.quick-entry-form .category-fieldset legend {
+  margin-bottom: 6px;
+  font-size: 16px;
+}
+
+.quick-entry-form .category-step-heading {
+  gap: 5px;
+  margin-bottom: 5px;
+  font-size: 14px;
+}
+
+.quick-entry-form .category-step-heading > span {
+  width: 20px;
+  height: 20px;
+  border-width: 1.5px;
+  font-size: 11px;
+}
+
+.quick-entry-form .category-leaf-heading {
+  margin-top: 7px;
+}
+
+.quick-entry-form .category-groups {
+  grid-auto-columns: 88px;
+  gap: 6px;
+  padding-bottom: 4px;
+}
+
+.quick-entry-form .category-pill {
+  display: flex;
+  min-height: 44px;
+  gap: 5px;
+  padding: 5px 7px;
+  border-width: 2px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.quick-entry-form .category-pill > span {
+  font-size: 18px;
+}
+
+.quick-entry-form .category-pill > svg {
+  display: none;
+}
+
+.quick-entry-form .category-leaves {
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin: 0 -3px;
+  padding: 2px 3px 5px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.quick-entry-form .category-leaf {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 6px 10px;
+  border-width: 2px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.quick-entry-form .mood-score-fieldset {
+  padding: 9px 0 0;
+}
+
+.quick-entry-form .mood-score-heading {
+  margin-bottom: 6px;
+}
+
+.quick-entry-form .mood-score-heading legend {
+  font-size: 16px;
+}
+
+.quick-entry-form .mood-score-heading output {
+  font-size: 12px;
+}
+
+.quick-entry-form .mood-score-options {
+  gap: 5px;
+}
+
+.quick-entry-form .mood-score-options button {
+  min-height: 52px;
+  grid-template-rows: 24px auto;
+  padding: 4px 2px;
+  border-width: 2px;
+  box-shadow: 1px 1px 0 var(--line);
+}
+
+.quick-entry-form .mood-score-options button > span {
+  font-size: 22px;
+}
+
+.quick-entry-form .mood-score-options button strong {
+  font-size: 12px;
+}
+
+.quick-entry-form .mood-score-options button small {
+  display: none;
+}
+
+.quick-entry-form .entry-context-editor {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+  padding: 8px 0 0;
+  border-bottom: 0;
+}
+
+.quick-entry-form .entry-time-field,
+.quick-entry-form .location-request,
+.quick-entry-form .location-ready,
+.quick-entry-form .location-disabled {
+  min-height: 40px;
+  border-width: 2px;
+  font-size: 12px;
+}
+
+.quick-entry-form .entry-time-field {
+  padding-inline: 7px;
+}
+
+.quick-entry-form .entry-time-field > span {
+  font-size: 0;
+}
+
+.quick-entry-form .entry-time-field > span svg {
+  width: 16px;
+  height: 16px;
+}
+
+.quick-entry-form .entry-time-field input {
+  height: 34px;
+  font-size: 14px;
+}
+
 .category-fieldset {
   margin: 0;
   padding: 16px 0 5px;
@@ -3837,5 +4068,72 @@ video.preview-image {
 @media (prefers-reduced-motion: reduce) {
   .lazy-pet-view .pet-portrait-3d {
     animation: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .sheet-backdrop {
+    padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom));
+  }
+
+  .add-sheet {
+    max-height: calc(100dvh - max(16px, env(safe-area-inset-top)) - env(safe-area-inset-bottom));
+    padding: 25px 16px 14px;
+    border-radius: 22px;
+  }
+
+  .sheet-header {
+    align-items: center;
+    margin-bottom: 10px;
+  }
+
+  .sheet-header .eyebrow {
+    margin-bottom: 1px;
+    font-size: 10px;
+  }
+
+  .sheet-header h2 {
+    font-size: 21px;
+  }
+
+  .quick-entry-form .category-groups {
+    grid-auto-columns: 88px;
+    gap: 6px;
+  }
+
+  .quick-entry-form .category-groups .category-pill {
+    min-height: 44px;
+    padding: 5px 7px;
+    font-size: 13px;
+  }
+
+  .quick-entry-form .category-leaves {
+    flex-wrap: nowrap;
+    gap: 6px;
+    margin-bottom: 0;
+    overflow-x: auto;
+  }
+
+  .quick-entry-form .category-leaves .category-leaf {
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+
+  .quick-entry-form .amount-quick-actions {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) 36px;
+  }
+
+  .quick-entry-form .amount-quick-actions button {
+    font-size: 12px;
+  }
+
+  .quick-entry-form .mood-score-options button {
+    min-height: 52px;
+  }
+
+  .quick-entry-form .mood-score-options button small {
+    display: none;
   }
 }

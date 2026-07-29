@@ -137,7 +137,6 @@ describe('Cashlog photo MVP', () => {
     render(<App />)
 
     await user.click(screen.getByRole('button', { name: '+ 기록 추가' }))
-    await user.click(screen.getByRole('button', { name: '직접 입력' }))
     await user.type(screen.getByLabelText('제목'), '지하철 충전')
     await user.type(screen.getByLabelText('금액'), '10000')
     await user.click(screen.getByRole('button', { name: '5점 최고야' }))
@@ -157,8 +156,7 @@ describe('Cashlog photo MVP', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: '+ 기록 추가' }))
-    await user.click(screen.getByRole('button', { name: '카메라로 촬영' }))
+    await user.click(screen.getByRole('button', { name: '카메라로 바로 촬영' }))
 
     expect(screen.getByRole('heading', { name: '사진으로 기록' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '카메라 촬영' })).toBeInTheDocument()
@@ -270,7 +268,7 @@ describe('Cashlog photo MVP', () => {
     expect(screen.getByText('위치 포함')).toBeInTheDocument()
   })
 
-  it('keeps model-improvement image retention as a separate opt-in', async () => {
+  it('keeps model-improvement image retention out of the quick entry flow', async () => {
     const user = userEvent.setup()
     render(<App />)
     const photo = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0])], 'cafe.jpg', {
@@ -279,14 +277,10 @@ describe('Cashlog photo MVP', () => {
 
     await user.upload(screen.getByLabelText('갤러리에서 사진 선택'), photo)
 
-    await user.click(await screen.findByText('사진 활용 설정'))
-    const consent = await screen.findByRole('checkbox', {
+    await screen.findByText(/아래 내용만 확인하면 저장돼요/)
+    expect(screen.queryByRole('checkbox', {
       name: /추천 품질 개선을 위한 학습·평가 후보로 보관/,
-    })
-    expect(consent).not.toBeChecked()
-    expect(screen.getByText(/기록과 사진 보관에는 영향이 없어요/)).toBeInTheDocument()
-    await user.click(consent)
-    expect(consent).toBeChecked()
+    })).not.toBeInTheDocument()
   })
 
   it('enables 하루 스토리 after a manual expense (no photo)', async () => {
@@ -317,7 +311,6 @@ describe('Cashlog photo MVP', () => {
     render(<App />)
 
     await user.click(screen.getByRole('button', { name: '+ 기록 추가' }))
-    await user.click(screen.getByRole('button', { name: '직접 입력' }))
     await user.click(screen.getByRole('button', { name: '수입' }))
     await user.type(screen.getByLabelText('제목'), '환급')
     await user.type(screen.getByLabelText('금액'), '12000')
