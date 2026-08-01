@@ -136,7 +136,7 @@ describe('Cashlog photo MVP', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: '+ 기록 추가' }))
+    await user.click(screen.getByRole('button', { name: '빠른 직접 입력' }))
     await user.type(screen.getByLabelText('제목'), '지하철 충전')
     await user.type(screen.getByLabelText('금액'), '10000')
     await user.click(screen.getByRole('button', { name: '5점 최고야' }))
@@ -150,6 +150,51 @@ describe('Cashlog photo MVP', () => {
     expect(screen.getAllByText('10,000원').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/교통 · 대중교통/).length).toBeGreaterThan(0)
     expect(screen.getByText(/5\/5 · 최고야/)).toBeInTheDocument()
+  })
+
+  it('moves keyboard focus into the entry dialog and restores it after Escape', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    const trigger = screen.getByRole('button', { name: '빠른 직접 입력' })
+
+    await user.click(trigger)
+    expect(await screen.findByRole('button', { name: '기록 창 닫기' })).toHaveFocus()
+    await user.keyboard('{Escape}')
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '기록 추가' })).not.toBeInTheDocument())
+    expect(trigger).toHaveFocus()
+  })
+
+  it('opens the monthly story from the calendar when a photo record exists', async () => {
+    const user = userEvent.setup()
+    const expense = createExpenseFromAnalysis({
+      analysis: {
+        suggestedAmount: 8200,
+        suggestedCategory: 'meal_cafe',
+        suggestedTitle: '이번 달 카페',
+        suggestedMemo: '',
+        confidence: 0.88,
+        rawText: '',
+      },
+      imageUrl: 'blob:cashlog-photo',
+      dateTime: new Date().toISOString(),
+    })
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([expense]))
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '달력' }))
+    const monthStory = await screen.findByRole('button', { name: '한 달 스토리' })
+    expect(monthStory).toBeEnabled()
+    await user.click(monthStory)
+
+    expect(await screen.findByRole('dialog', { name: /월 기록/ })).toBeInTheDocument()
+  })
+
+  it('renders a real 404 for an unknown address', () => {
+    history.replaceState(null, '', '/definitely-not-a-cashlog-page')
+    render(<App />)
+    expect(screen.getByRole('heading', { name: '여긴 기록장이 아니에요' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Cashlog 홈으로' })).toHaveAttribute('href', '/')
   })
 
   it('keeps photo picking separate from the long expense form', async () => {

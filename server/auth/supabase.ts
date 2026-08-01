@@ -115,6 +115,20 @@ export const authRefresh = async (refreshToken: string) => {
   return body as SupabaseSession
 }
 
+export const authRequestPasswordReset = async (email: string, origin?: string) => {
+  const config = getServerSupabaseConfig()
+  const endpoint = new URL(`${config.url}/auth/v1/recover`)
+  if (origin) endpoint.searchParams.set('redirect_to', `${origin}/reset-password.html`)
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: headers(config.anonKey, config.anonKey, { 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ email }),
+  })
+  if (!response.ok) {
+    throw new ApiError(503, 'PASSWORD_RESET_UNAVAILABLE', '재설정 메일을 보내지 못했어요. 잠시 후 다시 시도해 주세요.')
+  }
+}
+
 export const getAuthUser = async (accessToken: string) => {
   const config = getServerSupabaseConfig()
   const response = await fetch(`${config.url}/auth/v1/user`, { headers: headers(config.anonKey, accessToken) })

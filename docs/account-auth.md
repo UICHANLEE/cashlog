@@ -39,6 +39,8 @@ CASHLOG_ALLOWED_ORIGINS=https://cashlog.example.com,https://cashlog.vercel.app
 | --- | --- |
 | 회원가입 | `/signup.html` |
 | 로그인 | `/login.html` |
+| 비밀번호 재설정 요청 | `/forgot-password.html` |
+| 새 비밀번호 설정 | `/reset-password.html` |
 | 보호된 프로필 | `/profile.html` |
 
 | Method | Endpoint | 설명 |
@@ -47,6 +49,8 @@ CASHLOG_ALLOWED_ORIGINS=https://cashlog.example.com,https://cashlog.vercel.app
 | POST | `/api/auth/login` | 비밀번호 로그인과 쿠키 발급 |
 | POST | `/api/auth/logout` | 전체 세션 로그아웃과 쿠키 삭제 |
 | POST | `/api/auth/refresh` | Refresh Token 회전 |
+| POST | `/api/auth/password-reset-request` | 계정 존재 여부를 노출하지 않고 재설정 메일 요청 |
+| PATCH | `/api/auth/password-reset` | Recovery Token 검증 후 비밀번호 변경·전체 세션 무효화 |
 | GET | `/api/auth/me` | 현재 사용자·서명 이미지 URL 조회 |
 | PATCH | `/api/users/me` | multipart 닉네임·이미지 변경 |
 | PATCH | `/api/users/me/password` | 비밀번호 변경 후 전체 세션 무효화 |

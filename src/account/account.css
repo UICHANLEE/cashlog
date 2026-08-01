@@ -6,6 +6,8 @@ body { margin: 0; min-width: 320px; min-height: 100vh; background-color: #fffaf0
 button, input { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 a { color: inherit; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid #27775a; outline-offset: 3px; }
 .account-page { min-height: 100vh; padding-bottom: 56px; }
 .account-topbar { height: 62px; max-width: 760px; margin: 0 auto; padding: 0 18px; display: grid; grid-template-columns: 40px 1fr 40px; align-items: center; }
 .account-topbar > a:first-child { width: 38px; height: 38px; display: grid; place-items: center; border: 2px solid #2d2925; border-radius: 50%; background: #fffdf8; box-shadow: 2px 3px 0 #2d2925; }
@@ -25,7 +27,8 @@ a { color: inherit; }
 .avatar-actions button { padding: 5px 10px; border: 0; background: transparent; color: #5b5148; font-size: 12px; font-weight: 700; text-decoration: underline; cursor: pointer; }
 .avatar-picker p { margin: -4px 0 0; color: #8b8176; font-size: 11px; }
 .form-field { display: grid; gap: 7px; }
-.form-field > span { font-size: 13px; font-weight: 800; }
+.form-field > span,
+.form-field > label { font-size: 13px; font-weight: 800; }
 .form-field input { width: 100%; height: 48px; padding: 0 13px; color: #27231f; background: #fffdf8; border: 1.5px solid #a69b90; border-radius: 5px; outline: 0; transition: border-color .18s, box-shadow .18s, transform .18s; }
 .form-field input:focus { border-color: #27775a; box-shadow: 0 0 0 3px rgba(68,178,135,.17); transform: translateY(-1px); }
 .form-field input[aria-invalid="true"] { border-color: #d8453a; }
@@ -39,6 +42,7 @@ a { color: inherit; }
 .consent-list { display: grid; gap: 9px; padding: 14px; background: #fff7dc; border: 1.5px dashed #8d7f6d; border-radius: 5px; }
 .consent-list label, .remember-row { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.55; cursor: pointer; }
 .consent-list input, .remember-row input { width: 17px; height: 17px; margin: 1px 0 0; accent-color: #ee5e4f; flex: none; }
+.consent-list input[aria-invalid="true"] { outline: 2px solid #c9362f; outline-offset: 2px; }
 .consent-list strong { color: #d8453a; }
 .consent-list a { font-weight: 800; }
 .consent-list .consent-protection {
@@ -47,7 +51,7 @@ a { color: inherit; }
   font-size: 11px;
   line-height: 1.6;
 }
-.primary-submit, .secondary-submit { min-height: 49px; display: flex; justify-content: center; align-items: center; gap: 7px; color: #fff; background: #ee5e4f; border: 2px solid #2d2925; border-radius: 5px; box-shadow: 3px 4px 0 #2d2925; font-weight: 800; cursor: pointer; transition: transform .14s, box-shadow .14s; }
+.primary-submit, .secondary-submit { min-height: 49px; display: flex; justify-content: center; align-items: center; gap: 7px; color: #27231f; background: #ee5e4f; border: 2px solid #2d2925; border-radius: 5px; box-shadow: 3px 4px 0 #2d2925; font-weight: 800; cursor: pointer; transition: transform .14s, box-shadow .14s; }
 .primary-submit:hover, .secondary-submit:hover { transform: translate(-1px,-1px); box-shadow: 4px 5px 0 #2d2925; }
 .primary-submit:active, .secondary-submit:active { transform: translate(2px,2px); box-shadow: 1px 1px 0 #2d2925; }
 .primary-submit:disabled { opacity: .65; cursor: wait; }
@@ -58,6 +62,15 @@ a { color: inherit; }
 .form-message.success { color: #176143; background: #e8f8ef; border: 1px solid #99d1b6; }
 .login-form { padding-top: 8px; }
 .remember-row { align-items: center; }
+.login-options { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.login-options > a { color: #27775a; font-size: 12px; font-weight: 800; }
+.account-helper { margin: 0; color: #665f55; font-size: 13px; line-height: 1.65; }
+.account-state { min-height: 230px; display: grid; justify-items: center; align-content: center; gap: 13px; text-align: center; }
+.account-state h2, .account-state p { margin: 0; }
+.account-state h2 { font-family: 'Gaegu', cursive; font-size: 27px; }
+.account-state p { max-width: 360px; color: #665f55; font-size: 13px; line-height: 1.65; }
+.account-state > a:not(.primary-link) { color: #27775a; font-size: 12px; font-weight: 800; }
+.primary-link { min-height: 49px; width: 100%; display: flex; justify-content: center; align-items: center; color: #fff; background: #ee5e4f; border: 2px solid #2d2925; border-radius: 5px; box-shadow: 3px 4px 0 #2d2925; font-weight: 800; text-decoration: none; }
 .profile-summary { display: flex; align-items: center; gap: 14px; margin-bottom: 27px; padding-bottom: 22px; border-bottom: 2px dashed #c7bcaf; }
 .profile-avatar { width: 72px; height: 72px; display: grid; place-items: center; flex: none; overflow: hidden; background: #dff5e9; border: 2px solid #2d2925; border-radius: 48%; }
 .profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
@@ -68,11 +81,12 @@ a { color: inherit; }
 .password-change { display: grid; gap: 15px; padding: 25px 0; border-bottom: 2px dashed #c7bcaf; }
 .password-change h2 { margin: 0 0 2px; font-family: 'Gaegu', cursive; font-size: 25px; }
 .secondary-submit { min-height: 44px; color: #27231f; background: #f5c84c; }
+.secondary-submit:disabled, .danger-actions button:disabled { opacity: .58; cursor: wait; }
 .danger-actions { display: flex; justify-content: space-between; gap: 12px; padding-top: 22px; }
 .danger-actions button { display: flex; align-items: center; gap: 5px; padding: 8px 5px; border: 0; background: transparent; color: #665d54; font-size: 12px; cursor: pointer; }
 .danger-actions button:last-child { color: #b43a32; }
 .page-loader { min-height: 240px; display: grid; place-items: center; color: #ee5e4f; }
 .spin { animation: spin .85s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-@media (max-width: 520px) { .account-stage { width: min(100% - 18px, 560px); margin-top: 10px; } .account-panel { padding: 25px 18px 30px; } .account-intro { margin-bottom: 18px; } .account-topbar { padding: 0 12px; } }
+@media (max-width: 520px) { .account-stage { width: min(100% - 18px, 560px); margin-top: 10px; } .account-panel { padding: 25px 18px 30px; } .account-intro { margin-bottom: 18px; } .account-topbar { padding: 0 12px; } .login-options { align-items: flex-start; flex-direction: column; gap: 8px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }

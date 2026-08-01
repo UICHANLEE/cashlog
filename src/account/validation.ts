@@ -35,3 +35,18 @@ export const validateSignup = (values: {
   if (!values.photoAndTime) errors.photoTimeConsent = '사진과 기록 시간 처리 동의가 필요해요.'
   return errors
 }
+
+export const validateLogin = (email: string, password: string) => {
+  const errors: FieldErrors = {}
+  if (!emailPattern.test(email.trim())) errors.email = '올바른 이메일 주소를 입력해 주세요.'
+  if (!password) errors.password = '비밀번호를 입력해 주세요.'
+  return errors
+}
+
+export const validateNicknameInput = (nickname: string) => {
+  const normalized = nickname.trim().replace(/\s+/g, ' ')
+  if (normalized.length < 2 || normalized.length > 30 || !/^[\p{L}\p{N}_ .-]+$/u.test(normalized)) {
+    return '닉네임은 2~30자의 한글, 영문, 숫자로 입력해 주세요.'
+  }
+  return ''
+}

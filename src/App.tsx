@@ -17,6 +17,7 @@ import {
   Check,
   ChevronDown,
   Clock,
+  House,
   Image as ImageIcon,
   LocateFixed,
   MapPin,
@@ -245,6 +246,8 @@ function CashlogApp() {
   const [isAnalyzingPhoto, setIsAnalyzingPhoto] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const addSheetRef = useRef<HTMLDivElement>(null)
+  const addSheetTriggerRef = useRef<HTMLElement | null>(null)
   const [captureKind, setCaptureKind] = useState<'photo' | 'video'>('photo')
   const [isRecording, setIsRecording] = useState(false)
   const [recordSeconds, setRecordSeconds] = useState(0)
@@ -1091,9 +1094,31 @@ function CashlogApp() {
     if (addMode === 'closed') return undefined
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') closeAddSheet()
+      if (event.key !== 'Tab') return
+      const focusable = Array.from(addSheetRef.current?.querySelectorAll<HTMLElement>(
+        'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])',
+      ) ?? []).filter((element) => element.offsetParent !== null)
+      if (!focusable.length) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
     }
+    addSheetTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const focusFrame = window.requestAnimationFrame(() => {
+      addSheetRef.current?.querySelector<HTMLElement>('button:not(:disabled), input:not(:disabled), [tabindex="0"]')?.focus()
+    })
     window.addEventListener('keydown', handleEscape)
-    return () => window.removeEventListener('keydown', handleEscape)
+    return () => {
+      window.cancelAnimationFrame(focusFrame)
+      window.removeEventListener('keydown', handleEscape)
+      addSheetTriggerRef.current?.focus()
+    }
   }, [addMode, closeAddSheet])
 
   useEffect(() => {
@@ -1641,7 +1666,7 @@ function CashlogApp() {
                     </label>
                     <label>
                       <input type="checkbox" checked={signupConsents.privacy} onChange={(event) => setSignupConsents((current) => ({ ...current, privacy: event.target.checked }))} />
-                      <span><strong>[필수]</strong> <a href="/privacy.html" target="_blank">개인정보 처리방침</a>에 동의합니다.</span>
+                      <span><strong>[필수]</strong> <a href="/privacy.html" target="_blank" rel="noopener noreferrer">개인정보 처리방침</a>에 동의합니다.</span>
                     </label>
                     <label>
                       <input type="checkbox" checked={signupConsents.photoAndTime} onChange={(event) => setSignupConsents((current) => ({ ...current, photoAndTime: event.target.checked }))} />
@@ -1681,7 +1706,7 @@ function CashlogApp() {
                         checked={signupConsents.privacy}
                         onChange={(event) => setSignupConsents((current) => ({ ...current, privacy: event.target.checked }))}
                       />
-                      <span><strong>[필수]</strong> <a href="/privacy.html" target="_blank">개인정보 처리방침</a>에 동의합니다.</span>
+                      <span><strong>[필수]</strong> <a href="/privacy.html" target="_blank" rel="noopener noreferrer">개인정보 처리방침</a>에 동의합니다.</span>
                     </label>
                     <details>
                       <summary>개인정보 수집 내용</summary>
@@ -1995,7 +2020,9 @@ function CashlogApp() {
           }}
         >
           <motion.div
+            ref={addSheetRef}
             className={addSheetClassName}
+            tabIndex={-1}
             initial={false}
             animate={
               addMode !== 'closed'
@@ -2496,6 +2523,7 @@ function ExpenseEditor({
         <span className="sr-only">{assistantMode ? '이 장면의 이름' : '제목'}</span>
         <input
           value={form.title}
+          maxLength={80}
           onChange={(event) => onChange('title', event.target.value)}
           placeholder={
             form.kind === 'income' ? '예: 급여, 캐시백' : '예: 오늘의 카페 기록'
@@ -2843,14 +2871,30 @@ function CategoryEditor({
   )
 }
 
+function NotFoundPage() {
+  return (
+    <main className="not-found-page">
+      <section>
+        <p className="eyebrow">404 LOST PAGE</p>
+        <h1>여긴 기록장이 아니에요</h1>
+        <p>주소가 바뀌었거나 존재하지 않는 페이지예요. 내 가계부 내용은 이 화면에 표시하지 않았어요.</p>
+        <a href="/"><House size={19} aria-hidden /> Cashlog 홈으로</a>
+      </section>
+    </main>
+  )
+}
+
 function App() {
-  return window.location.pathname === '/uichan'
-    ? (
+  const pathname = window.location.pathname
+  if (pathname === '/uichan') {
+    return (
       <Suspense fallback={null}>
         <UichanAdmin />
       </Suspense>
     )
-    : <CashlogApp />
+  }
+  if (pathname === '/' || pathname === '/index.html') return <CashlogApp />
+  return <NotFoundPage />
 }
 
 export default App
