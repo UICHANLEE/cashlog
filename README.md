@@ -147,7 +147,9 @@ Supabase Dashboard의 **Authentication → URL Configuration**도 설정해야 �
 4. Kakao REST API 키와 Client Secret을 Supabase의 Kakao Provider에 입력하고 활성화합니다. Cashlog에서 이메일을 표시하려면 카카오 동의 항목에서 계정 이메일 제공도 설정합니다.
 5. 변경된 [`supabase/schema.sql`](supabase/schema.sql)을 SQL Editor에서 다시 실행합니다. 기존 데이터를 삭제하지 않고 OAuth 사용자가 자신의 가입 동의 내역을 저장할 RLS 정책을 추가합니다.
 
-Google·카카오 로그인에는 별도의 Vercel 환경 변수가 필요하지 않습니다. 기존 `VITE_SUPABASE_URL`과 `VITE_SUPABASE_PUBLISHABLE_KEY`만 유지하면 됩니다.
+Google·카카오 로그인에는 공급자별 Vercel 비밀키가 필요하지 않습니다. 다만 callback 세션을 HttpOnly 쿠키로 교환하므로 기존 `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`와 서버용 `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`를 함께 유지해야 합니다.
+
+OAuth·메일 인증의 Refresh Token은 callback 직후 `/api/auth/session`에서 검증·회전되어 HttpOnly 쿠키에 저장됩니다. 앱의 Supabase Access Token은 RLS 동기화 중 메모리에서만 사용하며 `localStorage`에 저장하지 않습니다.
 
 ### 보안 설정
 

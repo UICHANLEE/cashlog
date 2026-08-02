@@ -8,7 +8,7 @@
 - 프로필 원본은 서버에서 MIME·파일 시그니처·해상도를 검증한 뒤 512×512 WebP로 재인코딩합니다. EXIF와 원본 파일명은 저장하지 않습니다.
 - 이미지는 비공개 `cashlog-profiles/<user-id>/<uuid>.webp`에 저장하며 화면에는 1시간짜리 서명 URL만 전달합니다.
 
-기존 앱은 Supabase RLS 동기화에 Access Token이 필요합니다. `/api/auth/me`가 HttpOnly 쿠키를 검증한 뒤 Access Token을 응답하고, 앱은 이를 메모리에서만 사용합니다. 새 인증 흐름은 토큰을 `localStorage`에 저장하지 않습니다.
+기존 앱은 Supabase RLS 동기화에 Access Token이 필요합니다. OAuth·메일 인증 콜백의 Refresh Token은 `/api/auth/session`에서 즉시 검증·회전한 뒤 HttpOnly 쿠키로 바뀝니다. `/api/auth/me`가 쿠키를 검증해 돌려준 Access Token은 앱 메모리에서만 사용하며 `localStorage`에는 저장하지 않습니다. 이전 버전의 로컬 세션은 최초 실행 시 한 번만 읽어 같은 쿠키 세션으로 이관한 뒤 삭제합니다.
 
 ## 환경변수
 
@@ -47,6 +47,7 @@ CASHLOG_ALLOWED_ORIGINS=https://cashlog.example.com,https://cashlog.vercel.app
 | --- | --- | --- |
 | POST | `/api/auth/signup` | multipart 회원가입과 프로필 사진 저장 |
 | POST | `/api/auth/login` | 비밀번호 로그인과 쿠키 발급 |
+| POST | `/api/auth/session` | OAuth·메일 콜백 Refresh Token 검증·회전과 쿠키 발급 |
 | POST | `/api/auth/logout` | 전체 세션 로그아웃과 쿠키 삭제 |
 | POST | `/api/auth/refresh` | Refresh Token 회전 |
 | POST | `/api/auth/password-reset-request` | 계정 존재 여부를 노출하지 않고 재설정 메일 요청 |

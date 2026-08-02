@@ -578,17 +578,20 @@ function CashlogApp() {
             secureSession = null
           }
         }
-        const stored = fromUrl ?? secureSession ?? authClient.loadStoredSession()
-        if (!stored) {
+        const legacySession = fromUrl || secureSession ? null : authClient.loadStoredSession()
+        let activeSession = fromUrl ?? secureSession ?? legacySession
+        if (!activeSession) {
           setSyncStatus('로그인 대기 · 로컬 저장 중')
           return
         }
-        const hydrated = await authClient.hydrateSession(stored)
+        if (!secureSession) {
+          activeSession = await authClient.persistSession(activeSession)
+        }
+        const hydrated = await authClient.hydrateSession(activeSession)
         const savedOAuthConsent = fromUrl
           ? await authClient.persistPendingOAuthConsent(hydrated)
           : false
         if (!alive) return
-        if (!secureSession) authClient.saveSession(hydrated)
         setSession(hydrated)
         if (fromUrl) {
           setShowAccount(true)
@@ -811,8 +814,8 @@ function CashlogApp() {
   }, [expenses, localMedia, repository, storage])
 
   const completeAuth = async (nextSession: CashlogSession, message: string) => {
-    const hydrated = await authClient.hydrateSession(nextSession)
-    authClient.saveSession(hydrated)
+    const secured = await authClient.persistSession(nextSession)
+    const hydrated = await authClient.hydrateSession(secured)
     setSession(hydrated)
     setAuthPassword('')
     setAuthMessage(message)

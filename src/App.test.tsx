@@ -74,12 +74,12 @@ describe('Cashlog photo MVP', () => {
     expect(await screen.findByText(/나비와 함께 쓰는 가계부/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '나비' })).toHaveAttribute('aria-pressed', 'true')
 
-    const petStages = screen.getAllByRole('button', { name: /나비 캐릭터\. 누르면 다정하게 인사해요/ })
+    const petStages = await screen.findAllByRole('button', { name: /나비 캐릭터\. 누르면 다정하게 인사해요/ })
     await user.click(petStages[petStages.length - 1])
-    expect(screen.getByText('나비가 눈을 가늘게 뜨고 기대요')).toBeInTheDocument()
+    expect(await screen.findByText('나비가 눈을 가늘게 뜨고 기대요')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /초코 캐릭터.*강아지.*말티즈/ }))
-    expect(screen.getAllByRole('button', { name: /초코 캐릭터\. 누르면 다정하게 인사해요/ })).toHaveLength(1)
+    expect(await screen.findAllByRole('button', { name: /초코 캐릭터\. 누르면 다정하게 인사해요/ })).toHaveLength(1)
   })
 
   it('applies and remembers Nabi wardrobe and color choices', async () => {
@@ -257,11 +257,20 @@ describe('Cashlog photo MVP', () => {
     vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'anon-key')
     localStorage.setItem('cashlog.supabase.session', JSON.stringify({
       accessToken: 'access-token',
+      refreshToken: 'refresh-token',
       expiresAt: Date.now() + 60_000,
       user: { id: 'user-1', email: 'me@example.com' },
     }))
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
+      if (url === '/api/auth/session') {
+        return new Response(JSON.stringify({
+          success: true,
+          accessToken: 'rotated-access-token',
+          expiresIn: 3600,
+          user: { id: 'user-1', email: 'me@example.com' },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
       if (url.includes('/rest/v1/cashlog_user_consents')) {
         return new Response(JSON.stringify([{
           consent_version: '2026-07-26',
@@ -384,6 +393,14 @@ describe('Cashlog photo MVP', () => {
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           )
+        }
+        if (url === '/api/auth/session') {
+          return new Response(JSON.stringify({
+            success: true,
+            accessToken: 'rotated-access-token',
+            expiresIn: 3600,
+            user: { id: 'user-1', email: 'me@example.com' },
+          }), { status: 200, headers: { 'Content-Type': 'application/json' } })
         }
         if (url.includes('/rest/v1/cashlog_entries')) {
           return new Response(init?.method === 'POST' ? '' : '[]', { status: 200 })

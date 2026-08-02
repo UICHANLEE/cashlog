@@ -74,6 +74,13 @@ export const resetPassword = (accessToken: string, password: string, passwordCon
 
 export const refreshSession = () => request<{ success: true; accessToken: string; expiresIn?: number }>('/api/auth/refresh', { method: 'POST' })
 
+export const exchangeSession = (refreshToken: string, remember = true) =>
+  request<SessionResponse>('/api/auth/session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken, remember }),
+  })
+
 export const getMe = async () => {
   try {
     return await request<SessionResponse>('/api/auth/me')

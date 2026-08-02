@@ -4,6 +4,7 @@ import { createCashlogAuthClient } from './auth'
 describe('Cashlog signup consent', () => {
   afterEach(() => {
     localStorage.clear()
+    sessionStorage.clear()
     window.history.replaceState({}, '', '/')
     vi.unstubAllEnvs()
     vi.unstubAllGlobals()
@@ -98,7 +99,7 @@ describe('Cashlog signup consent', () => {
   it('stores pending OAuth consent in the authenticated user row', async () => {
     vi.stubEnv('VITE_SUPABASE_URL', 'https://cashlog.supabase.co')
     vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'anon-key')
-    localStorage.setItem('cashlog.oauth.pending-consent', JSON.stringify({
+    sessionStorage.setItem('cashlog.oauth.pending-consent', JSON.stringify({
       age14: true,
       privacy: true,
       photoAndTime: true,
@@ -126,7 +127,58 @@ describe('Cashlog signup consent', () => {
       privacy_consent: true,
       location_consent: false,
     })
+    expect(sessionStorage.getItem('cashlog.oauth.pending-consent')).toBeNull()
     expect(localStorage.getItem('cashlog.oauth.pending-consent')).toBeNull()
+  })
+
+  it('exchanges a callback refresh token for HttpOnly cookies without persisting tokens', async () => {
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://cashlog.supabase.co')
+    vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'anon-key')
+    localStorage.setItem('cashlog.supabase.session', JSON.stringify({
+      accessToken: 'legacy-access',
+      refreshToken: 'legacy-refresh',
+      expiresAt: Date.now() + 60_000,
+    }))
+    const fetchMock = vi.fn(async (...args: [RequestInfo | URL, RequestInit?]) => {
+      void args
+      return new Response(JSON.stringify({
+        success: true,
+        accessToken: 'rotated-access',
+        expiresIn: 3600,
+        user: {
+          id: 'user-1',
+          email: 'me@example.com',
+          nickname: 'Cashlogger',
+          profileImageUrl: null,
+          status: 'ACTIVE',
+          emailVerifiedAt: null,
+          lastLoginAt: null,
+          createdAt: '2026-07-26T00:00:00.000Z',
+          updatedAt: '2026-07-26T00:00:00.000Z',
+        },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const client = createCashlogAuthClient()
+
+    const legacy = client.loadStoredSession()
+    expect(legacy?.refreshToken).toBe('legacy-refresh')
+    expect(localStorage.getItem('cashlog.supabase.session')).toBeNull()
+
+    const secured = await client.persistSession(legacy!)
+
+    expect(secured).toMatchObject({
+      accessToken: 'rotated-access',
+      user: { id: 'user-1', email: 'me@example.com' },
+    })
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(String(url)).toBe('/api/auth/session')
+    expect(init?.credentials).toBe('include')
+    expect(JSON.parse(String(init?.body))).toEqual({
+      refreshToken: 'legacy-refresh',
+      remember: true,
+    })
+    expect(localStorage.getItem('cashlog.supabase.session')).toBeNull()
   })
 
   it('loads and withdraws the signed-in account location consent', async () => {

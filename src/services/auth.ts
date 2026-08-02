@@ -1,4 +1,5 @@
 import { getSupabaseConfig, type SupabaseConfig } from './supabaseConfig'
+import { exchangeSession } from '../account/accountApi'
 
 const SESSION_STORAGE_KEY = 'cashlog.supabase.session'
 const OAUTH_CONSENT_STORAGE_KEY = 'cashlog.oauth.pending-consent'
@@ -111,23 +112,32 @@ export const createCashlogAuthClient = () => {
     if (!config) return null
     try {
       const raw = localStorage.getItem(SESSION_STORAGE_KEY)
+      localStorage.removeItem(SESSION_STORAGE_KEY)
       if (!raw) return null
       const parsed = JSON.parse(raw) as CashlogSession
       if (!parsed.accessToken) return null
       if (parsed.expiresAt && parsed.expiresAt < Date.now()) return null
       return parsed
     } catch {
+      localStorage.removeItem(SESSION_STORAGE_KEY)
       return null
     }
   }
 
-  const saveSession = (session: CashlogSession | null) => {
-    if (!config) return
-    if (!session) {
-      localStorage.removeItem(SESSION_STORAGE_KEY)
-      return
+  const persistSession = async (session: CashlogSession): Promise<CashlogSession> => {
+    localStorage.removeItem(SESSION_STORAGE_KEY)
+    if (!session.refreshToken) {
+      throw new Error('보안을 위해 로그인 상태를 갱신해야 해요. 다시 로그인해 주세요.')
     }
-    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session))
+    const secured = await exchangeSession(session.refreshToken, true)
+    if (!secured.accessToken) {
+      throw new Error('안전한 로그인 세션을 만들지 못했어요. 다시 로그인해 주세요.')
+    }
+    return {
+      accessToken: secured.accessToken,
+      expiresAt: secured.expiresIn ? Date.now() + secured.expiresIn * 1000 : undefined,
+      user: { id: secured.user.id, email: secured.user.email },
+    }
   }
 
   const consumeSessionFromUrl = async (): Promise<CashlogSession | null> => {
@@ -217,19 +227,22 @@ export const createCashlogAuthClient = () => {
       consentVersion: CASHLOG_CONSENT_VERSION,
       consentedAt: new Date().toISOString(),
     }
-    localStorage.setItem(OAUTH_CONSENT_STORAGE_KEY, JSON.stringify(pendingConsent))
+    localStorage.removeItem(OAUTH_CONSENT_STORAGE_KEY)
+    sessionStorage.setItem(OAUTH_CONSENT_STORAGE_KEY, JSON.stringify(pendingConsent))
     window.location.assign(getOAuthAuthorizeUrl(provider))
   }
 
   const persistPendingOAuthConsent = async (session: CashlogSession) => {
     if (!config || typeof window === 'undefined') return false
-    const raw = localStorage.getItem(OAUTH_CONSENT_STORAGE_KEY)
+    const raw = sessionStorage.getItem(OAUTH_CONSENT_STORAGE_KEY)
+      ?? localStorage.getItem(OAUTH_CONSENT_STORAGE_KEY)
     if (!raw) return false
 
     let consent: PendingOAuthConsent
     try {
       consent = JSON.parse(raw) as PendingOAuthConsent
     } catch {
+      sessionStorage.removeItem(OAUTH_CONSENT_STORAGE_KEY)
       localStorage.removeItem(OAUTH_CONSENT_STORAGE_KEY)
       return false
     }
@@ -257,6 +270,7 @@ export const createCashlogAuthClient = () => {
     if (!response.ok) {
       throw new Error(await readAuthError(response, '간편 로그인 동의 내역을 저장하지 못했어요.'))
     }
+    sessionStorage.removeItem(OAUTH_CONSENT_STORAGE_KEY)
     localStorage.removeItem(OAUTH_CONSENT_STORAGE_KEY)
     return true
   }
@@ -375,13 +389,17 @@ export const createCashlogAuthClient = () => {
     return user ? { ...session, user } : session
   }
 
-  const signOut = () => saveSession(null)
+  const signOut = () => {
+    localStorage.removeItem(SESSION_STORAGE_KEY)
+    sessionStorage.removeItem(OAUTH_CONSENT_STORAGE_KEY)
+    localStorage.removeItem(OAUTH_CONSENT_STORAGE_KEY)
+  }
 
   return {
     isConfigured: Boolean(config),
     config,
     loadStoredSession,
-    saveSession,
+    persistSession,
     consumeSessionFromUrl,
     signInWithEmail,
     signInWithPassword,
