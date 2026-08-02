@@ -40,6 +40,7 @@ import {
 } from '../domain/pet'
 import { getZodiacCharacter } from '../domain/zodiac'
 import { signalSoftImpact } from '../motion/haptics'
+import { trackEvent } from '../services/analytics'
 import type { PetAction } from './InteractivePet3D'
 import { PetPortrait } from './PetPortrait'
 import './PetCorner.css'
@@ -113,10 +114,11 @@ export function PetCorner({
 
   const play = useCallback((action: PetAction = 'pet') => {
     signalSoftImpact()
+    trackEvent('pet_interacted', { pet_kind: petState.selectedKind, action })
     setPetAction(action)
     setCheer(true)
     setCheerRequest((request) => request + 1)
-  }, [])
+  }, [petState.selectedKind])
 
   useEffect(() => {
     if (cheerRequest === 0) return undefined

@@ -106,6 +106,11 @@ import { assertValidImageFile } from './media/imageSignature'
 import { getMe as getSecureAccount, logout as secureLogout } from './account/accountApi'
 import { createCategoryFeedbackPayload } from './domain/productImage'
 import { createLocalMediaStore } from './services/localMediaStore'
+import {
+  isAnalyticsEnabled,
+  setAnalyticsEnabled,
+  trackEvent,
+} from './services/analytics'
 import { signalSoftImpact } from './motion/haptics'
 
 const PetCorner = lazy(() =>
@@ -277,6 +282,7 @@ function CashlogApp() {
   })
   const [locationCollectionConsent, setLocationCollectionConsent] = useState(false)
   const [isSavingLocationConsent, setIsSavingLocationConsent] = useState(false)
+  const [analyticsEnabled, setAnalyticsEnabledState] = useState(isAnalyticsEnabled)
   const [, setSyncStatus] = useState('Supabase 미연결 · 로컬 저장 중')
   const authClient = useMemo(() => createCashlogAuthClient(), [])
   const localMedia = useMemo(() => createLocalMediaStore(), [])
@@ -297,6 +303,10 @@ function CashlogApp() {
     const id = window.setInterval(() => setRelativeMinuteTick((x) => x + 1), 60_000)
     return () => window.clearInterval(id)
   }, [])
+
+  useEffect(() => {
+    trackEvent('view_opened', { view: activeView })
+  }, [activeView])
 
   const stopCamera = useCallback(() => {
     setCameraStream((current) => {
@@ -399,7 +409,11 @@ function CashlogApp() {
     )
   }, [locationCollectionConsent])
 
-  const applyPhotoFile = useCallback(async (file: File, sourceDate?: Date) => {
+  const applyPhotoFile = useCallback(async (
+    file: File,
+    sourceDate?: Date,
+    source: 'camera' | 'gallery' = 'gallery',
+  ) => {
     setCameraError(null)
     setPhotoAssistMessage('')
     setTrainingImageConsent(false)
@@ -412,6 +426,7 @@ function CashlogApp() {
       return
     }
     photoFileRef.current = file
+    trackEvent('media_selected', { source, media_type: 'image' })
     const recordedAt =
       sourceDate ??
       (file.lastModified > 0 ? new Date(file.lastModified) : new Date())
@@ -422,6 +437,10 @@ function CashlogApp() {
     })
     setAnalysis(null)
     setIsAnalyzingPhoto(true)
+    trackEvent('analysis_started', {
+      source,
+      analysis_mode: import.meta.env.VITE_PHOTO_ANALYSIS_MODE ?? 'mock',
+    })
     if (locationCollectionConsent) requestCurrentLocation(true)
 
     try {
@@ -435,8 +454,16 @@ function CashlogApp() {
         moodScore: null,
         kind: 'expense',
       })
+      trackEvent('analysis_succeeded', {
+        source,
+        analysis_mode: import.meta.env.VITE_PHOTO_ANALYSIS_MODE ?? 'mock',
+      })
     } catch (e) {
       void e
+      trackEvent('analysis_failed', {
+        source,
+        analysis_mode: import.meta.env.VITE_PHOTO_ANALYSIS_MODE ?? 'mock',
+      })
       setPhotoAssistMessage('사진은 준비됐어요. 금액과 카테고리를 직접 확인해 주세요.')
       setForm(emptyForm())
     } finally {
@@ -594,6 +621,7 @@ function CashlogApp() {
         if (!alive) return
         setSession(hydrated)
         if (fromUrl) {
+          trackEvent('auth_succeeded', { mode: 'callback' })
           setShowAccount(true)
           setAuthMessage(
             savedOAuthConsent
@@ -621,6 +649,7 @@ function CashlogApp() {
       if (kind === 'dog') return { ...prev, dogOutfit: outfit }
       return { ...prev, pigOutfit: outfit }
     })
+    trackEvent('pet_customized', { pet_kind: kind, action: 'outfit' })
   }, [])
 
   const handlePaletteChange = useCallback((kind: PetKind, palette: PetPaletteId) => {
@@ -629,10 +658,12 @@ function CashlogApp() {
       if (kind === 'dog') return { ...prev, dogPalette: palette }
       return { ...prev, pigPalette: palette }
     })
+    trackEvent('pet_customized', { pet_kind: kind, action: 'palette' })
   }, [])
 
   const handlePetKindChange = useCallback((kind: PetKind) => {
     setPetState((prev) => ({ ...prev, selectedKind: kind }))
+    trackEvent('pet_customized', { pet_kind: kind, action: 'selected' })
   }, [])
 
   const handleBreedChange = useCallback(
@@ -646,6 +677,7 @@ function CashlogApp() {
         }
         return { ...prev, pigBreed: breed as PigBreedId, selectedKind: 'pig' }
       })
+      trackEvent('pet_customized', { pet_kind: kind, action: 'breed' })
     },
     [],
   )
@@ -833,6 +865,7 @@ function CashlogApp() {
       return
     }
     setAuthMessage(`${provider === 'google' ? 'Google' : '카카오'} 로그인으로 이동할게요.`)
+    trackEvent('auth_started', { mode: 'oauth', provider })
     authClient.signInWithOAuth(provider, {
       age14: true,
       privacy: true,
@@ -863,9 +896,11 @@ function CashlogApp() {
           ? '로그인 메일을 보내는 중...'
           : '로그인 중...',
     )
+    trackEvent('auth_started', { mode: authMode })
     try {
       if (authMode === 'magic') {
         await authClient.signInWithEmail(email)
+        trackEvent('auth_succeeded', { mode: 'magic', result: 'link_sent' })
         setAuthMessage('메일함에서 로그인 링크를 눌러 주세요.')
         return
       }
@@ -882,14 +917,21 @@ function CashlogApp() {
         })
         if (created) {
           await completeAuth(created, '가입 완료! 계정 동기화를 준비했어요.')
+          trackEvent('auth_succeeded', { mode: 'sign_up', result: 'session_created' })
         } else {
+          trackEvent('auth_succeeded', { mode: 'sign_up', result: 'verification_sent' })
           setAuthMessage('가입 확인 메일을 보냈어요. 메일에서 인증을 완료해 주세요.')
         }
         return
       }
       const nextSession = await authClient.signInWithPassword(email, password)
       await completeAuth(nextSession, '로그인했어요. 기록을 계정과 맞출게요.')
+      trackEvent('auth_succeeded', { mode: 'password' })
     } catch (e) {
+      trackEvent('auth_failed', {
+        mode: authMode,
+        error_name: e instanceof Error ? e.name : 'Error',
+      })
       setAuthMessage(e instanceof Error ? e.message : '로그인 요청에 실패했어요.')
     }
   }
@@ -1148,6 +1190,7 @@ function CashlogApp() {
         audio: wantAudio,
       })
       setCameraStream(stream)
+      trackEvent('camera_opened', { media_type: captureKind, status: 'ready' })
     } catch {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -1155,6 +1198,7 @@ function CashlogApp() {
           audio: wantAudio,
         })
         setCameraStream(stream)
+        trackEvent('camera_opened', { media_type: captureKind, status: 'fallback_ready' })
       } catch (err) {
         const e = err as DOMException
         if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
@@ -1166,6 +1210,11 @@ function CashlogApp() {
         } else {
           setCameraError('카메라를 켤 수 없어요. HTTPS 또는 localhost에서 다시 시도해 주세요.')
         }
+        trackEvent('camera_opened', {
+          media_type: captureKind,
+          status: 'failed',
+          error_name: e.name || 'Error',
+        })
       }
     }
   }
@@ -1181,7 +1230,7 @@ function CashlogApp() {
     }
     const file = new File([blob], `cashlog-capture-${Date.now()}.jpg`, { type: 'image/jpeg' })
     stopCamera()
-    await applyPhotoFile(file)
+    await applyPhotoFile(file, undefined, 'camera')
   }
 
   const pickVideoMimeType = (): string | undefined => {
@@ -1304,6 +1353,7 @@ function CashlogApp() {
     stopCamera()
 
     if (isVideo) {
+      trackEvent('media_selected', { source: 'gallery', media_type: 'video' })
       setCameraError(null)
       setVideoPreview((prev) => {
         if (prev.startsWith('blob:')) URL.revokeObjectURL(prev)
@@ -1311,14 +1361,14 @@ function CashlogApp() {
       })
       const poster = await posterFromVideoFile(file)
       if (poster) {
-        void applyPhotoFile(poster, sourceDate)
+        void applyPhotoFile(poster, sourceDate, 'gallery')
       } else {
         setForm(emptyForm())
       }
       return
     }
 
-    void applyPhotoFile(file)
+    void applyPhotoFile(file, undefined, 'gallery')
   }
 
   const handleSave = async (event: FormEvent<HTMLFormElement>) => {
@@ -1497,6 +1547,14 @@ function CashlogApp() {
     }
 
     setExpenses((current) => [expense, ...current])
+    trackEvent('record_saved', {
+      entry_kind: expense.kind,
+      has_media: hasMedia,
+      has_location: Boolean(locationDraft),
+      analysis_mode: analysis ? 'analyzed' : 'manual',
+      result: expense.moodScore === null ? 'mood_skipped' : 'mood_added',
+      authenticated: Boolean(session),
+    })
     stopCamera()
     setPhotoPreview('')
     photoFileRef.current = null
@@ -1576,7 +1634,10 @@ function CashlogApp() {
           type="button"
           className={`icon-button account-trigger${showAccount ? ' is-open' : ''}`}
           aria-label={showAccount ? '계정 메뉴 닫기' : '계정 메뉴 열기'}
-          onClick={() => setShowAccount((open) => !open)}
+          onClick={() => setShowAccount((open) => {
+            if (!open) trackEvent('account_panel_opened', { authenticated: Boolean(session) })
+            return !open
+          })}
         >
           {showAccount ? (
             <X size={22} />
@@ -1592,7 +1653,10 @@ function CashlogApp() {
           type="button"
           className="daily-story-button"
           disabled={dayStorySlides.length === 0}
-          onClick={() => setStoryMode('day')}
+          onClick={() => {
+            trackEvent('story_opened', { story_type: 'day' })
+            setStoryMode('day')
+          }}
         >
           <Sparkles size={16} aria-hidden /> 하루 스토리
         </button>
@@ -1741,6 +1805,21 @@ function CashlogApp() {
                 <button type="submit">{authMode === 'signUp' ? '가입하고 시작' : authMode === 'magic' ? '메일 링크 받기' : '로그인'}</button>
               </form>
             )}
+          <label className="account-location-setting account-analytics-setting">
+            <input
+              type="checkbox"
+              checked={analyticsEnabled}
+              onChange={(event) => {
+                const enabled = event.target.checked
+                setAnalyticsEnabled(enabled)
+                setAnalyticsEnabledState(isAnalyticsEnabled())
+              }}
+            />
+            <span>
+              <strong>사용성 로그</strong>
+              <small>금액·메모·사진·위치 없이 기능 이용과 오류를 보내요. 로그인 중에는 계정과 연결될 수 있어요.</small>
+            </span>
+          </label>
           {authMessage && <small className="account-message">{authMessage}</small>}
         </motion.section>
         )}
@@ -1823,7 +1902,10 @@ function CashlogApp() {
                 type="button"
                 className="ghost-button story-launch-btn"
                 disabled={monthStorySlides.length === 0}
-                onClick={() => setStoryMode('month')}
+                onClick={() => {
+                  trackEvent('story_opened', { story_type: 'month' })
+                  setStoryMode('month')
+                }}
                 title="이번 달 기록 재생"
               >
                 한 달 스토리

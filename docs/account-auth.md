@@ -22,9 +22,11 @@ SUPABASE_PUBLISHABLE_KEY=sb_publishable_xxx
 SUPABASE_SERVICE_ROLE_KEY=<server-only-service-role-key>
 AUTH_RATE_LIMIT_SALT=<32자 이상의 무작위 문자열>
 CASHLOG_ALLOWED_ORIGINS=https://cashlog.example.com,https://cashlog.vercel.app
+CASHLOG_ADMIN_EMAILS=owner@example.com
+ANALYTICS_HASH_SALT=<32자 이상의 별도 무작위 문자열>
 ```
 
-`SUPABASE_SERVICE_ROLE_KEY`와 `AUTH_RATE_LIMIT_SALT`에는 `VITE_`를 붙이지 않으며 Git에 커밋하지 않습니다.
+`SUPABASE_SERVICE_ROLE_KEY`, `AUTH_RATE_LIMIT_SALT`, `ANALYTICS_HASH_SALT`, `CASHLOG_ADMIN_EMAILS`에는 `VITE_`를 붙이지 않으며 Git에 커밋하지 않습니다. 관리자 로그 화면과 이벤트 수집 설정은 [`user-analytics.md`](user-analytics.md)에 정리되어 있습니다.
 
 ## Supabase 적용
 

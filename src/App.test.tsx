@@ -464,14 +464,38 @@ describe('Cashlog photo MVP', () => {
     vi.stubEnv('VITE_IMAGE_ANALYSIS_PIPELINE', 'product')
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () =>
-        new Response(
-          JSON.stringify({
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input)
+        const body = path.includes('/api/uichan/events')
+          ? {
+              checkedAt: '2026-08-03T00:00:00.000Z',
+              summary: {
+                events24h: 12,
+                activeSessions24h: 3,
+                signedInUsers7d: 2,
+                clientErrors24h: 0,
+                topEvents7d: [{ name: 'page_view', count: 6 }],
+              },
+              total: 1,
+              events: [{
+                id: 'event-1',
+                userId: null,
+                sessionId: 'session123456',
+                name: 'page_view',
+                path: '/',
+                properties: { device: 'mobile' },
+                occurredAt: '2026-08-03T00:00:00.000Z',
+                receivedAt: '2026-08-03T00:00:01.000Z',
+              }],
+            }
+          : {
             checkedAt: '2026-07-10T00:00:00.000Z',
             cashlog: {
               supabaseConfigured: true,
               productAnalyzerConfigured: true,
               productAnalyzerOrigin: 'https://catai.example.com',
+              productAnalyzerSecured: true,
+              productAnalyzerAuthMode: 'api_key',
               visionConfigured: true,
               vercelEnv: 'preview',
             },
@@ -480,16 +504,37 @@ describe('Cashlog photo MVP', () => {
               httpStatus: 200,
               health: { status: 'ok' },
             },
-          }),
+          }
+        return new Response(
+          JSON.stringify(body),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
-        ),
-      ),
+        )
+      }),
     )
     window.history.pushState({}, '', '/uichan')
 
     render(<App />)
 
-    expect(await screen.findByRole('heading', { name: '분석 연결 정상' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '서비스 연결 정상' })).toBeInTheDocument()
     expect(screen.getByText('https://catai.example.com')).toBeInTheDocument()
+    expect(screen.getByText('사용자 활동 로그')).toBeInTheDocument()
+    expect(screen.getAllByText('페이지 방문').length).toBeGreaterThan(0)
+  })
+
+  it('requires a login before showing Uichan activity logs', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      JSON.stringify({ success: false, code: 'UNAUTHORIZED', message: '로그인이 필요해요.' }),
+      { status: 401, headers: { 'Content-Type': 'application/json' } },
+    )))
+    window.history.pushState({}, '', '/uichan')
+
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: '관리자 로그인이 필요해요' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '관리자 로그인' })).toHaveAttribute(
+      'href',
+      '/login.html?returnTo=%2Fuichan',
+    )
+    expect(screen.queryByText('사용자 활동 로그')).not.toBeInTheDocument()
   })
 })

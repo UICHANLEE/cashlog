@@ -1,4 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { requireAdminUser } from '../../server/auth/admin.js'
+import { requireMethod, sendError } from '../../server/auth/http.js'
 import { guardApiOrigin } from '../../server/httpSecurity.js'
 import { getProductAnalyzerConfig, type ProductAnalyzerConfig } from '../../server/productAnalyzerGateway.js'
 
@@ -95,30 +97,31 @@ const checkAnalyzer = async (config: ProductAnalyzerConfig): Promise<AnalyzerSta
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!guardApiOrigin(req, res)) return
-  if (req.method !== 'GET') {
-    res.status(405).json({ error: 'Method Not Allowed' })
-    return
+  try {
+    requireMethod(req, 'GET')
+    await requireAdminUser(req)
+    const analyzerConfig = getProductAnalyzerConfig()
+    const analyzer = await checkAnalyzer(analyzerConfig)
+
+    res.status(200).json({
+      checkedAt: new Date().toISOString(),
+      cashlog: {
+        nodeEnv: process.env.NODE_ENV ?? 'unknown',
+        vercelEnv: process.env.VERCEL_ENV ?? null,
+        supabaseConfigured: Boolean(
+          process.env.VITE_SUPABASE_URL &&
+            (process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY),
+        ),
+        productAnalyzerConfigured: Boolean(analyzerConfig.endpoint),
+        productAnalyzerOrigin: safeOrigin(analyzerConfig.endpoint),
+        productAnalyzerSecured: analyzerConfig.authMode !== 'none' && !analyzerConfig.configurationError,
+        productAnalyzerAuthMode: analyzerConfig.authMode,
+        openAiConfigured: Boolean(process.env.OPENAI_API_KEY),
+        visionConfigured: Boolean(process.env.VISION_API_KEY || process.env.HF_TOKEN || process.env.OPENAI_API_KEY),
+      },
+      analyzer,
+    })
+  } catch (error) {
+    sendError(res, error)
   }
-
-  const analyzerConfig = getProductAnalyzerConfig()
-  const analyzer = await checkAnalyzer(analyzerConfig)
-
-  res.status(200).json({
-    checkedAt: new Date().toISOString(),
-    cashlog: {
-      nodeEnv: process.env.NODE_ENV ?? 'unknown',
-      vercelEnv: process.env.VERCEL_ENV ?? null,
-      supabaseConfigured: Boolean(
-        process.env.VITE_SUPABASE_URL &&
-          (process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY),
-      ),
-      productAnalyzerConfigured: Boolean(analyzerConfig.endpoint),
-      productAnalyzerOrigin: safeOrigin(analyzerConfig.endpoint),
-      productAnalyzerSecured: analyzerConfig.authMode !== 'none' && !analyzerConfig.configurationError,
-      productAnalyzerAuthMode: analyzerConfig.authMode,
-      openAiConfigured: Boolean(process.env.OPENAI_API_KEY),
-      visionConfigured: Boolean(process.env.VISION_API_KEY || process.env.HF_TOKEN || process.env.OPENAI_API_KEY),
-    },
-    analyzer,
-  })
 }

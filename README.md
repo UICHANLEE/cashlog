@@ -132,6 +132,19 @@ AUTH_RATE_LIMIT_SALT=long-random-secret
 
 서버 전용 `SUPABASE_SERVICE_ROLE_KEY`와 `AUTH_RATE_LIMIT_SALT`에는 `VITE_`를 붙이지 말고 브라우저 코드나 Git에 넣지 않습니다. 계정 API, 이미지 영속화, 실행·테스트 방법은 [`docs/account-auth.md`](docs/account-auth.md)에 정리되어 있습니다.
 
+### 사용자 활동 로그
+
+`/uichan`은 로그인한 관리자만 볼 수 있는 운영 화면입니다. 페이지 방문, 인증, 사진 선택·분석, 기록 저장, 스토리, 캐릭터 상호작용과 클라이언트 오류를 확인할 수 있습니다. 금액, 메모, 사진·영상, 위치, 이메일, 토큰은 제품 로그에 저장하지 않습니다.
+
+Supabase에서 [`supabase/migrations/202608030001_user_event_logs.sql`](supabase/migrations/202608030001_user_event_logs.sql)을 실행하고 Vercel에 아래 서버 전용 값을 추가한 뒤 재배포합니다.
+
+```env
+CASHLOG_ADMIN_EMAILS=owner@example.com
+ANALYTICS_HASH_SALT=<32자 이상의 별도 무작위 문자열>
+```
+
+전체 이벤트 목록, 보존기간, 관리자 접속 방법은 [`docs/user-analytics.md`](docs/user-analytics.md)에 있습니다.
+
 Supabase Dashboard의 **Authentication → URL Configuration**도 설정해야 이메일 인증 링크가 Cashlog로 돌아옵니다.
 
 - Site URL: 실제 Cashlog 프로덕션 주소(예: `https://cashlog.example.com`)

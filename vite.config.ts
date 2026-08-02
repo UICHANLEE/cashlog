@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
-import { getProductAnalyzerConfig } from './server/productAnalyzerGateway'
+import { getProductAnalyzerConfig } from './server/productAnalyzerGateway.ts'
 
 const apiProxyTarget = process.env.CASHLOG_API_PROXY_TARGET?.trim() || 'http://127.0.0.1:3000'
 const productAnalyzerProxyTarget =

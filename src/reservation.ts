@@ -1,5 +1,8 @@
 import './reservation.css'
 import { createReservation } from './services/reservationRepository'
+import { initializeAnalytics, trackEvent } from './services/analytics'
+
+initializeAnalytics()
 
 const form = document.querySelector<HTMLFormElement>('#reserve')
 const emailInput = document.querySelector<HTMLInputElement>('#reservation-email')
@@ -22,11 +25,13 @@ form?.addEventListener('submit', async (event) => {
   message.textContent = '예약을 챙겨두는 중...'
   try {
     const result = await createReservation(email, developerMessageInput?.value ?? '')
+    trackEvent('reservation_submitted', { result })
     form.classList.add('is-complete')
     message.textContent = result === 'duplicate'
       ? '이미 예약되어 있어요. 출시 소식은 나비가 잘 챙겨둘게요.'
       : '예약 완료! 나비가 출시 소식을 꼭 챙겨둘게요.'
   } catch (error) {
+    trackEvent('reservation_submitted', { result: 'failed' })
     message.classList.add('is-error')
     message.textContent = error instanceof Error ? error.message : '예약을 저장하지 못했어요.'
     submitButton?.removeAttribute('disabled')

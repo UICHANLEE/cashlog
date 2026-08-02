@@ -35,6 +35,7 @@ import {
   validateSignup,
   type FieldErrors,
 } from './validation'
+import { trackEvent } from '../services/analytics'
 
 type Page = 'signup' | 'login' | 'profile' | 'forgot' | 'reset'
 
@@ -44,6 +45,11 @@ const pageFromPath = (): Page => {
   if (location.pathname.includes('signup')) return 'signup'
   if (location.pathname.includes('profile')) return 'profile'
   return 'login'
+}
+
+const safeReturnTo = () => {
+  const value = new URLSearchParams(location.search).get('returnTo')
+  return value && value.startsWith('/') && !value.startsWith('//') ? value : '/'
 }
 
 const FieldError = ({ id, message }: { id: string; message?: string }) =>
@@ -57,7 +63,7 @@ const useRedirectAuthenticated = () => {
   useEffect(() => {
     let active = true
     void getMe().then(() => {
-      if (active) location.replace('/')
+      if (active) location.replace(safeReturnTo())
     }).catch(() => undefined)
     return () => { active = false }
   }, [])
@@ -171,6 +177,7 @@ const SignupPage = () => {
       return
     }
     setLoading(true)
+    trackEvent('auth_started', { mode: 'signup_page' })
     setErrors({})
     setMessage('')
     const form = new FormData()
@@ -184,8 +191,13 @@ const SignupPage = () => {
     if (image) form.append('profileImage', image)
     try {
       const result = await signup(form)
+      trackEvent('auth_succeeded', {
+        mode: 'signup_page',
+        result: result.requiresEmailVerification ? 'verification_sent' : 'session_created',
+      })
       location.assign(result.requiresEmailVerification ? `/login.html?message=${encodeURIComponent(result.message || '')}` : '/')
     } catch (error) {
+      trackEvent('auth_failed', { mode: 'signup_page', error_name: error instanceof Error ? error.name : 'Error' })
       if (error instanceof AccountApiError && error.field) {
         setErrors({ [error.field]: error.message })
         focusFirstInvalid(formRef.current)
@@ -240,11 +252,14 @@ const LoginPage = () => {
       return
     }
     setLoading(true)
+    trackEvent('auth_started', { mode: 'login_page' })
     setErrors({})
     try {
       await login(email.trim().toLowerCase(), password, remember)
-      location.assign('/')
+      trackEvent('auth_succeeded', { mode: 'login_page' })
+      location.assign(safeReturnTo())
     } catch (error) {
+      trackEvent('auth_failed', { mode: 'login_page', error_name: error instanceof Error ? error.name : 'Error' })
       setErrors({ form: error instanceof Error ? error.message : '로그인에 실패했어요.' })
     } finally {
       setLoading(false)
@@ -283,8 +298,10 @@ const ForgotPasswordPage = () => {
     setMessage('')
     try {
       const result = await requestPasswordReset(email.trim().toLowerCase())
+      trackEvent('password_reset_requested', { result: 'sent' })
       setMessage(result.message)
     } catch (reason) {
+      trackEvent('password_reset_requested', { result: 'failed', error_name: reason instanceof Error ? reason.name : 'Error' })
       setError(reason instanceof Error ? reason.message : '재설정 메일을 보내지 못했어요.')
     } finally {
       setLoading(false)
@@ -328,10 +345,12 @@ const ResetPasswordPage = () => {
     setErrors({})
     try {
       const result = await resetPassword(accessToken, password, passwordConfirm)
+      trackEvent('password_changed', { result: 'recovery' })
       setMessage(result.message)
       setPassword('')
       setPasswordConfirm('')
     } catch (reason) {
+      trackEvent('auth_failed', { mode: 'password_recovery', error_name: reason instanceof Error ? reason.name : 'Error' })
       setErrors({ form: reason instanceof Error ? reason.message : '비밀번호를 변경하지 못했어요.' })
     } finally {
       setLoading(false)
@@ -410,6 +429,7 @@ const ProfilePage = () => {
     if (file) form.append('profileImage', file)
     try {
       const result = await updateProfile(form)
+      trackEvent('profile_updated', { has_media: Boolean(file), result: removeImage ? 'image_removed' : 'saved' })
       setUser(result.user)
       setFile(null)
       setPreview('')
@@ -434,6 +454,7 @@ const ProfilePage = () => {
     setPasswordErrors({})
     try {
       const result = await changePassword(password, passwordConfirm)
+      trackEvent('password_changed', { result: 'profile' })
       setMessage(result.message)
       window.setTimeout(() => location.assign('/login.html'), 900)
     } catch (reason) {
@@ -453,7 +474,11 @@ const ProfilePage = () => {
     if (accountAction || !confirm('가계부 기록과 계정을 모두 삭제할까요? 이 작업은 되돌릴 수 없어요.')) return
     setAccountAction('delete')
     setError('')
-    try { await deleteAccount(); location.assign('/signup.html') }
+    try {
+      await deleteAccount()
+      trackEvent('account_deleted', { result: 'completed' })
+      location.assign('/signup.html')
+    }
     catch (reason) { setError(reason instanceof Error ? reason.message : '회원탈퇴를 완료하지 못했어요.'); setAccountAction(null) }
   }
   if (loading) return <AccountShell eyebrow="MY CASHLOG" title="프로필을 불러오는 중"><div className="page-loader" role="status"><LoaderCircle className="spin" aria-hidden /><span className="sr-only">프로필 로딩 중</span></div></AccountShell>

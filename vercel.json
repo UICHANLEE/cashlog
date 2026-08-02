@@ -6,6 +6,12 @@
     "api/analyze-image.ts": {
       "regions": ["icn1"]
     },
+    "api/events.ts": {
+      "regions": ["icn1"]
+    },
+    "api/uichan/events.ts": {
+      "regions": ["icn1"]
+    },
     "api/uichan/status.ts": {
       "regions": ["icn1"]
     }

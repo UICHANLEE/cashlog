@@ -1,0 +1,65 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { normalizeAnalyticsBatch } from './analytics.js'
+
+describe('analytics event normalization', () => {
+  beforeEach(() => {
+    vi.stubEnv('ANALYTICS_HASH_SALT', 'cashlog-test-salt-that-is-longer-than-32-characters')
+  })
+
+  afterEach(() => vi.unstubAllEnvs())
+
+  it('keeps only approved product metadata and hashes the session identifier', () => {
+    const occurredAt = new Date().toISOString()
+    const [event] = normalizeAnalyticsBatch({
+      sessionId: '123e4567-e89b-12d3-a456-426614174000',
+      events: [{
+        name: 'record_saved',
+        path: '/?token=secret#private',
+        occurredAt,
+        properties: {
+          source: 'quick-entry',
+          has_media: true,
+          result: 'mood_added',
+          mood_score: 4,
+          amount: 12900,
+          memo: '절대 저장하면 안 되는 메모',
+          email: 'person@example.com',
+          latitude: 37.5,
+          photo_url: 'https://example.com/private.jpg',
+        },
+      }],
+    }, 'user-1')
+
+    expect(event).toMatchObject({
+      user_id: 'user-1',
+      event_name: 'record_saved',
+      path: '/',
+      properties: {
+        source: 'quick-entry',
+        has_media: true,
+        result: 'mood_added',
+      },
+      occurred_at: occurredAt,
+    })
+    expect(event.session_hash).toMatch(/^[a-f0-9]{64}$/)
+    expect(event.session_hash).not.toContain('123e4567')
+    expect(event.properties).not.toHaveProperty('amount')
+    expect(event.properties).not.toHaveProperty('memo')
+    expect(event.properties).not.toHaveProperty('email')
+    expect(event.properties).not.toHaveProperty('latitude')
+    expect(event.properties).not.toHaveProperty('photo_url')
+    expect(event.properties).not.toHaveProperty('mood_score')
+  })
+
+  it('rejects unknown event names and malformed sessions', () => {
+    expect(() => normalizeAnalyticsBatch({
+      sessionId: '123e4567-e89b-12d3-a456-426614174000',
+      events: [{ name: 'raw_input_captured' }],
+    }, null)).toThrow('지원하지 않는 사용 로그 이벤트예요.')
+
+    expect(() => normalizeAnalyticsBatch({
+      sessionId: 'short',
+      events: [{ name: 'page_view' }],
+    }, null)).toThrow('사용 로그 세션을 확인하지 못했어요.')
+  })
+})
