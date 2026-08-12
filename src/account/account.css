@@ -19,6 +19,19 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 .scribble { width: 124px; height: 8px; margin: 8px auto 0; border-top: 3px solid #f5bd37; border-radius: 50%; transform: rotate(-2deg); }
 .account-panel { padding: 30px clamp(20px, 6vw, 40px) 34px; background: rgba(255,255,255,.9); border: 2px solid #2d2925; border-radius: 7px 5px 8px 6px; box-shadow: 7px 8px 0 rgba(45,41,37,.12); }
 .account-form-page { display: grid; gap: 17px; }
+.consent-master { display: flex; align-items: center; gap: 10px; padding: 12px 13px; background: #fff7dc; border: 1.5px solid #8d7f6d; border-radius: 5px; cursor: pointer; }
+.consent-master input { width: 19px; height: 19px; margin: 0; flex: none; accent-color: #ee5e4f; }
+.consent-master span { display: grid; gap: 1px; font-size: 13px; }
+.consent-master small { color: #746a61; font-size: 10px; font-weight: 500; }
+.account-social-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.account-social { min-height: 47px; display: flex; align-items: center; justify-content: center; gap: 8px; border: 1.5px solid #a69b90; border-radius: 5px; background: #fff; color: #27231f; font-size: 12px; font-weight: 800; cursor: pointer; }
+.account-social > span { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; font-size: 11px; font-weight: 900; }
+.account-social.google > span { border: 1px solid #d6d1ca; background: #fff; color: #3079db; }
+.account-social.kakao { border-color: #f2d838; background: #fee500; }
+.account-social.kakao > span { background: #2c211f; color: #fee500; }
+.account-divider { display: flex; align-items: center; gap: 10px; color: #8b8176; font-size: 10px; text-align: center; }
+.account-divider::before, .account-divider::after { content: ''; height: 1px; flex: 1; background: #ded5c9; }
+.account-divider span { white-space: nowrap; }
 .avatar-picker { display: grid; justify-items: center; gap: 8px; margin-bottom: 3px; }
 .avatar-preview { position: relative; width: 96px; height: 96px; padding: 0; display: grid; place-items: center; overflow: visible; color: #6c6258; background: #dff5e9; border: 2px solid #2d2925; border-radius: 48% 52% 46% 54%; cursor: pointer; transform: rotate(-1deg); }
 .avatar-preview img { width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
@@ -26,6 +39,14 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 .avatar-actions { display: flex; gap: 8px; }
 .avatar-actions button { padding: 5px 10px; border: 0; background: transparent; color: #5b5148; font-size: 12px; font-weight: 700; text-decoration: underline; cursor: pointer; }
 .avatar-picker p { margin: -4px 0 0; color: #8b8176; font-size: 11px; }
+.optional-profile-image { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 13px 0; border-top: 1.5px dashed #c7bcaf; border-bottom: 1.5px dashed #c7bcaf; }
+.optional-profile-image > div:first-child { min-width: 0; }
+.optional-profile-image h2 { margin: 0; font-family: 'Gaegu', cursive; font-size: 19px; }
+.optional-profile-image h2 span { margin-left: 4px; color: #72685f; font-family: 'Noto Sans KR', sans-serif; font-size: 10px; font-weight: 700; }
+.optional-profile-image > div:first-child p { margin: 3px 0 0; color: #746a61; font-size: 10px; line-height: 1.5; }
+.optional-profile-image .avatar-picker { grid-template-columns: auto; margin: 0; }
+.optional-profile-image .avatar-preview { width: 66px; height: 66px; }
+.optional-profile-image .avatar-actions, .optional-profile-image .avatar-picker > p { display: none; }
 .form-field { display: grid; gap: 7px; }
 .form-field > span,
 .form-field > label { font-size: 13px; font-weight: 800; }
@@ -50,6 +71,10 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
   color: #665f55;
   font-size: 11px;
   line-height: 1.6;
+}
+@media (max-width: 430px) {
+  .account-social-buttons { grid-template-columns: 1fr; }
+  .optional-profile-image { grid-template-columns: minmax(0, 1fr) 66px; }
 }
 .primary-submit, .secondary-submit { min-height: 49px; display: flex; justify-content: center; align-items: center; gap: 7px; color: #27231f; background: #ee5e4f; border: 2px solid #2d2925; border-radius: 5px; box-shadow: 3px 4px 0 #2d2925; font-weight: 800; cursor: pointer; transition: transform .14s, box-shadow .14s; }
 .primary-submit:hover, .secondary-submit:hover { transform: translate(-1px,-1px); box-shadow: 4px 5px 0 #2d2925; }
@@ -86,6 +111,17 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 .danger-actions button { display: flex; align-items: center; gap: 5px; padding: 8px 5px; border: 0; background: transparent; color: #665d54; font-size: 12px; cursor: pointer; }
 .danger-actions button:last-child { color: #b43a32; }
 .page-loader { min-height: 240px; display: grid; place-items: center; color: #ee5e4f; }
+.profile-skeleton { display: grid; gap: 18px; min-height: 250px; overflow: hidden; }
+.profile-skeleton-head { display: flex; align-items: center; gap: 14px; padding-bottom: 22px; border-bottom: 2px dashed #c7bcaf; }
+.profile-skeleton-head > span { width: 72px; height: 72px; flex: none; border-radius: 48%; background: #e9e0d4; }
+.profile-skeleton-head > div { display: grid; flex: 1; gap: 9px; }
+.profile-skeleton-head i, .profile-skeleton-field { display: block; border-radius: 4px; background: #e9e0d4; }
+.profile-skeleton-head i:first-child { width: min(160px, 70%); height: 19px; }
+.profile-skeleton-head i:last-child { width: min(230px, 92%); height: 13px; }
+.profile-skeleton-field { width: 100%; height: 48px; }
+.profile-skeleton-head > span, .profile-skeleton-head i, .profile-skeleton-field { animation: account-skeleton-pulse 1.1s ease-in-out infinite alternate; }
+@keyframes account-skeleton-pulse { from { opacity: .55; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .profile-skeleton-head > span, .profile-skeleton-head i, .profile-skeleton-field { animation: none; } }
 .spin { animation: spin .85s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 520px) { .account-stage { width: min(100% - 18px, 560px); margin-top: 10px; } .account-panel { padding: 25px 18px 30px; } .account-intro { margin-bottom: 18px; } .account-topbar { padding: 0 12px; } .login-options { align-items: flex-start; flex-direction: column; gap: 8px; } }

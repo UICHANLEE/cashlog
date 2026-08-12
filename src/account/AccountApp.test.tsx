@@ -15,6 +15,7 @@ describe('AccountApp release paths', () => {
 
   afterEach(() => {
     history.replaceState(null, '', '/')
+    vi.unstubAllEnvs()
     vi.unstubAllGlobals()
   })
 
@@ -43,6 +44,28 @@ describe('AccountApp release paths', () => {
     expect(screen.getByLabelText('닉네임')).toHaveFocus()
     expect(screen.getByText('이용약관 동의가 필요해요.')).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: /이용약관/ })).toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('keeps social signup visible and makes only required consent one tap', async () => {
+    history.replaceState(null, '', '/signup.html')
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://cashlog.supabase.co')
+    vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'anon-key')
+    const user = userEvent.setup()
+    render(<AccountApp />)
+
+    expect(screen.getByRole('button', { name: 'Google로 계속하기' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '카카오로 계속하기' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '이용약관' })).toHaveAttribute('href', '/terms.html')
+
+    await user.click(screen.getByRole('checkbox', { name: /필수 항목 모두 동의/ }))
+    expect(screen.getByRole('checkbox', { name: /만 14세 이상/ })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: /이용약관/ })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: /개인정보 처리방침/ })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: /기기의 현재 위치/ })).not.toBeChecked()
+
+    expect(screen.getByLabelText('닉네임')).toHaveAttribute('name', 'nickname')
+    expect(screen.getByLabelText('이메일')).toHaveAttribute('autocomplete', 'email')
+    expect(screen.getByLabelText('프로필 이미지 파일')).toHaveAttribute('name', 'profileImage')
   })
 
   it('shows a safe failure state when a reset link has no token', () => {

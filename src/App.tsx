@@ -25,6 +25,7 @@ import {
   Pencil,
   Plus,
   RotateCcw,
+  ShieldCheck,
   Sparkles,
   Utensils,
   UserRound,
@@ -276,6 +277,7 @@ function CashlogApp() {
   const [showSocialConsents, setShowSocialConsents] = useState(false)
   const [signupConsents, setSignupConsents] = useState({
     age14: false,
+    terms: false,
     privacy: false,
     photoAndTime: false,
     location: false,
@@ -706,6 +708,7 @@ function CashlogApp() {
     [visibleMonth.year, visibleMonth.month],
   )
   const selectedPetName = getPetName(petState)
+  const isFirstSession = expenses.length === 0
   const selectedDaySpent = dayExpenseTotal(selectedExpenses)
   const selectedDayEarned = dayIncomeTotal(selectedExpenses)
   const selectedDayPhotos = selectedExpenses.filter((expense) => expense.imageUrl).slice(0, 3)
@@ -859,7 +862,7 @@ function CashlogApp() {
       setAuthMessage('로그인 서비스 연결이 아직 완료되지 않았어요.')
       return
     }
-    if (!signupConsents.age14 || !signupConsents.privacy || !signupConsents.photoAndTime) {
+    if (!signupConsents.age14 || !signupConsents.terms || !signupConsents.privacy || !signupConsents.photoAndTime) {
       setShowSocialConsents(true)
       setAuthMessage('간편 가입에 필요한 필수 동의를 확인해 주세요.')
       return
@@ -868,6 +871,7 @@ function CashlogApp() {
     trackEvent('auth_started', { mode: 'oauth', provider })
     authClient.signInWithOAuth(provider, {
       age14: true,
+      terms: true,
       privacy: true,
       photoAndTime: true,
       location: signupConsents.location,
@@ -905,12 +909,13 @@ function CashlogApp() {
         return
       }
       if (authMode === 'signUp') {
-        if (!signupConsents.age14 || !signupConsents.privacy || !signupConsents.photoAndTime) {
+        if (!signupConsents.age14 || !signupConsents.terms || !signupConsents.privacy || !signupConsents.photoAndTime) {
           setAuthMessage('필수 동의 항목을 모두 확인해 주세요.')
           return
         }
         const created = await authClient.signUpWithPassword(email, password, {
           age14: true,
+          terms: true,
           privacy: true,
           photoAndTime: true,
           location: signupConsents.location,
@@ -1626,6 +1631,19 @@ function CashlogApp() {
     isCameraLive ? 'is-camera-live' : '',
     isPhotoReview ? 'is-photo-review' : '',
   ].filter(Boolean).join(' ')
+  const allRequiredSignupConsents = signupConsents.age14
+    && signupConsents.terms
+    && signupConsents.privacy
+    && signupConsents.photoAndTime
+  const setAllRequiredSignupConsents = (checked: boolean) => {
+    setSignupConsents((current) => ({
+      ...current,
+      age14: checked,
+      terms: checked,
+      privacy: checked,
+      photoAndTime: checked,
+    }))
+  }
 
   return (
     <main className="app-shell timeline-app-shell">
@@ -1653,6 +1671,9 @@ function CashlogApp() {
           type="button"
           className="daily-story-button"
           disabled={dayStorySlides.length === 0}
+          aria-disabled={dayStorySlides.length === 0}
+          aria-describedby={dayStorySlides.length === 0 ? 'day-story-lock-hint' : undefined}
+          title={dayStorySlides.length === 0 ? '선택한 날짜에 기록을 하나 남기면 열려요' : '선택한 날짜의 스토리 보기'}
           onClick={() => {
             trackEvent('story_opened', { story_type: 'day' })
             setStoryMode('day')
@@ -1661,6 +1682,11 @@ function CashlogApp() {
           <Sparkles size={16} aria-hidden /> 하루 스토리
         </button>
       </header>
+      {dayStorySlides.length === 0 && (
+        <p id="day-story-lock-hint" className="story-lock-hint">
+          선택한 날짜에 기록을 하나 남기면 하루 스토리가 열려요.
+        </p>
+      )}
 
       <AnimatePresence initial={false}>
         {showAccount && (
@@ -1727,9 +1753,17 @@ function CashlogApp() {
                 {showSocialConsents && authMode !== 'signUp' && (
                   <fieldset className="signup-consents social-consents">
                     <legend>간편 가입 동의</legend>
+                    <label className="consent-select-all">
+                      <input type="checkbox" checked={allRequiredSignupConsents} onChange={(event) => setAllRequiredSignupConsents(event.target.checked)} />
+                      <span>필수 항목 모두 동의</span>
+                    </label>
                     <label>
                       <input type="checkbox" checked={signupConsents.age14} onChange={(event) => setSignupConsents((current) => ({ ...current, age14: event.target.checked }))} />
                       <span><strong>[필수]</strong> 만 14세 이상입니다.</span>
+                    </label>
+                    <label>
+                      <input type="checkbox" checked={signupConsents.terms} onChange={(event) => setSignupConsents((current) => ({ ...current, terms: event.target.checked }))} />
+                      <span><strong>[필수]</strong> <a href="/terms.html" target="_blank" rel="noopener noreferrer">이용약관</a>에 동의합니다.</span>
                     </label>
                     <label>
                       <input type="checkbox" checked={signupConsents.privacy} onChange={(event) => setSignupConsents((current) => ({ ...current, privacy: event.target.checked }))} />
@@ -1752,13 +1786,17 @@ function CashlogApp() {
                   <button type="button" className={authMode === 'signUp' ? 'active' : ''} onClick={() => setAuthMode('signUp')}>회원가입</button>
                   <button type="button" className={authMode === 'magic' ? 'active' : ''} onClick={() => setAuthMode('magic')}>메일링크</button>
                 </div>
-                <input type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="email@example.com" aria-label="로그인 이메일" autoComplete="email" />
+                <input name="email" type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="email@example.com" aria-label="로그인 이메일" autoComplete="email" />
                 {authMode !== 'magic' && (
-                  <input type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder="비밀번호 6자 이상" aria-label="로그인 비밀번호" autoComplete={authMode === 'signUp' ? 'new-password' : 'current-password'} />
+                  <input name="password" type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder="비밀번호 6자 이상" aria-label="로그인 비밀번호" autoComplete={authMode === 'signUp' ? 'new-password' : 'current-password'} />
                 )}
                 {authMode === 'signUp' && (
                   <fieldset className="signup-consents">
                     <legend>가입 및 개인정보 동의</legend>
+                    <label className="consent-select-all">
+                      <input type="checkbox" checked={allRequiredSignupConsents} onChange={(event) => setAllRequiredSignupConsents(event.target.checked)} />
+                      <span>필수 항목 모두 동의</span>
+                    </label>
                     <label>
                       <input
                         type="checkbox"
@@ -1766,6 +1804,14 @@ function CashlogApp() {
                         onChange={(event) => setSignupConsents((current) => ({ ...current, age14: event.target.checked }))}
                       />
                       <span><strong>[필수]</strong> 만 14세 이상입니다.</span>
+                    </label>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={signupConsents.terms}
+                        onChange={(event) => setSignupConsents((current) => ({ ...current, terms: event.target.checked }))}
+                      />
+                      <span><strong>[필수]</strong> <a href="/terms.html" target="_blank" rel="noopener noreferrer">이용약관</a>에 동의합니다.</span>
                     </label>
                     <label>
                       <input
@@ -1902,6 +1948,8 @@ function CashlogApp() {
                 type="button"
                 className="ghost-button story-launch-btn"
                 disabled={monthStorySlides.length === 0}
+                aria-disabled={monthStorySlides.length === 0}
+                aria-describedby={monthStorySlides.length === 0 ? 'month-story-lock-hint' : undefined}
                 onClick={() => {
                   trackEvent('story_opened', { story_type: 'month' })
                   setStoryMode('month')
@@ -1911,6 +1959,11 @@ function CashlogApp() {
                 한 달 스토리
               </button>
             </div>
+            {monthStorySlides.length === 0 && (
+              <p id="month-story-lock-hint" className="story-lock-hint story-lock-hint-calendar">
+                이번 달 기록을 하나 남기면 한 달 스토리가 열려요.
+              </p>
+            )}
             <div className="weekday-row">
               {['일', '월', '화', '수', '목', '금', '토'].map((day) => (
                 <span key={day}>{day}</span>
@@ -1950,36 +2003,49 @@ function CashlogApp() {
         </section>
       ) : (
         <section className="timeline-home">
-          <header className="today-heading">
-            <div>
-              <p className="eyebrow">TODAY</p>
-              <button type="button" className="date-switcher" onClick={() => navigateToView('calendar')}>
-                {selectedDateLabel} <ChevronDown size={20} aria-hidden />
-              </button>
-            </div>
-            <div className="today-cuts" aria-label={`오늘 사진 ${selectedDayPhotos.length}장`}>
-              <strong>오늘 {selectedDayPhotos.length}컷</strong>
-              <div className="today-cut-strip">
-                {selectedDayPhotos.map((expense) => (
-                  <img key={expense.id} src={expense.imageUrl} alt="오늘 기록" />
-                ))}
-                {selectedDayPhotos.length === 0 && (
-                  <button type="button" onClick={openPhotoCapture} aria-label="오늘 첫 사진 촬영">
-                    <Camera size={18} aria-hidden />
+          {isFirstSession ? (
+            <section className="first-session-intro" aria-labelledby="first-session-title">
+              <p className="eyebrow">가계부 쓰다 포기한 사람을 위한 가계부</p>
+              <h1 id="first-session-title">영수증 찍으면,<br />가계부가 써져요</h1>
+              <p className="first-session-copy">
+                금액과 카테고리는 먼저 정리하고, <strong>{selectedPetName}</strong>는 기록할수록 함께 자라요.
+              </p>
+              <p className="first-session-trust">
+                <ShieldCheck size={17} aria-hidden />
+                <span>사진은 기기에 먼저 저장되고 다른 사용자에게 공개하거나 판매하지 않아요. 위치는 선택입니다.</span>
+              </p>
+            </section>
+          ) : (
+            <>
+              <header className="today-heading">
+                <div>
+                  <p className="eyebrow">TODAY</p>
+                  <button type="button" className="date-switcher" onClick={() => navigateToView('calendar')}>
+                    {selectedDateLabel} <ChevronDown size={20} aria-hidden />
                   </button>
+                </div>
+                {selectedDayPhotos.length > 0 && (
+                  <div className="today-cuts" aria-label={`오늘 사진 ${selectedDayPhotos.length}장`}>
+                    <strong>오늘 {selectedDayPhotos.length}컷</strong>
+                    <div className="today-cut-strip">
+                      {selectedDayPhotos.map((expense) => (
+                        <img key={expense.id} src={expense.imageUrl} alt="오늘 기록" loading="lazy" />
+                      ))}
+                    </div>
+                  </div>
                 )}
+              </header>
+
+              <div className="today-money-strip">
+                <span>오늘 남긴 장면 <strong>{selectedExpenses.length}개</strong></span>
+                {dominantDayCategory && <span>자주 등장한 순간 <strong>{dominantDayCategory}</strong></span>}
+                <span className="today-total-money">총 지출 {formatCurrency(selectedDaySpent)}</span>
+                {selectedDayEarned > 0 && <span className="today-income">수입 +{formatCurrency(selectedDayEarned)}</span>}
               </div>
-            </div>
-          </header>
+            </>
+          )}
 
-          <div className="today-money-strip">
-            <span>오늘 남긴 장면 <strong>{selectedExpenses.length}개</strong></span>
-            {dominantDayCategory && <span>자주 등장한 순간 <strong>{dominantDayCategory}</strong></span>}
-            <span className="today-total-money">총 지출 {formatCurrency(selectedDaySpent)}</span>
-            {selectedDayEarned > 0 && <span className="today-income">수입 +{formatCurrency(selectedDayEarned)}</span>}
-          </div>
-
-          <div className="timeline-companion">
+          <div className={`timeline-companion${isFirstSession ? ' first-session-companion' : ''}`}>
             <PetPortrait
               kind={petState.selectedKind}
               name={selectedPetName}
@@ -1989,26 +2055,35 @@ function CashlogApp() {
             />
             <p>
               <strong>{selectedPetName}</strong>가{' '}
-              {selectedExpenses.length > 0
+              {isFirstSession
+                ? '첫 기록을 같이 정리하고, 기록할수록 새로운 코디를 열어요.'
+                : selectedExpenses.length > 0
                 ? `${selectedExpenses.length}개의 장면을 한 편의 하루로 묶고 있어요.`
-                : '오늘의 첫 장면을 기다리고 있어요.'}
+                : '이 날짜에 남길 장면을 기다리고 있어요.'}
             </p>
           </div>
 
-          <div className="photo-timeline">
+          <div className={`photo-timeline${isFirstSession ? ' first-session-photo-timeline' : ''}`}>
             {selectedExpenses.length === 0 ? (
-              <div className="timeline-empty-moment">
-                <div className="timeline-empty-photo">
-                  <img src="/cafe-receipt-moment.png" alt="아이스 아메리카노와 영수증 기록 예시" />
-                  <span><Camera size={14} aria-hidden /> 사진 기록 예시</span>
+              isFirstSession ? (
+                <div className="timeline-empty-moment first-session-demo" aria-label="사진 기록 결과 예시">
+                  <div className="timeline-empty-photo">
+                    <img src="/cafe-receipt-moment.png" alt="아이스 아메리카노와 영수증 기록 예시" />
+                    <span><Camera size={14} aria-hidden /> 찍기 전</span>
+                  </div>
+                  <div className="demo-result">
+                    <span>찍고 나면</span>
+                    <strong>5,200원</strong>
+                    <p>카페 · 디저트</p>
+                    <small>제안만 확인하면 저장돼요</small>
+                  </div>
                 </div>
-                <div>
-                  <p className="empty-question">오늘 첫 장면, 나랑 찍어볼까?</p>
-                  <button type="button" className="empty-camera-link" onClick={openPhotoCapture}>
-                    <Camera size={18} aria-hidden /> 사진으로 시작
-                  </button>
+              ) : (
+                <div className="timeline-date-empty">
+                  <strong>{selectedDateLabel}에는 아직 기록이 없어요.</strong>
+                  <span>아래 촬영 버튼으로 이 날의 첫 장면을 남겨보세요.</span>
                 </div>
-              </div>
+              )
             ) : (
               selectedExpenseGroups.map((group) => (
                 <section className="timeline-daypart" key={group.part.id}>
@@ -2033,22 +2108,29 @@ function CashlogApp() {
             )}
           </div>
 
-          <div className="capture-prompt">찍으면 내가 정리해줄게!</div>
           <div className="capture-dock" aria-label="빠른 기록">
-            <label className="dock-secondary" title="사진 보관함">
-              <ImageIcon size={23} aria-hidden />
-              <span>사진</span>
-              <input type="file" accept="image/*" onChange={handleGalleryPick} aria-label="갤러리에서 사진 선택" />
-            </label>
-            <button type="button" className="camera-shutter" onClick={openPhotoCapture} aria-label="카메라로 바로 촬영">
-              <Camera size={34} strokeWidth={2.2} aria-hidden />
+            <button type="button" className="capture-primary" onClick={openPhotoCapture} aria-label={isFirstSession ? '가입 없이 3초 만에 영수증 기록하기' : '카메라로 영수증 기록하기'}>
+              <span className="camera-shutter" aria-hidden>
+                <Camera size={31} strokeWidth={2.2} />
+              </span>
+              <span className="capture-primary-copy">
+                <strong>{isFirstSession ? '가입 없이 3초 만에 기록' : '영수증 찍어 기록'}</strong>
+                <small>{isFirstSession ? '사진 한 장이면 바로 시작해요' : '금액과 카테고리를 먼저 정리해요'}</small>
+              </span>
             </button>
-            <button type="button" className="dock-secondary" onClick={openManual} aria-label="빠른 직접 입력">
-              <Pencil size={23} aria-hidden />
-              <span>입력</span>
-            </button>
+            <div className="capture-alternatives">
+              <label className="dock-secondary" title="사진 보관함">
+                <ImageIcon size={18} aria-hidden />
+                <span>앨범에서 고르기</span>
+                <input type="file" accept="image/*" onChange={handleGalleryPick} aria-label="갤러리에서 사진 선택" />
+              </label>
+              <span aria-hidden>·</span>
+              <button type="button" className="dock-secondary" onClick={openManual} aria-label="직접 입력">
+                <Pencil size={18} aria-hidden />
+                <span>직접 입력</span>
+              </button>
+            </div>
           </div>
-          <button type="button" className="sr-only-action" onClick={openManual}>+ 기록 추가</button>
         </section>
       )}
           </motion.div>
@@ -2429,7 +2511,7 @@ function CashlogApp() {
         </motion.section>
       <footer className="legal-footer">
         <a href="/privacy.html">개인정보처리방침</a>
-        <a href="https://github.com/UICHANLEE/cashlog">GitHub</a>
+        <a href="/terms.html">이용약관</a>
       </footer>
       {storyMode === 'day' && dayStorySlides.length > 0 && (
         <Suspense fallback={null}>
@@ -2488,12 +2570,15 @@ function TimelineExpenseEntry({ expense }: { expense: Expense }) {
             loop
             playsInline
             autoPlay
+            preload="metadata"
           />
         ) : expense.imageUrl ? (
           <img
             src={expense.imageUrl}
             alt={`${expense.title} 사진 기록`}
             className="timeline-photo"
+            loading="lazy"
+            decoding="async"
           />
         ) : null}
         <div className="entry-meta-row">

@@ -28,6 +28,9 @@ describe('Cashlog photo MVP', () => {
     render(<App />)
 
     expect(screen.getByRole('button', { name: /하루 스토리/i })).toBeDisabled()
+    expect(screen.getByText('선택한 날짜에 기록을 하나 남기면 하루 스토리가 열려요.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /영수증 찍으면/ })).toBeInTheDocument()
+    expect(screen.queryByText('총 지출 0원')).not.toBeInTheDocument()
     expect(screen.getByText('로그인')).toBeInTheDocument()
   })
 
@@ -60,6 +63,7 @@ describe('Cashlog photo MVP', () => {
 
     expect(within(account).getByText('간편 가입에 필요한 필수 동의를 확인해 주세요.')).toBeInTheDocument()
     expect(within(account).getByText('간편 가입 동의')).toBeInTheDocument()
+    expect(within(account).getByRole('checkbox', { name: /이용약관/ })).toBeInTheDocument()
   })
 
   it('keeps the pet playground behind a dedicated tab', async () => {
@@ -136,7 +140,7 @@ describe('Cashlog photo MVP', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: '빠른 직접 입력' }))
+    await user.click(screen.getByRole('button', { name: '직접 입력' }))
     await user.type(screen.getByLabelText('제목'), '지하철 충전')
     await user.type(screen.getByLabelText('금액'), '10000')
     await user.click(screen.getByRole('button', { name: '5점 최고야' }))
@@ -155,7 +159,7 @@ describe('Cashlog photo MVP', () => {
   it('moves keyboard focus into the entry dialog and restores it after Escape', async () => {
     const user = userEvent.setup()
     render(<App />)
-    const trigger = screen.getByRole('button', { name: '빠른 직접 입력' })
+    const trigger = screen.getByRole('button', { name: '직접 입력' })
 
     await user.click(trigger)
     expect(await screen.findByRole('button', { name: '기록 창 닫기' })).toHaveFocus()
@@ -201,7 +205,7 @@ describe('Cashlog photo MVP', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: '카메라로 바로 촬영' }))
+    await user.click(screen.getByRole('button', { name: '가입 없이 3초 만에 영수증 기록하기' }))
 
     expect(screen.getByRole('heading', { name: '사진으로 기록' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '카메라 촬영' })).toBeInTheDocument()
@@ -223,7 +227,7 @@ describe('Cashlog photo MVP', () => {
     })
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: '사진으로 시작' }))
+    await user.click(screen.getByRole('button', { name: '가입 없이 3초 만에 영수증 기록하기' }))
 
     expect(await screen.findByRole('heading', { name: '장면 촬영' })).toBeInTheDocument()
     expect(document.querySelector('.add-sheet')).toHaveClass('is-camera-live')
@@ -364,7 +368,7 @@ describe('Cashlog photo MVP', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: '+ 기록 추가' }))
+    await user.click(screen.getByRole('button', { name: '직접 입력' }))
     await user.click(screen.getByRole('button', { name: '수입' }))
     await user.type(screen.getByLabelText('제목'), '환급')
     await user.type(screen.getByLabelText('금액'), '12000')
@@ -450,6 +454,7 @@ describe('Cashlog photo MVP', () => {
     expect(fetchMock).not.toHaveBeenCalled()
 
     await user.click(within(account).getByRole('checkbox', { name: /만 14세 이상입니다/ }))
+    await user.click(within(account).getByRole('checkbox', { name: /이용약관/ }))
     await user.click(within(account).getByRole('checkbox', { name: /개인정보 처리방침/ }))
     await user.click(within(account).getByRole('checkbox', { name: /선택한 사진과 사진 파일·기록 시각/ }))
     await user.click(within(account).getByRole('button', { name: '가입하고 시작' }))

@@ -22,6 +22,7 @@ export const CASHLOG_CONSENT_VERSION = '2026-07-26'
 
 export type SignupConsents = {
   age14: true
+  terms: true
   privacy: true
   photoAndTime: true
   location: boolean
@@ -50,8 +51,8 @@ type PendingOAuthConsent = SignupConsents & {
   consentedAt: string
 }
 
-const redirectTarget = () =>
-  typeof window !== 'undefined' ? window.location.origin + window.location.pathname : undefined
+const redirectTarget = (pathname?: string) =>
+  typeof window !== 'undefined' ? window.location.origin + (pathname ?? window.location.pathname) : undefined
 
 const clearAuthParamsFromUrl = () => {
   if (typeof window === 'undefined') return
@@ -211,16 +212,16 @@ export const createCashlogAuthClient = () => {
     return session
   }
 
-  const getOAuthAuthorizeUrl = (provider: OAuthProvider) => {
+  const getOAuthAuthorizeUrl = (provider: OAuthProvider, redirectPath?: string) => {
     if (!config) throw new Error('Supabase 환경변수가 설정되지 않았어요.')
     const endpoint = new URL(`${config.url}/auth/v1/authorize`)
     endpoint.searchParams.set('provider', provider)
-    const redirectTo = redirectTarget()
+    const redirectTo = redirectTarget(redirectPath)
     if (redirectTo) endpoint.searchParams.set('redirect_to', redirectTo)
     return endpoint.toString()
   }
 
-  const signInWithOAuth = (provider: OAuthProvider, consents: SignupConsents) => {
+  const signInWithOAuth = (provider: OAuthProvider, consents: SignupConsents, redirectPath?: string) => {
     if (typeof window === 'undefined') return
     const pendingConsent: PendingOAuthConsent = {
       ...consents,
@@ -229,7 +230,7 @@ export const createCashlogAuthClient = () => {
     }
     localStorage.removeItem(OAUTH_CONSENT_STORAGE_KEY)
     sessionStorage.setItem(OAUTH_CONSENT_STORAGE_KEY, JSON.stringify(pendingConsent))
-    window.location.assign(getOAuthAuthorizeUrl(provider))
+    window.location.assign(getOAuthAuthorizeUrl(provider, redirectPath))
   }
 
   const persistPendingOAuthConsent = async (session: CashlogSession) => {
@@ -249,6 +250,21 @@ export const createCashlogAuthClient = () => {
 
     const user = session.user ?? (await getUser(session))
     if (!user?.id) throw new Error('간편 로그인 계정 정보를 확인하지 못했어요.')
+    const metadataResponse = await fetch(`${config.url}/auth/v1/user`, {
+      method: 'PUT',
+      headers: authHeaders(config, session.accessToken),
+      body: JSON.stringify({
+        data: {
+          app_id: 'cashlog',
+          consent_version: consent.consentVersion,
+          consented_at: consent.consentedAt,
+          terms_consent: consent.terms,
+        },
+      }),
+    })
+    if (!metadataResponse.ok) {
+      throw new Error(await readAuthError(metadataResponse, '이용약관 동의 내역을 저장하지 못했어요.'))
+    }
     const response = await fetch(`${config.url}/rest/v1/cashlog_user_consents?on_conflict=user_id`, {
       method: 'POST',
       headers: {
@@ -360,6 +376,7 @@ export const createCashlogAuthClient = () => {
           consent_version: CASHLOG_CONSENT_VERSION,
           consented_at: new Date().toISOString(),
           age_14_or_older: consents.age14,
+          terms_consent: consents.terms,
           privacy_consent: consents.privacy,
           photo_time_consent: consents.photoAndTime,
           location_consent: consents.location,

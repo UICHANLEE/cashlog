@@ -25,7 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       values.email,
       values.password,
       values.nickname,
-      { photoAndTime: values.photoAndTime, location: values.location },
+      { terms: true, photoAndTime: values.photoAndTime, location: values.location },
       origin,
     )
     if (!session.user?.id) throw new ApiError(503, 'SIGNUP_FAILED', '계정 정보를 확인하지 못했어요.')

@@ -25,6 +25,7 @@ describe('Cashlog signup consent', () => {
 
     await createCashlogAuthClient().signUpWithPassword('me@example.com', 'secret1', {
       age14: true,
+      terms: true,
       privacy: true,
       photoAndTime: true,
       location: false,
@@ -39,6 +40,7 @@ describe('Cashlog signup consent', () => {
       app_id: 'cashlog',
       consent_version: '2026-07-26',
       age_14_or_older: true,
+      terms_consent: true,
       privacy_consent: true,
       photo_time_consent: true,
       location_consent: false,
@@ -101,6 +103,7 @@ describe('Cashlog signup consent', () => {
     vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'anon-key')
     sessionStorage.setItem('cashlog.oauth.pending-consent', JSON.stringify({
       age14: true,
+      terms: true,
       privacy: true,
       photoAndTime: true,
       location: false,
@@ -119,7 +122,11 @@ describe('Cashlog signup consent', () => {
     })
 
     expect(saved).toBe(true)
-    const [url, init] = fetchMock.mock.calls[0]
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    const [metadataUrl, metadataInit] = fetchMock.mock.calls[0]
+    expect(String(metadataUrl)).toBe('https://cashlog.supabase.co/auth/v1/user')
+    expect(JSON.parse(String(metadataInit?.body))).toMatchObject({ data: { terms_consent: true } })
+    const [url, init] = fetchMock.mock.calls[1]
     expect(String(url)).toContain('/rest/v1/cashlog_user_consents?on_conflict=user_id')
     expect(JSON.parse(String(init?.body))).toMatchObject({
       user_id: 'oauth-user',

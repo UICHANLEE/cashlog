@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import {
   ArrowLeft,
   Camera,
@@ -36,6 +36,7 @@ import {
   type FieldErrors,
 } from './validation'
 import { trackEvent } from '../services/analytics'
+import { createCashlogAuthClient, type OAuthProvider } from '../services/auth'
 
 type Page = 'signup' | 'login' | 'profile' | 'forgot' | 'reset'
 
@@ -92,7 +93,7 @@ const AvatarPicker = ({ preview, onFile, onRemove, error }: {
       {preview ? <img src={preview} alt="선택한 프로필 이미지 미리보기" /> : <UserRound size={42} aria-hidden />}
       <span><Camera size={17} aria-hidden /></span>
     </button>
-    <input ref={input} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={handleChange} aria-label="프로필 이미지 파일" />
+    <input ref={input} hidden name="profileImage" type="file" accept="image/jpeg,image/png,image/webp" onChange={handleChange} aria-label="프로필 이미지 파일" />
     <div className="avatar-actions">
       <button type="button" onClick={() => input.current?.click()}>사진 선택</button>
       {preview && <button type="button" onClick={onRemove}>삭제</button>}
@@ -117,6 +118,7 @@ const PasswordInput = ({ id, label, value, onChange, autoComplete, error }: {
     <div className="password-field">
       <input
         id={id}
+        name={id.includes('confirm') ? 'passwordConfirm' : 'password'}
         type={visible ? 'text' : 'password'}
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -143,6 +145,7 @@ const AccountShell = ({ eyebrow, title, children }: { eyebrow: string; title: st
 
 const SignupPage = () => {
   useRedirectAuthenticated()
+  const authClient = useMemo(() => createCashlogAuthClient(), [])
   const formRef = useRef<HTMLFormElement>(null)
   const [values, setValues] = useState({
     nickname: '', email: '', password: '', passwordConfirm: '', age14: false,
@@ -154,6 +157,44 @@ const SignupPage = () => {
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
   const checks = passwordChecks(values.password, values.email)
+  const allRequiredConsents = values.age14 && values.terms && values.privacy && values.photoAndTime
+
+  const setAllRequiredConsents = (checked: boolean) => {
+    setValues((current) => ({
+      ...current,
+      age14: checked,
+      terms: checked,
+      privacy: checked,
+      photoAndTime: checked,
+    }))
+  }
+
+  const startSocialSignup = (provider: OAuthProvider) => {
+    if (!authClient.isConfigured) {
+      setMessage('간편 로그인 서비스 연결이 아직 완료되지 않았어요.')
+      return
+    }
+    if (!allRequiredConsents) {
+      setErrors({
+        ...(!values.age14 ? { age14Consent: '만 14세 이상 확인이 필요해요.' } : {}),
+        ...(!values.terms ? { termsConsent: '이용약관 동의가 필요해요.' } : {}),
+        ...(!values.privacy ? { privacyConsent: '개인정보 처리방침 동의가 필요해요.' } : {}),
+        ...(!values.photoAndTime ? { photoTimeConsent: '사진과 기록 시간 처리 동의가 필요해요.' } : {}),
+      })
+      setMessage('간편 가입 전에 필수 동의를 확인해 주세요.')
+      focusFirstInvalid(formRef.current)
+      return
+    }
+    setMessage(`${provider === 'google' ? 'Google' : '카카오'} 로그인으로 이동할게요.`)
+    trackEvent('auth_started', { mode: 'signup_page_oauth', provider })
+    authClient.signInWithOAuth(provider, {
+      age14: true,
+      terms: true,
+      privacy: true,
+      photoAndTime: true,
+      location: values.location,
+    }, '/')
+  }
 
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview) }, [preview])
   const chooseImage = async (file: File) => {
@@ -210,14 +251,26 @@ const SignupPage = () => {
   }
   return <AccountShell eyebrow="NEW CASHLOGGER" title="내 기록을 오래 간직해요">
     <form ref={formRef} className="account-form-page" onSubmit={submit} noValidate>
-      <AvatarPicker preview={preview} onFile={chooseImage} onRemove={() => { setImage(null); setPreview('') }} error={errors.profileImage} />
-      <div className="form-field"><label htmlFor="signup-nickname">닉네임</label><input id="signup-nickname" required value={values.nickname} maxLength={30} autoComplete="nickname" onChange={(event) => setValues({ ...values, nickname: event.target.value })} aria-invalid={Boolean(errors.nickname)} aria-describedby={errors.nickname ? 'signup-nickname-error' : undefined} /><FieldError id="signup-nickname-error" message={errors.nickname} /></div>
-      <div className="form-field"><label htmlFor="signup-email">이메일</label><input id="signup-email" required type="email" value={values.email} autoComplete="email" onChange={(event) => setValues({ ...values, email: event.target.value })} aria-invalid={Boolean(errors.email)} aria-describedby={errors.email ? 'signup-email-error' : undefined} /><FieldError id="signup-email-error" message={errors.email} /></div>
+      <label className="consent-master">
+        <input type="checkbox" checked={allRequiredConsents} onChange={(event) => setAllRequiredConsents(event.target.checked)} />
+        <span><strong>필수 항목 모두 동의</strong><small>위치는 선택이며 포함되지 않아요.</small></span>
+      </label>
+      <div className="account-social-buttons" aria-label="간편 회원가입">
+        <button type="button" className="account-social google" onClick={() => startSocialSignup('google')}><span aria-hidden>G</span>Google로 계속하기</button>
+        <button type="button" className="account-social kakao" onClick={() => startSocialSignup('kakao')}><span aria-hidden>톡</span>카카오로 계속하기</button>
+      </div>
+      <div className="account-divider"><span>또는 이메일로 가입</span></div>
+      <div className="form-field"><label htmlFor="signup-nickname">닉네임</label><input id="signup-nickname" name="nickname" required value={values.nickname} maxLength={30} autoComplete="nickname" onChange={(event) => setValues({ ...values, nickname: event.target.value })} aria-invalid={Boolean(errors.nickname)} aria-describedby={errors.nickname ? 'signup-nickname-error' : undefined} /><FieldError id="signup-nickname-error" message={errors.nickname} /></div>
+      <div className="form-field"><label htmlFor="signup-email">이메일</label><input id="signup-email" name="email" required type="email" value={values.email} autoComplete="email" onChange={(event) => setValues({ ...values, email: event.target.value })} aria-invalid={Boolean(errors.email)} aria-describedby={errors.email ? 'signup-email-error' : undefined} /><FieldError id="signup-email-error" message={errors.email} /></div>
       <PasswordInput id="signup-password" label="비밀번호" value={values.password} onChange={(password) => setValues({ ...values, password })} autoComplete="new-password" error={errors.password} />
       <div className="password-rules" aria-live="polite">
         <span className={checks.length ? 'pass' : ''}><Check size={13} aria-hidden />8자 이상</span><span className={checks.groups ? 'pass' : ''}><Check size={13} aria-hidden />문자 종류 2개</span><span className={checks.personal ? 'pass' : ''}><Check size={13} aria-hidden />이메일과 다르게</span>
       </div>
       <PasswordInput id="signup-password-confirm" label="비밀번호 확인" value={values.passwordConfirm} onChange={(passwordConfirm) => setValues({ ...values, passwordConfirm })} autoComplete="new-password" error={errors.passwordConfirm} />
+      <section className="optional-profile-image" aria-labelledby="optional-profile-title">
+        <div><h2 id="optional-profile-title">프로필 사진 <span>선택</span></h2><p>지금 건너뛰고 가입 후 프로필에서 추가해도 돼요.</p></div>
+        <AvatarPicker preview={preview} onFile={chooseImage} onRemove={() => { setImage(null); setPreview('') }} error={errors.profileImage} />
+      </section>
       <div className="consent-list">
         <label><input required type="checkbox" checked={values.age14} onChange={(event) => setValues({ ...values, age14: event.target.checked })} aria-invalid={Boolean(errors.age14Consent)} aria-describedby={errors.age14Consent ? 'age14-error' : undefined} /><span><strong>[필수]</strong> 만 14세 이상입니다.</span></label><FieldError id="age14-error" message={errors.age14Consent} />
         <label><input required type="checkbox" checked={values.terms} onChange={(event) => setValues({ ...values, terms: event.target.checked })} aria-invalid={Boolean(errors.termsConsent)} aria-describedby={errors.termsConsent ? 'terms-error' : undefined} /><span><strong>[필수]</strong> <a href="/terms.html" target="_blank" rel="noopener noreferrer">이용약관</a>에 동의합니다.</span></label><FieldError id="terms-error" message={errors.termsConsent} />
@@ -268,7 +321,7 @@ const LoginPage = () => {
   return <AccountShell eyebrow="WELCOME BACK" title="오늘의 소비도 같이 적어요">
     <form ref={formRef} className="account-form-page login-form" onSubmit={submit} noValidate>
       {message && <p className="form-message success" role="status"><ShieldCheck size={18} aria-hidden />{message}</p>}
-      <div className="form-field"><label htmlFor="login-email">이메일</label><input id="login-email" required type="email" value={email} autoComplete="email" onChange={(event) => setEmail(event.target.value)} aria-invalid={Boolean(errors.email)} aria-describedby={errors.email ? 'login-email-error' : undefined} /><FieldError id="login-email-error" message={errors.email} /></div>
+      <div className="form-field"><label htmlFor="login-email">이메일</label><input id="login-email" name="email" required type="email" value={email} autoComplete="email" onChange={(event) => setEmail(event.target.value)} aria-invalid={Boolean(errors.email)} aria-describedby={errors.email ? 'login-email-error' : undefined} /><FieldError id="login-email-error" message={errors.email} /></div>
       <PasswordInput id="login-password" label="비밀번호" value={password} onChange={setPassword} autoComplete="current-password" error={errors.password} />
       <div className="login-options"><label className="remember-row"><input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} /><span>로그인 상태 유지</span></label><a href="/forgot-password.html">비밀번호 재설정</a></div>
       {errors.form && <p className="form-message error" role="alert">{errors.form}</p>}
@@ -310,7 +363,7 @@ const ForgotPasswordPage = () => {
   return <AccountShell eyebrow="ACCOUNT RECOVERY" title="비밀번호를 다시 만들어요">
     <form ref={formRef} className="account-form-page login-form" onSubmit={submit} noValidate>
       <p className="account-helper">가입한 이메일을 입력하면 재설정 링크를 보내드려요. 가입 여부는 보안을 위해 같은 문구로 안내합니다.</p>
-      <div className="form-field"><label htmlFor="forgot-email">이메일</label><input id="forgot-email" required type="email" value={email} autoComplete="email" onChange={(event) => setEmail(event.target.value)} aria-invalid={Boolean(error)} aria-describedby={error ? 'forgot-email-error' : undefined} /><FieldError id="forgot-email-error" message={error} /></div>
+      <div className="form-field"><label htmlFor="forgot-email">이메일</label><input id="forgot-email" name="email" required type="email" value={email} autoComplete="email" onChange={(event) => setEmail(event.target.value)} aria-invalid={Boolean(error)} aria-describedby={error ? 'forgot-email-error' : undefined} /><FieldError id="forgot-email-error" message={error} /></div>
       {message && <p className="form-message success" role="status"><ShieldCheck size={18} aria-hidden />{message}</p>}
       <button className="primary-submit" disabled={loading}>{loading ? <><LoaderCircle className="spin" size={19} aria-hidden /> 메일 보내는 중</> : '재설정 링크 받기'}</button>
       <p className="form-switch"><a href="/login.html">로그인으로 돌아가기</a></p>
@@ -481,13 +534,13 @@ const ProfilePage = () => {
     }
     catch (reason) { setError(reason instanceof Error ? reason.message : '회원탈퇴를 완료하지 못했어요.'); setAccountAction(null) }
   }
-  if (loading) return <AccountShell eyebrow="MY CASHLOG" title="프로필을 불러오는 중"><div className="page-loader" role="status"><LoaderCircle className="spin" aria-hidden /><span className="sr-only">프로필 로딩 중</span></div></AccountShell>
+  if (loading) return <AccountShell eyebrow="MY CASHLOG" title="프로필을 불러오는 중"><div className="profile-skeleton" role="status" aria-label="프로필 로딩 중"><div className="profile-skeleton-head"><span /><div><i /><i /></div></div><div className="profile-skeleton-field" /><div className="profile-skeleton-field" /><span className="sr-only">프로필 로딩 중</span></div></AccountShell>
   if (loadError || !user) return <AccountShell eyebrow="MY CASHLOG" title="프로필을 불러오지 못했어요"><div className="account-state" role="alert"><RefreshCw size={34} aria-hidden /><p>{loadError || '프로필 정보가 비어 있어요.'}</p><button className="secondary-submit" onClick={() => { setLoading(true); setLoadError(''); setLoadAttempt((current) => current + 1) }}>다시 시도</button><a href="/login.html">로그인으로 이동</a></div></AccountShell>
   return <AccountShell eyebrow="MY CASHLOG" title={`${user.nickname}님의 기록 보관함`}>
     <div className="profile-summary"><div className="profile-avatar">{imageUrl ? <img src={imageUrl} alt={`${user.nickname} 프로필`} onError={() => setImageFailed(true)} /> : <UserRound size={42} aria-hidden />}</div><div><strong>{user.nickname}</strong><span>{user.email}</span><small>{new Intl.DateTimeFormat('ko-KR', { dateStyle: 'long' }).format(new Date(user.createdAt))} 가입 · {user.status === 'ACTIVE' ? '정상' : user.status}</small></div></div>
     <form className="account-form-page profile-form" onSubmit={save} noValidate>
       <AvatarPicker preview={imageUrl} onFile={chooseImage} onRemove={() => { setFile(null); setPreview(''); setRemoveImage(true); setImageFailed(false) }} />
-      <div className="form-field"><label htmlFor="profile-nickname">닉네임</label><input id="profile-nickname" required value={nickname} maxLength={30} onChange={(event) => setNickname(event.target.value)} aria-invalid={Boolean(error && validateNicknameInput(nickname))} /></div>
+      <div className="form-field"><label htmlFor="profile-nickname">닉네임</label><input id="profile-nickname" name="nickname" required value={nickname} maxLength={30} autoComplete="nickname" onChange={(event) => setNickname(event.target.value)} aria-invalid={Boolean(error && validateNicknameInput(nickname))} /></div>
       {message && <p className="form-message success" role="status">{message}</p>}{error && <p className="form-message error" role="alert">{error}</p>}
       <button className="primary-submit" disabled={saving}>{saving ? '저장하는 중' : '프로필 저장'}</button>
     </form>

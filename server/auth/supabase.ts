@@ -57,7 +57,7 @@ export const authSignup = async (
   email: string,
   password: string,
   nickname: string,
-  consents: { photoAndTime: true; location: boolean },
+  consents: { terms: true; photoAndTime: true; location: boolean },
   origin?: string,
 ) => {
   const config = getServerSupabaseConfig()
@@ -71,7 +71,7 @@ export const authSignup = async (
       password,
       data: {
         app_id: 'cashlog', nickname, consent_version: '2026-07-26', consented_at: new Date().toISOString(),
-        age_14_or_older: true, privacy_consent: true,
+        age_14_or_older: true, terms_consent: consents.terms, privacy_consent: true,
         photo_time_consent: consents.photoAndTime, location_consent: consents.location,
       },
     }),
