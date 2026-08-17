@@ -22,6 +22,8 @@ describe('API origin guard', () => {
 
     expect(guardApiOrigin({ method: 'POST', headers: { origin: 'https://cashlog.example.com' } } as never, response as never)).toBe(true)
     expect(headers.get('Access-Control-Allow-Origin')).toBe('https://cashlog.example.com')
+    expect(headers.get('Access-Control-Expose-Headers')).toContain('X-Cashlog-model-Time-Ms')
+    expect(headers.get('Access-Control-Expose-Headers')).toContain('X-Cashlog-analyzer-Time-Ms')
     expect([...headers.values()]).not.toContain('*')
   })
 

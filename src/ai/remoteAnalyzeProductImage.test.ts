@@ -65,7 +65,14 @@ describe('remoteAnalyzeProductImage', () => {
             model: 'cashlog33-hybrid-v1.1-fast',
             taxonomy_version: '13.33.1',
           }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
+          {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Cashlog-total-Time-Ms': '842.4',
+              'X-Cashlog-analyzer-Time-Ms': '701.7',
+            },
+          },
         ),
       ),
     )
@@ -82,6 +89,12 @@ describe('remoteAnalyzeProductImage', () => {
     expect(result.status).toBe('final')
     expect(result.model).toBe('cashlog33-hybrid-v1.1-fast')
     expect(result.taxonomyVersion).toBe('13.33.1')
+    expect(result.operational).toMatchObject({
+      pipeline: 'product',
+      serverDurationMs: 842,
+      modelDurationMs: 702,
+      httpStatus: 200,
+    })
   })
 
   it('uses FastAPI detail messages for failed product analysis requests', async () => {

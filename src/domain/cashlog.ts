@@ -515,6 +515,17 @@ export type PhotoAnalysis = {
   errorCode?: ProductDetectionErrorCode
   /** 왜 이 카테고리를 골랐는지 사용자에게 보여 줄 짧은 근거 */
   categoryReason?: string
+  /** 운영 성능 계측용 숫자만 보관한다. 이미지/OCR/위치는 포함하지 않는다. */
+  operational?: {
+    pipeline?: string
+    requestDurationMs?: number
+    serverDurationMs?: number
+    modelDurationMs?: number
+    preprocessDurationMs?: number
+    networkDurationMs?: number
+    payloadKb?: number
+    httpStatus?: number
+  }
 }
 
 export type CalendarDay = {

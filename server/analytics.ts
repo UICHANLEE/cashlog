@@ -22,8 +22,11 @@ export const ANALYTICS_EVENT_NAMES = [
   'analysis_started',
   'analysis_succeeded',
   'analysis_failed',
+  'analysis_feedback',
   'record_saved',
   'story_opened',
+  'story_rendered',
+  'view_ready',
   'pet_interacted',
   'pet_customized',
   'reservation_submitted',
@@ -69,6 +72,25 @@ const PROPERTY_KEYS = new Set([
   'time_to_action_ms',
   'scroll_depth_pct',
   'reason',
+  'trace_id',
+  'pipeline',
+  'model',
+  'engine',
+  'suggested_category',
+  'selected_category',
+  'operation',
+  'confidence_band',
+  'server_duration_ms',
+  'model_duration_ms',
+  'preprocess_duration_ms',
+  'network_duration_ms',
+  'confidence_pct',
+  'payload_kb',
+  'item_count',
+  'slide_count',
+  'http_status',
+  'corrected',
+  'needs_review',
 ])
 
 const TOKEN_PROPERTY_KEYS = new Set([
@@ -95,16 +117,39 @@ const TOKEN_PROPERTY_KEYS = new Set([
   'action_id',
   'action_type',
   'reason',
+  'trace_id',
+  'pipeline',
+  'model',
+  'engine',
+  'suggested_category',
+  'selected_category',
+  'operation',
+  'confidence_band',
 ])
 
 const TOKEN_VALUE = /^[a-z0-9/][a-z0-9_.:/-]{0,79}$/i
-const BOOLEAN_PROPERTY_KEYS = new Set(['has_media', 'has_location', 'authenticated'])
+const BOOLEAN_PROPERTY_KEYS = new Set([
+  'has_media',
+  'has_location',
+  'authenticated',
+  'corrected',
+  'needs_review',
+])
 const NUMBER_LIMITS: Record<string, [number, number]> = {
   action_sequence: [1, 10_000],
   duration_ms: [0, 86_400_000],
   total_duration_ms: [0, 86_400_000],
   time_to_action_ms: [0, 86_400_000],
   scroll_depth_pct: [0, 100],
+  server_duration_ms: [0, 120_000],
+  model_duration_ms: [0, 120_000],
+  preprocess_duration_ms: [0, 120_000],
+  network_duration_ms: [0, 120_000],
+  confidence_pct: [0, 100],
+  payload_kb: [0, 10_240],
+  item_count: [0, 1_000],
+  slide_count: [0, 500],
+  http_status: [100, 599],
 }
 
 export type AnalyticsInput = {
@@ -158,7 +203,7 @@ const normalizeOccurredAt = (raw: unknown, now = Date.now()) => {
 const normalizeProperties = (raw: unknown) => {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
   const output: Record<string, string | number | boolean> = {}
-  for (const [key, value] of Object.entries(raw).slice(0, 20)) {
+  for (const [key, value] of Object.entries(raw).slice(0, 28)) {
     if (!PROPERTY_KEYS.has(key)) continue
     if (BOOLEAN_PROPERTY_KEYS.has(key)) {
       if (typeof value === 'boolean') output[key] = value

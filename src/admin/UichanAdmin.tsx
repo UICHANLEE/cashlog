@@ -8,6 +8,7 @@ import {
   UserRoundCheck,
 } from 'lucide-react'
 import { CatDoodle, DogDoodle } from '../components/Doodles'
+import { formatCategoryLabel, migrateCategoryId } from '../domain/cashlog'
 import { getSupabaseConfig } from '../services/supabaseConfig'
 
 type StatusResponse = {
@@ -32,6 +33,7 @@ type StatusResponse = {
 }
 
 type EventSummary = {
+  operationalVersion?: number
   totalEvents?: number
   events24h?: number
   events7d?: number
@@ -56,6 +58,52 @@ type EventSummary = {
     avgFirstActionMs: number
   }>
   topActions7d?: Array<{ actionId: string; count: number; avgTimeToActionMs: number }>
+  analysisAttempts24h?: number
+  analysisSucceeded24h?: number
+  analysisFailed24h?: number
+  analysisSuccessRate24h?: number
+  analysisP50Ms7d?: number
+  analysisP95Ms7d?: number
+  modelP50Ms7d?: number
+  modelP95Ms7d?: number
+  avgConfidencePct7d?: number
+  feedbackSamples7d?: number
+  categoryAcceptanceRate7d?: number
+  categoryCorrectionRate7d?: number
+  storyOpens24h?: number
+  storyRendered24h?: number
+  storyRenderRate24h?: number
+  storyP50Ms7d?: number
+  storyP95Ms7d?: number
+  operationBreakdown7d?: Array<{
+    operation: string
+    count: number
+    errors: number
+    avgDurationMs: number
+    p50DurationMs: number
+    p95DurationMs: number
+  }>
+  modelQuality7d?: Array<{
+    model: string
+    samples: number
+    acceptanceRate: number
+    correctionRate: number
+    avgConfidencePct: number
+  }>
+  categoryQuality7d?: Array<{
+    suggestedCategory: string
+    samples: number
+    acceptanceRate: number
+    correctionRate: number
+  }>
+  storyPerformance7d?: Array<{
+    storyType: string
+    renders: number
+    avgDurationMs: number
+    p50DurationMs: number
+    p95DurationMs: number
+    avgSlides: number
+  }>
 }
 
 type UserEvent = {
@@ -99,8 +147,11 @@ const eventLabels: Record<string, string> = {
   analysis_started: '사진 분석 시작',
   analysis_succeeded: '사진 분석 성공',
   analysis_failed: '사진 분석 실패',
+  analysis_feedback: '카테고리 확인',
   record_saved: '기록 저장',
   story_opened: '스토리 열기',
+  story_rendered: '스토리 표시 완료',
+  view_ready: '화면 표시 완료',
   pet_interacted: '캐릭터 상호작용',
   pet_customized: '캐릭터 꾸미기',
   reservation_submitted: '사전예약 제출',
@@ -155,12 +206,50 @@ const propertyLabels: Record<string, string> = {
   scroll_depth_pct: '스크롤',
   view: '화면',
   reason: '종료 이유',
+  trace_id: '흐름 ID',
+  pipeline: '파이프라인',
+  model: '모델',
+  engine: '엔진',
+  suggested_category: '추천 카테고리',
+  selected_category: '최종 카테고리',
+  operation: '작업',
+  confidence_band: '신뢰도 구간',
+  server_duration_ms: '서버 처리',
+  model_duration_ms: '모델 판독',
+  preprocess_duration_ms: '전처리',
+  network_duration_ms: '네트워크',
+  confidence_pct: '모델 신뢰도',
+  payload_kb: '전송 크기',
+  item_count: '탐지 항목',
+  slide_count: '슬라이드',
+  http_status: 'HTTP',
+  corrected: '사용자 수정',
+  needs_review: '확인 필요',
 }
 
 const formatProperty = (key: string, value: string | number | boolean) => {
   if (key.endsWith('_ms') && typeof value === 'number') return formatDuration(value)
   if (key === 'scroll_depth_pct') return `${value}%`
+  if (key === 'confidence_pct') return `${value}%`
+  if (key === 'payload_kb') return `${value}KB`
+  if (key === 'corrected' || key === 'needs_review') return value ? '예' : '아니요'
+  if ((key === 'suggested_category' || key === 'selected_category') && typeof value === 'string') {
+    return formatCategoryLabel(migrateCategoryId(value))
+  }
   return String(value)
+}
+
+const operationLabels: Record<string, string> = {
+  photo_analysis: '사진 카테고리 판독',
+  story_render: '스토리 첫 화면',
+  view_transition: '앱 화면 이동',
+  camera_open: '카메라 열기',
+  record_save: '기록 저장',
+}
+
+const storyLabels: Record<string, string> = {
+  day: '하루 스토리',
+  month: '한 달 스토리',
 }
 
 const sinceFor = (period: Period) => {
@@ -328,7 +417,7 @@ export function UichanAdmin() {
           <p className="eyebrow">Uichan admin</p>
           <h1>Cashlog</h1>
           <p className="hero-copy">
-            민감한 가계부 내용 없이 사용 흐름, 오류, 연결 상태를 한곳에서 확인합니다.
+            민감한 가계부 내용 없이 사용 흐름, 모델 품질, 처리 시간과 오류를 한곳에서 확인합니다.
           </p>
           <div className="hero-mascots" aria-hidden="true">
             <CatDoodle className="mascot mascot-cat" />
@@ -364,6 +453,51 @@ export function UichanAdmin() {
         <MetricCard label="측정 완료 화면" value={summary.engagedViews24h ?? 0} detail="최근 24시간" tone="coral" />
       </section>
 
+      {summary.operationalVersion !== 1 && (
+        <section className="admin-migration-notice" role="status">
+          <AlertTriangle size={18} aria-hidden />
+          <span><strong>운영 성능 집계 준비가 필요해요.</strong> Supabase에서 <code>202608180001_operational_analytics.sql</code>을 적용해 주세요.</span>
+        </section>
+      )}
+
+      <section className="admin-metrics" aria-label="사진 분석 운영 성능">
+        <MetricCard
+          label="분석 성공률"
+          value={summary.analysisSuccessRate24h ?? 0}
+          valueLabel={`${Number(summary.analysisSuccessRate24h ?? 0).toFixed(1)}%`}
+          detail={`24시간 ${summary.analysisSucceeded24h ?? 0}건 성공 · ${summary.analysisFailed24h ?? 0}건 실패`}
+          tone="mint"
+        />
+        <MetricCard label="사진 판독 P50" value={summary.analysisP50Ms7d ?? 0} valueLabel={formatDuration(summary.analysisP50Ms7d)} detail="최근 7일 사용자 체감 중앙값" tone="sky" />
+        <MetricCard label="사진 판독 P95" value={summary.analysisP95Ms7d ?? 0} valueLabel={formatDuration(summary.analysisP95Ms7d)} detail="느린 5% 경계" tone="coral" />
+        <MetricCard label="모델 판독 P95" value={summary.modelP95Ms7d ?? 0} valueLabel={formatDuration(summary.modelP95Ms7d)} detail="서버가 보고한 모델 처리" tone="sun" />
+      </section>
+
+      <section className="admin-metrics" aria-label="모델 품질과 스토리 성능">
+        <MetricCard
+          label="카테고리 수용률"
+          value={summary.categoryAcceptanceRate7d ?? 0}
+          valueLabel={`${Number(summary.categoryAcceptanceRate7d ?? 0).toFixed(1)}%`}
+          detail={`사용자 확인 기준 · ${summary.feedbackSamples7d ?? 0}건`}
+          tone="mint"
+        />
+        <MetricCard
+          label="평균 모델 신뢰도"
+          value={summary.avgConfidencePct7d ?? 0}
+          valueLabel={`${Number(summary.avgConfidencePct7d ?? 0).toFixed(1)}%`}
+          detail="모델 자체 점수이며 실제 정확도와 다름"
+          tone="sun"
+        />
+        <MetricCard label="스토리 표시 P50" value={summary.storyP50Ms7d ?? 0} valueLabel={formatDuration(summary.storyP50Ms7d)} detail="버튼부터 첫 슬라이드까지" tone="sky" />
+        <MetricCard
+          label="스토리 표시 완료율"
+          value={summary.storyRenderRate24h ?? 0}
+          valueLabel={`${Number(summary.storyRenderRate24h ?? 0).toFixed(1)}%`}
+          detail={`24시간 ${summary.storyRendered24h ?? 0}/${summary.storyOpens24h ?? 0}회`}
+          tone="coral"
+        />
+      </section>
+
       <section className="admin-grid" aria-label="연결 상태">
         <article className="admin-card">
           <div className="section-heading">
@@ -374,6 +508,100 @@ export function UichanAdmin() {
           <AdminRow label="분석 파이프라인" value={pipeline} ok={pipeline === 'product'} />
           <AdminRow label="이미지 API 경로" value={imageApiUrl} ok={imageApiUrl.includes('/api/analyze-image')} />
           <AdminRow label="Supabase 공개 설정" value={supabaseConfig ? supabaseConfig.url : '미설정'} ok={Boolean(supabaseConfig)} />
+        </article>
+
+        <article className="admin-card admin-card-wide admin-operation-card">
+          <div className="section-heading">
+            <p className="eyebrow">Operations · 7 days</p>
+            <h2>기능별 처리 시간</h2>
+            <p>사용자가 기능을 누른 순간부터 결과가 보이거나 저장될 때까지 측정합니다.</p>
+          </div>
+          <div className="admin-data-table admin-operation-table" role="table" aria-label="최근 7일 기능별 처리 시간">
+            <div className="admin-data-head" role="row">
+              <span role="columnheader">작업</span>
+              <span role="columnheader">표본</span>
+              <span role="columnheader">평균</span>
+              <span role="columnheader">P50</span>
+              <span role="columnheader">P95</span>
+              <span role="columnheader">오류</span>
+            </div>
+            {(summary.operationBreakdown7d ?? []).map((item) => (
+              <div className="admin-data-row" role="row" key={item.operation}>
+                <strong role="cell">{operationLabels[item.operation] ?? item.operation}</strong>
+                <span role="cell">{item.count.toLocaleString('ko-KR')}건</span>
+                <span role="cell">{formatDuration(item.avgDurationMs)}</span>
+                <span role="cell">{formatDuration(item.p50DurationMs)}</span>
+                <span role="cell">{formatDuration(item.p95DurationMs)}</span>
+                <span role="cell" className={item.errors > 0 ? 'admin-danger-value' : ''}>{item.errors.toLocaleString('ko-KR')}건</span>
+              </div>
+            ))}
+            {(summary.operationBreakdown7d ?? []).length === 0 && <p className="admin-empty">운영 이벤트가 쌓이면 기능별 시간이 표시됩니다.</p>}
+          </div>
+        </article>
+
+        <article className="admin-card admin-quality-card">
+          <div className="section-heading">
+            <p className="eyebrow">Model quality · 7 days</p>
+            <h2>모델별 사용자 확인 결과</h2>
+            <p>실제 정답지가 아니라, 추천 카테고리를 사용자가 그대로 저장했는지 보여줍니다.</p>
+          </div>
+          <div className="admin-quality-list">
+            {(summary.modelQuality7d ?? []).map((item) => (
+              <div key={item.model}>
+                <strong title={item.model}>{item.model}</strong>
+                <span>수용 {Number(item.acceptanceRate).toFixed(1)}%</span>
+                <span>수정 {Number(item.correctionRate).toFixed(1)}%</span>
+                <small>{item.samples}건 · 신뢰도 {Number(item.avgConfidencePct).toFixed(1)}%</small>
+              </div>
+            ))}
+            {(summary.modelQuality7d ?? []).length === 0 && <p className="admin-empty">카테고리를 확인해 저장한 표본이 아직 없어요.</p>}
+          </div>
+        </article>
+
+        <article className="admin-card admin-quality-card">
+          <div className="section-heading">
+            <p className="eyebrow">Category quality · 7 days</p>
+            <h2>카테고리별 수정률</h2>
+          </div>
+          <div className="admin-quality-list">
+            {(summary.categoryQuality7d ?? []).map((item) => (
+              <div key={item.suggestedCategory}>
+                <strong>{formatCategoryLabel(migrateCategoryId(item.suggestedCategory))}</strong>
+                <span>수용 {Number(item.acceptanceRate).toFixed(1)}%</span>
+                <span>수정 {Number(item.correctionRate).toFixed(1)}%</span>
+                <small>{item.samples}건</small>
+              </div>
+            ))}
+            {(summary.categoryQuality7d ?? []).length === 0 && <p className="admin-empty">카테고리 확인 표본이 쌓이면 여기에 표시됩니다.</p>}
+          </div>
+        </article>
+
+        <article className="admin-card admin-card-wide admin-operation-card">
+          <div className="section-heading">
+            <p className="eyebrow">Story performance · 7 days</p>
+            <h2>하루·한 달 스토리 표시 시간</h2>
+          </div>
+          <div className="admin-data-table admin-story-table" role="table" aria-label="최근 7일 스토리 표시 시간">
+            <div className="admin-data-head" role="row">
+              <span role="columnheader">스토리</span>
+              <span role="columnheader">표시</span>
+              <span role="columnheader">평균</span>
+              <span role="columnheader">P50</span>
+              <span role="columnheader">P95</span>
+              <span role="columnheader">평균 장수</span>
+            </div>
+            {(summary.storyPerformance7d ?? []).map((item) => (
+              <div className="admin-data-row" role="row" key={item.storyType}>
+                <strong role="cell">{storyLabels[item.storyType] ?? item.storyType}</strong>
+                <span role="cell">{item.renders.toLocaleString('ko-KR')}회</span>
+                <span role="cell">{formatDuration(item.avgDurationMs)}</span>
+                <span role="cell">{formatDuration(item.p50DurationMs)}</span>
+                <span role="cell">{formatDuration(item.p95DurationMs)}</span>
+                <span role="cell">{item.avgSlides}장</span>
+              </div>
+            ))}
+            {(summary.storyPerformance7d ?? []).length === 0 && <p className="admin-empty">스토리를 열면 실제 표시 시간이 쌓입니다.</p>}
+          </div>
         </article>
 
         <article className="admin-card admin-card-wide admin-engagement-card">

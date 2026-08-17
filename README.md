@@ -134,9 +134,13 @@ AUTH_RATE_LIMIT_SALT=long-random-secret
 
 ### 사용자 활동 로그
 
-`/uichan`은 로그인한 관리자만 볼 수 있는 운영 화면입니다. 페이지·앱 화면별 체류시간, 첫 행동까지 걸린 시간, 버튼·링크 클릭 순서, 인증, 사진 선택·분석, 기록 저장, 스토리, 캐릭터 상호작용과 클라이언트 오류를 확인할 수 있습니다. 금액, 메모, 사진·영상, 위치, 이메일, 토큰, 입력 내용과 클릭 좌표는 제품 로그에 저장하지 않습니다.
+`/uichan`은 로그인한 관리자만 볼 수 있는 운영 화면입니다. 페이지·앱 화면별 체류시간, 첫 행동까지 걸린 시간, 버튼·링크 클릭 순서뿐 아니라 사진 분석 성공률과 P50/P95, 모델 판독 시간, 사용자 확인 기준 카테고리 수용률, 하루·한 달 스토리 표시 시간을 확인할 수 있습니다. 금액, 메모, 사진·영상, OCR 원문, 위치, 이메일, 토큰, 입력 내용과 클릭 좌표는 제품 로그에 저장하지 않습니다.
 
-Supabase에서 [`supabase/migrations/202608030001_user_event_logs.sql`](supabase/migrations/202608030001_user_event_logs.sql)과 [`supabase/migrations/202608140001_behavior_analytics.sql`](supabase/migrations/202608140001_behavior_analytics.sql)을 순서대로 실행하고 Vercel에 아래 서버 전용 값을 추가한 뒤 재배포합니다.
+Supabase에서 아래 마이그레이션을 순서대로 실행하고 Vercel에 서버 전용 값을 추가한 뒤 재배포합니다.
+
+1. [`supabase/migrations/202608030001_user_event_logs.sql`](supabase/migrations/202608030001_user_event_logs.sql)
+2. [`supabase/migrations/202608140001_behavior_analytics.sql`](supabase/migrations/202608140001_behavior_analytics.sql)
+3. [`supabase/migrations/202608180001_operational_analytics.sql`](supabase/migrations/202608180001_operational_analytics.sql)
 
 ```env
 CASHLOG_ADMIN_EMAILS=owner@example.com

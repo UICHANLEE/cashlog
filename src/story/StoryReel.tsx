@@ -49,6 +49,7 @@ type StoryReelProps = {
   aggregateLabel: string
   slides: StorySlide[]
   onClose: () => void
+  onReady?: () => void
   autoAdvanceMs?: number
 }
 
@@ -121,6 +122,7 @@ export function StoryReel({
   aggregateLabel,
   slides,
   onClose,
+  onReady,
   autoAdvanceMs = 6500,
 }: StoryReelProps) {
   const [index, setIndex] = useState(0)
@@ -134,6 +136,7 @@ export function StoryReel({
   const gestureRef = useRef<ActiveGesture | null>(null)
   const suppressTapRef = useRef(false)
   const viewportWidthRef = useRef(0)
+  const readyReportedRef = useRef(false)
   const [motionBurst, setMotionBurst] = useState<MotionBurst | null>(null)
   const prefersReducedMotion = useReducedMotion()
   const dragX = useMotionValue(0)
@@ -144,6 +147,22 @@ export function StoryReel({
   const slideOpacity = useTransform(dragX, (value) =>
     Math.max(0.74, 1 - Math.abs(value) / 780),
   )
+
+  useEffect(() => {
+    if (readyReportedRef.current) return undefined
+    let paintedFrame = 0
+    const layoutFrame = window.requestAnimationFrame(() => {
+      paintedFrame = window.requestAnimationFrame(() => {
+        if (readyReportedRef.current) return
+        readyReportedRef.current = true
+        onReady?.()
+      })
+    })
+    return () => {
+      window.cancelAnimationFrame(layoutFrame)
+      if (paintedFrame) window.cancelAnimationFrame(paintedFrame)
+    }
+  }, [onReady])
 
   const clearMotionTimer = useCallback(() => {
     if (motionClearRef.current) {

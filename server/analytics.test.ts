@@ -99,4 +99,51 @@ describe('analytics event normalization', () => {
     })
     expect(event.properties).not.toHaveProperty('reason')
   })
+
+  it('keeps bounded operational metrics while stripping image and OCR data', () => {
+    const [event] = normalizeAnalyticsBatch({
+      sessionId: '123e4567-e89b-12d3-a456-426614174000',
+      events: [{
+        name: 'analysis_succeeded',
+        path: '/',
+        properties: {
+          trace_id: '123e4567-e89b-12d3-a456-426614174001',
+          operation: 'photo_analysis',
+          pipeline: 'product',
+          model: 'Qwen/Qwen2.5-VL-3B-Instruct',
+          engine: 'qwen',
+          suggested_category: 'meal_cafe',
+          duration_ms: 3_420.2,
+          server_duration_ms: 2_900.8,
+          model_duration_ms: 2_310.4,
+          confidence_pct: 112,
+          payload_kb: 25_000,
+          item_count: 3,
+          needs_review: false,
+          ocr_text: '카드번호와 영수증 원문',
+          image_base64: 'private-image-data',
+          latitude: 37.5,
+        },
+      }],
+    }, null)
+
+    expect(event.properties).toEqual({
+      trace_id: '123e4567-e89b-12d3-a456-426614174001',
+      operation: 'photo_analysis',
+      pipeline: 'product',
+      model: 'Qwen/Qwen2.5-VL-3B-Instruct',
+      engine: 'qwen',
+      suggested_category: 'meal_cafe',
+      duration_ms: 3_420,
+      server_duration_ms: 2_901,
+      model_duration_ms: 2_310,
+      confidence_pct: 100,
+      payload_kb: 10_240,
+      item_count: 3,
+      needs_review: false,
+    })
+    expect(event.properties).not.toHaveProperty('ocr_text')
+    expect(event.properties).not.toHaveProperty('image_base64')
+    expect(event.properties).not.toHaveProperty('latitude')
+  })
 })

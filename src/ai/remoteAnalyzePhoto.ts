@@ -1,4 +1,10 @@
 import { migrateCategoryId, type PhotoAnalysis } from '../domain/cashlog'
+import {
+  AnalysisRequestError,
+  analysisNow,
+  elapsedAnalysisMs,
+  readTimingHeader,
+} from './analysisTiming'
 import { fileToPureBase64 } from './imageToBase64'
 
 /** Vercel `api/analyze` 등 동일 출처 또는 절대 URL */
@@ -6,9 +12,13 @@ export async function remoteAnalyzePhoto(
   file: File,
   endpoint: string,
 ): Promise<PhotoAnalysis> {
+  const requestStartedAt = analysisNow()
+  const preprocessStartedAt = analysisNow()
   const imageBase64 = await fileToPureBase64(file)
+  const preprocessDurationMs = elapsedAnalysisMs(preprocessStartedAt)
   const mimeType = file.type || 'image/jpeg'
 
+  const networkStartedAt = analysisNow()
   const res = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -17,6 +27,7 @@ export async function remoteAnalyzePhoto(
   })
 
   const text = await res.text()
+  const networkDurationMs = elapsedAnalysisMs(networkStartedAt)
   let body: unknown
   try {
     body = JSON.parse(text) as Record<string, unknown>
@@ -24,12 +35,23 @@ export async function remoteAnalyzePhoto(
     body = {}
   }
 
+  const operational = {
+    pipeline: 'receipt',
+    requestDurationMs: elapsedAnalysisMs(requestStartedAt),
+    serverDurationMs: readTimingHeader(res, 'X-Cashlog-total-Time-Ms'),
+    modelDurationMs: readTimingHeader(res, 'X-Cashlog-model-Time-Ms'),
+    preprocessDurationMs,
+    networkDurationMs,
+    payloadKb: Math.round(file.size / 1024),
+    httpStatus: res.status,
+  }
+
   if (!res.ok) {
     const err =
       typeof (body as Record<string, unknown>).error === 'string'
         ? ((body as Record<string, unknown>).error as string)
         : text || `분석 요청 실패 (${res.status})`
-    throw new Error(err)
+    throw new AnalysisRequestError(err, operational)
   }
 
   const o = body as Record<string, unknown>
@@ -50,6 +72,7 @@ export async function remoteAnalyzePhoto(
       ? o.detectedObjects.filter((item): item is string => typeof item === 'string').slice(0, 8)
       : [],
     categoryReason: typeof o.categoryReason === 'string' ? o.categoryReason : undefined,
+    operational,
   }
 
   if (

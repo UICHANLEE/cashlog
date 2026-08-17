@@ -34,6 +34,7 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import './App.css'
 import { analyzePhoto } from './ai/analyzePhoto'
+import { AnalysisRequestError } from './ai/analysisTiming'
 import { captureFrameFromVideo } from './camera/captureFromVideo'
 import {
   categoryTree,
@@ -108,6 +109,7 @@ import { getMe as getSecureAccount, logout as secureLogout } from './account/acc
 import { createCategoryFeedbackPayload } from './domain/productImage'
 import { createLocalMediaStore } from './services/localMediaStore'
 import {
+  createAnalyticsTraceId,
   isAnalyticsEnabled,
   setAnalyticsEnabled,
   setAnalyticsView,
@@ -130,6 +132,27 @@ type StoryMode = null | 'day' | 'month'
 type AppView = 'diary' | 'calendar' | 'pets'
 type AuthMode = 'signIn' | 'signUp' | 'magic'
 type LocationStatus = 'idle' | 'loading' | 'ready' | 'error'
+
+type AnalysisTrace = {
+  id: string
+  startedAt: number
+  completedAt?: number
+  source: 'camera' | 'gallery'
+  pipeline: string
+}
+
+type StoryTrace = {
+  id: string
+  startedAt: number
+  storyType: Exclude<StoryMode, null>
+  slideCount: number
+}
+
+type ViewTrace = {
+  id: string
+  startedAt: number
+  view: AppView
+}
 
 const APP_VIEW_ORDER: AppView[] = ['diary', 'calendar', 'pets']
 
@@ -218,6 +241,14 @@ const currentTimeZone = () => {
   }
 }
 
+const appNow = () => typeof performance === 'undefined' ? Date.now() : performance.now()
+const elapsedAppMs = (startedAt: number) => Math.max(0, Math.round(appNow() - startedAt))
+const confidenceBand = (confidence: number) => {
+  if (confidence >= 0.8) return 'high'
+  if (confidence >= 0.6) return 'medium'
+  return 'low'
+}
+
 const dominantCategoryLabel = (items: Expense[]) => {
   const totals = new Map<string, { amount: number; count: number; label: string }>()
   items
@@ -250,6 +281,9 @@ function CashlogApp() {
   const [locationMessage, setLocationMessage] = useState('')
   const [photoPreview, setPhotoPreview] = useState('')
   const photoFileRef = useRef<File | null>(null)
+  const analysisTraceRef = useRef<AnalysisTrace | null>(null)
+  const storyTraceRef = useRef<StoryTrace | null>(null)
+  const viewTraceRef = useRef<ViewTrace | null>(null)
   const [analysis, setAnalysis] = useState<PhotoAnalysis | null>(null)
   const [trainingImageConsent, setTrainingImageConsent] = useState(false)
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
@@ -315,6 +349,25 @@ function CashlogApp() {
 
   useEffect(() => {
     setAnalyticsView(activeView)
+    const trace = viewTraceRef.current
+    if (!trace || trace.view !== activeView) return undefined
+    let paintedFrame = 0
+    const layoutFrame = window.requestAnimationFrame(() => {
+      paintedFrame = window.requestAnimationFrame(() => {
+        if (viewTraceRef.current?.id !== trace.id) return
+        trackEvent('view_ready', {
+          trace_id: trace.id,
+          view: trace.view,
+          operation: 'view_transition',
+          duration_ms: elapsedAppMs(trace.startedAt),
+        })
+        viewTraceRef.current = null
+      })
+    })
+    return () => {
+      window.cancelAnimationFrame(layoutFrame)
+      if (paintedFrame) window.cancelAnimationFrame(paintedFrame)
+    }
   }, [activeView])
 
   const stopCamera = useCallback(() => {
@@ -354,6 +407,7 @@ function CashlogApp() {
     setRecordSeconds(0)
     recordedChunksRef.current = []
     photoFileRef.current = null
+    analysisTraceRef.current = null
     posterFileRef.current = null
     mediaRecorderRef.current = null
   }, [clearRecordTimer])
@@ -423,6 +477,12 @@ function CashlogApp() {
     sourceDate?: Date,
     source: 'camera' | 'gallery' = 'gallery',
   ) => {
+    const trace: AnalysisTrace = {
+      id: createAnalyticsTraceId(),
+      startedAt: appNow(),
+      source,
+      pipeline: import.meta.env.VITE_IMAGE_ANALYSIS_PIPELINE ?? 'receipt',
+    }
     setCameraError(null)
     setPhotoAssistMessage('')
     setTrainingImageConsent(false)
@@ -430,12 +490,19 @@ function CashlogApp() {
       await assertValidImageFile(file)
     } catch (error) {
       photoFileRef.current = null
+      analysisTraceRef.current = null
       setCameraError(error instanceof Error ? error.message : '유효한 이미지 파일이 아니에요.')
       setForm(emptyForm())
       return
     }
     photoFileRef.current = file
-    trackEvent('media_selected', { source, media_type: 'image' })
+    analysisTraceRef.current = trace
+    trackEvent('media_selected', {
+      trace_id: trace.id,
+      source,
+      media_type: 'image',
+      payload_kb: Math.round(file.size / 1024),
+    })
     const recordedAt =
       sourceDate ??
       (file.lastModified > 0 ? new Date(file.lastModified) : new Date())
@@ -447,13 +514,18 @@ function CashlogApp() {
     setAnalysis(null)
     setIsAnalyzingPhoto(true)
     trackEvent('analysis_started', {
+      trace_id: trace.id,
       source,
       analysis_mode: import.meta.env.VITE_PHOTO_ANALYSIS_MODE ?? 'mock',
+      pipeline: trace.pipeline,
+      operation: 'photo_analysis',
+      payload_kb: Math.round(file.size / 1024),
     })
     if (locationCollectionConsent) requestCurrentLocation(true)
 
     try {
       const nextAnalysis = await analyzePhoto(file)
+      trace.completedAt = appNow()
       setAnalysis(nextAnalysis)
       setForm({
         title: nextAnalysis.suggestedTitle,
@@ -464,15 +536,46 @@ function CashlogApp() {
         kind: 'expense',
       })
       trackEvent('analysis_succeeded', {
+        trace_id: trace.id,
         source,
         analysis_mode: import.meta.env.VITE_PHOTO_ANALYSIS_MODE ?? 'mock',
+        pipeline: nextAnalysis.operational?.pipeline ?? trace.pipeline,
+        operation: 'photo_analysis',
+        status: nextAnalysis.status ?? 'final',
+        duration_ms: elapsedAppMs(trace.startedAt),
+        server_duration_ms: nextAnalysis.operational?.serverDurationMs,
+        model_duration_ms: nextAnalysis.operational?.modelDurationMs,
+        preprocess_duration_ms: nextAnalysis.operational?.preprocessDurationMs,
+        network_duration_ms: nextAnalysis.operational?.networkDurationMs,
+        payload_kb: nextAnalysis.operational?.payloadKb ?? Math.round(file.size / 1024),
+        http_status: nextAnalysis.operational?.httpStatus,
+        model: nextAnalysis.model,
+        engine: nextAnalysis.engine,
+        suggested_category: nextAnalysis.suggestedCategory,
+        confidence_pct: Math.round(nextAnalysis.confidence * 100),
+        confidence_band: confidenceBand(nextAnalysis.confidence),
+        item_count: nextAnalysis.detectedItems?.length ?? nextAnalysis.detectedObjects?.length ?? 0,
+        needs_review: Boolean(nextAnalysis.needUserCheck),
       })
     } catch (e) {
-      void e
+      const operational = e instanceof AnalysisRequestError ? e.operational : undefined
       trackEvent('analysis_failed', {
+        trace_id: trace.id,
         source,
         analysis_mode: import.meta.env.VITE_PHOTO_ANALYSIS_MODE ?? 'mock',
+        pipeline: operational?.pipeline ?? trace.pipeline,
+        operation: 'photo_analysis',
+        status: 'failed',
+        duration_ms: elapsedAppMs(trace.startedAt),
+        server_duration_ms: operational?.serverDurationMs,
+        model_duration_ms: operational?.modelDurationMs,
+        preprocess_duration_ms: operational?.preprocessDurationMs,
+        network_duration_ms: operational?.networkDurationMs,
+        payload_kb: operational?.payloadKb ?? Math.round(file.size / 1024),
+        http_status: operational?.httpStatus,
+        error_name: e instanceof Error ? e.name : 'Error',
       })
+      analysisTraceRef.current = null
       setPhotoAssistMessage('사진은 준비됐어요. 금액과 카테고리를 직접 확인해 주세요.')
       setForm(emptyForm())
     } finally {
@@ -1188,8 +1291,15 @@ function CashlogApp() {
   }, [addMode])
 
   const startCamera = async () => {
+    const cameraStartedAt = appNow()
     if (!navigator.mediaDevices?.getUserMedia) {
       setCameraError('이 브라우저에서는 카메라를 사용할 수 없어요.')
+      trackEvent('camera_opened', {
+        media_type: captureKind,
+        status: 'unsupported',
+        operation: 'camera_open',
+        duration_ms: elapsedAppMs(cameraStartedAt),
+      })
       return
     }
     setCameraError(null)
@@ -1202,7 +1312,12 @@ function CashlogApp() {
         audio: wantAudio,
       })
       setCameraStream(stream)
-      trackEvent('camera_opened', { media_type: captureKind, status: 'ready' })
+      trackEvent('camera_opened', {
+        media_type: captureKind,
+        status: 'ready',
+        operation: 'camera_open',
+        duration_ms: elapsedAppMs(cameraStartedAt),
+      })
     } catch {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -1210,7 +1325,12 @@ function CashlogApp() {
           audio: wantAudio,
         })
         setCameraStream(stream)
-        trackEvent('camera_opened', { media_type: captureKind, status: 'fallback_ready' })
+        trackEvent('camera_opened', {
+          media_type: captureKind,
+          status: 'fallback_ready',
+          operation: 'camera_open',
+          duration_ms: elapsedAppMs(cameraStartedAt),
+        })
       } catch (err) {
         const e = err as DOMException
         if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
@@ -1226,6 +1346,8 @@ function CashlogApp() {
           media_type: captureKind,
           status: 'failed',
           error_name: e.name || 'Error',
+          operation: 'camera_open',
+          duration_ms: elapsedAppMs(cameraStartedAt),
         })
       }
     }
@@ -1389,6 +1511,7 @@ function CashlogApp() {
     const amount = Number(form.amount)
     if (!form.title.trim() || Number.isNaN(amount) || amount <= 0) return
 
+    const saveStartedAt = appNow()
     setIsSaving(true)
 
     const dateTime = combineLocalDateAndTime(selectedDate, entryTime)
@@ -1559,6 +1682,26 @@ function CashlogApp() {
     }
 
     setExpenses((current) => [expense, ...current])
+    const analysisTrace = analysisTraceRef.current
+    if (analysis && form.kind === 'expense') {
+      const selectedCategory = migrateCategoryId(String(categoryNormalized))
+      trackEvent('analysis_feedback', {
+        trace_id: analysisTrace?.id ?? analysis.requestId,
+        pipeline: analysis.operational?.pipeline ?? import.meta.env.VITE_IMAGE_ANALYSIS_PIPELINE ?? 'receipt',
+        operation: 'category_confirmation',
+        model: analysis.model,
+        engine: analysis.engine,
+        suggested_category: analysis.suggestedCategory,
+        selected_category: selectedCategory,
+        corrected: selectedCategory !== analysis.suggestedCategory,
+        confidence_pct: Math.round(analysis.confidence * 100),
+        confidence_band: confidenceBand(analysis.confidence),
+        needs_review: Boolean(analysis.needUserCheck),
+        time_to_action_ms: analysisTrace?.completedAt
+          ? elapsedAppMs(analysisTrace.completedAt)
+          : undefined,
+      })
+    }
     trackEvent('record_saved', {
       entry_kind: expense.kind,
       has_media: hasMedia,
@@ -1566,12 +1709,16 @@ function CashlogApp() {
       analysis_mode: analysis ? 'analyzed' : 'manual',
       result: expense.moodScore === null ? 'mood_skipped' : 'mood_added',
       authenticated: Boolean(session),
+      trace_id: analysisTrace?.id,
+      operation: 'record_save',
+      duration_ms: elapsedAppMs(saveStartedAt),
     })
     stopCamera()
     setPhotoPreview('')
     photoFileRef.current = null
     setVideoPreview('')
     setAnalysis(null)
+    analysisTraceRef.current = null
     setTrainingImageConsent(false)
     resetEntryContext()
     setAddMode('closed')
@@ -1582,7 +1729,41 @@ function CashlogApp() {
     setForm((current) => ({ ...current, [field]: value }))
   }
 
-  const closeStory = useCallback(() => setStoryMode(null), [])
+  const closeStory = useCallback(() => {
+    storyTraceRef.current = null
+    setStoryMode(null)
+  }, [])
+
+  const openStory = useCallback((storyType: Exclude<StoryMode, null>, slideCount: number) => {
+    const trace: StoryTrace = {
+      id: createAnalyticsTraceId(),
+      startedAt: appNow(),
+      storyType,
+      slideCount,
+    }
+    storyTraceRef.current = trace
+    trackEvent('story_opened', {
+      trace_id: trace.id,
+      story_type: storyType,
+      operation: 'story_render',
+      slide_count: slideCount,
+    })
+    setStoryMode(storyType)
+  }, [])
+
+  const handleStoryReady = useCallback(() => {
+    const trace = storyTraceRef.current
+    if (!trace) return
+    trackEvent('story_rendered', {
+      trace_id: trace.id,
+      story_type: trace.storyType,
+      operation: 'story_render',
+      duration_ms: elapsedAppMs(trace.startedAt),
+      slide_count: trace.slideCount,
+      status: 'ready',
+    })
+    storyTraceRef.current = null
+  }, [])
 
   const handleCaptureKindChange = (kind: 'photo' | 'video') => {
     if (kind === captureKind) return
@@ -1613,6 +1794,11 @@ function CashlogApp() {
 
   const navigateToView = useCallback((nextView: AppView) => {
     if (nextView === activeView) return
+    viewTraceRef.current = {
+      id: createAnalyticsTraceId(),
+      startedAt: appNow(),
+      view: nextView,
+    }
     const currentIndex = APP_VIEW_ORDER.indexOf(activeView)
     const nextIndex = APP_VIEW_ORDER.indexOf(nextView)
     setViewDirection(nextIndex > currentIndex ? 1 : -1)
@@ -1683,10 +1869,7 @@ function CashlogApp() {
           aria-disabled={dayStorySlides.length === 0}
           aria-describedby={dayStorySlides.length === 0 ? 'day-story-lock-hint' : undefined}
           title={dayStorySlides.length === 0 ? '선택한 날짜에 기록을 하나 남기면 열려요' : '선택한 날짜의 스토리 보기'}
-          onClick={() => {
-            trackEvent('story_opened', { story_type: 'day' })
-            setStoryMode('day')
-          }}
+          onClick={() => openStory('day', dayStorySlides.length)}
         >
           <Sparkles size={16} aria-hidden /> 하루 스토리
         </button>
@@ -1961,10 +2144,7 @@ function CashlogApp() {
                 disabled={monthStorySlides.length === 0}
                 aria-disabled={monthStorySlides.length === 0}
                 aria-describedby={monthStorySlides.length === 0 ? 'month-story-lock-hint' : undefined}
-                onClick={() => {
-                  trackEvent('story_opened', { story_type: 'month' })
-                  setStoryMode('month')
-                }}
+                onClick={() => openStory('month', monthStorySlides.length)}
                 title="이번 달 기록 재생"
               >
                 한 달 스토리
@@ -2573,6 +2753,7 @@ function CashlogApp() {
             aggregateLabel="오늘"
             slides={dayStorySlides}
             onClose={closeStory}
+            onReady={handleStoryReady}
           />
         </Suspense>
       )}
@@ -2584,6 +2765,7 @@ function CashlogApp() {
             aggregateLabel={`${visibleMonth.year}년 ${visibleMonth.month + 1}월`}
             slides={monthStorySlides}
             onClose={closeStory}
+            onReady={handleStoryReady}
           />
         </Suspense>
       )}

@@ -30,6 +30,19 @@ export const guardApiOrigin = (req: VercelRequest, res: VercelResponse) => {
   res.setHeader('Vary', 'Origin')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  res.setHeader(
+    'Access-Control-Expose-Headers',
+    [
+      'X-Request-ID',
+      'Server-Timing',
+      'X-Cashlog-total-Time-Ms',
+      'X-Cashlog-model-Time-Ms',
+      'X-Cashlog-analyzer-Time-Ms',
+      'X-Cashlog-optimize-Time-Ms',
+      'X-Upload-Bytes-In',
+      'X-Analyzer-Bytes-Out',
+    ].join(', '),
+  )
   res.setHeader('Access-Control-Max-Age', '600')
 
   if (rawOrigin && (!origin || !getAllowedOrigins().has(origin))) {

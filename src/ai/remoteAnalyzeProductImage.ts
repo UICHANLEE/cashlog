@@ -1,5 +1,11 @@
 import { migrateCategoryId, type PhotoAnalysis } from '../domain/cashlog'
 import { normalizeProductImageAnalysis } from '../domain/productImage'
+import {
+  AnalysisRequestError,
+  analysisNow,
+  elapsedAnalysisMs,
+  readTimingHeader,
+} from './analysisTiming'
 
 const CLIENT_MAX_IMAGE_EDGE = 960
 const CLIENT_JPEG_QUALITY = 0.82
@@ -51,9 +57,14 @@ export async function remoteAnalyzeProductImage(
   file: File,
   endpoint: string,
 ): Promise<PhotoAnalysis> {
+  const requestStartedAt = analysisNow()
+  const preprocessStartedAt = analysisNow()
+  const optimizedFile = await optimizeProductImageUpload(file)
+  const preprocessDurationMs = elapsedAnalysisMs(preprocessStartedAt)
   const form = new FormData()
-  form.append('image', await optimizeProductImageUpload(file))
+  form.append('image', optimizedFile)
 
+  const networkStartedAt = analysisNow()
   const response = await fetch(endpoint, {
     method: 'POST',
     body: form,
@@ -61,6 +72,7 @@ export async function remoteAnalyzeProductImage(
   })
 
   const text = await response.text()
+  const networkDurationMs = elapsedAnalysisMs(networkStartedAt)
   let body: unknown
   try {
     body = JSON.parse(text) as Record<string, unknown>
@@ -68,12 +80,23 @@ export async function remoteAnalyzeProductImage(
     body = {}
   }
 
+  const operational = {
+    pipeline: 'product',
+    requestDurationMs: elapsedAnalysisMs(requestStartedAt),
+    serverDurationMs: readTimingHeader(response, 'X-Cashlog-total-Time-Ms'),
+    modelDurationMs: readTimingHeader(response, 'X-Cashlog-analyzer-Time-Ms'),
+    preprocessDurationMs,
+    networkDurationMs,
+    payloadKb: Math.round(optimizedFile.size / 1024),
+    httpStatus: response.status,
+  }
+
   if (!response.ok) {
     const error = errorMessageFromResponseBody(
       body as Record<string, unknown>,
       text || `상품 분석 요청 실패 (${response.status})`,
     )
-    throw new Error(error)
+    throw new AnalysisRequestError(error, operational)
   }
 
   const analysis = normalizeProductImageAnalysis(body)
@@ -104,5 +127,6 @@ export async function remoteAnalyzeProductImage(
     needUserCheck: analysis.needUserCheck,
     errorCode: analysis.errorCode,
     categoryReason: analysis.reason,
+    operational,
   }
 }

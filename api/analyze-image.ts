@@ -431,6 +431,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (!guardApiOrigin(req, res)) return
   if (req.method !== 'POST') {
+    setTimingHeaders(405, 'METHOD_NOT_ALLOWED')
     res.status(405).json({ error: 'Method Not Allowed' })
     return
   }
@@ -445,12 +446,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       : parseJsonInput(raw)
 
     if (!input) {
+      setTimingHeaders(400, 'MISSING_IMAGE')
       res.status(400).json({ error: 'image 파일 또는 imageBase64가 필요합니다.' })
       return
     }
 
     const byteLength = Buffer.byteLength(input.imageBase64, 'base64')
     if (byteLength > MAX_IMAGE_BYTES) {
+      setTimingHeaders(413, 'PAYLOAD_TOO_LARGE')
       res.status(413).json({ code: 'PAYLOAD_TOO_LARGE', error: '이미지는 최대 10MB까지 업로드할 수 있습니다.' })
       return
     }
@@ -462,6 +465,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         input.filename,
       )
     } catch (error) {
+      timings.validate = performance.now() - validationStartedAt
+      setTimingHeaders(400, 'INVALID_IMAGE')
       res.status(400).json({
         code: 'INVALID_INPUT',
         error: error instanceof Error ? error.message : '유효한 이미지 파일이 아니에요.',

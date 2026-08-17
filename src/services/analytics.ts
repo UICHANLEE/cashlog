@@ -16,8 +16,11 @@ export type AnalyticsEventName =
   | 'analysis_started'
   | 'analysis_succeeded'
   | 'analysis_failed'
+  | 'analysis_feedback'
   | 'record_saved'
   | 'story_opened'
+  | 'story_rendered'
+  | 'view_ready'
   | 'pet_interacted'
   | 'pet_customized'
   | 'reservation_submitted'
@@ -70,6 +73,8 @@ const randomSessionId = () => {
     return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}_${Math.random().toString(36).slice(2)}`
   }
 }
+
+export const createAnalyticsTraceId = () => randomSessionId()
 
 const getSessionId = () => {
   try {

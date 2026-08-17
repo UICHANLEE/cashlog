@@ -527,11 +527,36 @@ describe('Cashlog photo MVP', () => {
           ? {
               checkedAt: '2026-08-03T00:00:00.000Z',
               summary: {
+                operationalVersion: 1,
                 events24h: 12,
                 activeSessions24h: 3,
                 signedInUsers7d: 2,
                 clientErrors24h: 0,
                 topEvents7d: [{ name: 'page_view', count: 6 }],
+                analysisSuccessRate24h: 94.5,
+                analysisP50Ms7d: 820,
+                analysisP95Ms7d: 2100,
+                modelP95Ms7d: 1700,
+                categoryAcceptanceRate7d: 81.2,
+                feedbackSamples7d: 16,
+                storyP50Ms7d: 130,
+                storyRenderRate24h: 100,
+                operationBreakdown7d: [{
+                  operation: 'photo_analysis',
+                  count: 12,
+                  errors: 1,
+                  avgDurationMs: 900,
+                  p50DurationMs: 820,
+                  p95DurationMs: 2100,
+                }],
+                storyPerformance7d: [{
+                  storyType: 'day',
+                  renders: 4,
+                  avgDurationMs: 140,
+                  p50DurationMs: 130,
+                  p95DurationMs: 220,
+                  avgSlides: 5,
+                }],
               },
               total: 1,
               events: [{
@@ -575,6 +600,9 @@ describe('Cashlog photo MVP', () => {
     expect(await screen.findByRole('heading', { name: '서비스 연결 정상' })).toBeInTheDocument()
     expect(screen.getByText('https://catai.example.com')).toBeInTheDocument()
     expect(screen.getByText('사용자 활동 로그')).toBeInTheDocument()
+    expect(screen.getByText('기능별 처리 시간')).toBeInTheDocument()
+    expect(screen.getByText('하루·한 달 스토리 표시 시간')).toBeInTheDocument()
+    expect(screen.getByText('94.5%')).toBeInTheDocument()
     expect(screen.getAllByText('페이지 방문').length).toBeGreaterThan(0)
   })
 

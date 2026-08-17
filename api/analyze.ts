@@ -6,6 +6,7 @@
  *
  * 카테고리 id는 프론트 `src/domain/cashlog.ts` 의 소분류 id와 반드시 동기화할 것.
  */
+import { performance } from 'node:perf_hooks'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { guardApiOrigin } from '../server/httpSecurity.js'
 import { assertValidImageBytes } from '../src/media/imageSignature.js'
@@ -236,8 +237,34 @@ export const config = {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const startedAt = performance.now()
+  const requestId = `req_${crypto.randomUUID()}`
+  const timings: Record<string, number> = {}
+  res.setHeader('X-Request-ID', requestId)
+
+  const finishTiming = (statusCode: number, errorType?: string) => {
+    timings.total = performance.now() - startedAt
+    res.setHeader(
+      'Server-Timing',
+      Object.entries(timings)
+        .map(([name, duration]) => `${name};dur=${duration.toFixed(1)}`)
+        .join(', '),
+    )
+    for (const [name, duration] of Object.entries(timings)) {
+      res.setHeader(`X-Cashlog-${name}-Time-Ms`, duration.toFixed(1))
+    }
+    console.info(JSON.stringify({
+      event: 'vision_analysis_completed',
+      request_id: requestId,
+      status_code: statusCode,
+      timings_ms: timings,
+      ...(errorType ? { error_type: errorType } : {}),
+    }))
+  }
+
   if (!guardApiOrigin(req, res)) return
   if (req.method !== 'POST') {
+    finishTiming(405, 'METHOD_NOT_ALLOWED')
     res.status(405).json({ error: 'Method Not Allowed' })
     return
   }
@@ -248,15 +275,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const mimeType = typeof body?.mimeType === 'string' ? body.mimeType : ''
 
     if (!imageBase64.trim()) {
+      finishTiming(400, 'MISSING_IMAGE')
       res.status(400).json({ error: 'imageBase64가 필요합니다' })
       return
     }
 
+    const decodeStartedAt = performance.now()
     const bytes = Buffer.from(imageBase64.trim(), 'base64')
+    timings.preprocess = performance.now() - decodeStartedAt
     if (bytes.byteLength > MAX_IMAGE_BYTES) {
+      finishTiming(413, 'PAYLOAD_TOO_LARGE')
       res.status(413).json({ error: '이미지는 최대 6MB까지 분석할 수 있어요.' })
       return
     }
+    const validationStartedAt = performance.now()
     try {
       assertValidImageBytes(
         new Uint8Array(bytes),
@@ -264,17 +296,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         typeof body?.filename === 'string' ? body.filename : undefined,
       )
     } catch (error) {
+      timings.validate = performance.now() - validationStartedAt
+      finishTiming(400, 'INVALID_IMAGE')
       res.status(400).json({
         error: error instanceof Error ? error.message : '유효한 이미지 파일이 아니에요.',
       })
       return
     }
+    timings.validate = performance.now() - validationStartedAt
 
+    const modelStartedAt = performance.now()
     const analyzed = await visionToAnalysis(imageBase64.trim(), mimeType)
+    timings.model = performance.now() - modelStartedAt
     const { json, model, engine } = analyzed
 
     const amount = coerceAmount(json.suggestedAmount)
     if (amount <= 0) {
+      finishTiming(422, 'AMOUNT_NOT_DETECTED')
       res.status(422).json({ error: '금액을 인식하지 못했습니다. 사진을 더 밝게 찍어 주세요.' })
       return
     }
@@ -316,9 +354,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       model,
     }
 
+    finishTiming(200)
     res.status(200).json(out)
   } catch (e) {
     const message = e instanceof Error ? e.message : '서버 오류'
+    finishTiming(502, e instanceof Error ? e.name : 'UnknownError')
     res.status(502).json({ error: message })
   }
 }

@@ -557,6 +557,28 @@
   line-height: 1;
 }
 
+.admin-migration-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  padding: 12px 14px;
+  border: 2px dashed var(--line);
+  border-radius: 8px 3px 8px 3px;
+  background: var(--crayon-sun);
+  color: var(--ink);
+}
+
+.admin-migration-notice span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-migration-notice code {
+  font-size: 12px;
+}
+
 .admin-breakdown {
   display: grid;
   gap: 11px;
@@ -680,6 +702,84 @@
 .admin-engagement-row > span small {
   color: var(--ink-soft);
   font-size: 10px;
+}
+
+.admin-operation-card .section-heading > p:last-child,
+.admin-quality-card .section-heading > p:last-child {
+  margin: 4px 0 0;
+  color: var(--ink-soft);
+}
+
+.admin-data-table {
+  min-width: 0;
+  overflow-x: auto;
+  border-block: 2px dashed var(--line-soft);
+}
+
+.admin-data-head,
+.admin-data-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.4fr) repeat(5, minmax(92px, 0.7fr));
+  align-items: center;
+  gap: 10px;
+  min-width: 760px;
+  padding: 11px 4px;
+}
+
+.admin-data-head {
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.admin-data-row {
+  border-top: 1.5px dashed var(--line-soft);
+}
+
+.admin-data-row > strong,
+.admin-data-row > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-data-row > span {
+  font-weight: 800;
+}
+
+.admin-danger-value {
+  color: #a22c2c;
+}
+
+.admin-quality-list {
+  display: grid;
+  gap: 9px;
+}
+
+.admin-quality-list > div {
+  display: grid;
+  grid-template-columns: minmax(130px, 1.4fr) auto auto;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 0;
+  border-top: 1.5px dashed var(--line-soft);
+}
+
+.admin-quality-list strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-quality-list span {
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.admin-quality-list small {
+  grid-column: 1 / -1;
+  color: var(--ink-soft);
+  font-weight: 700;
 }
 
 .admin-empty {
