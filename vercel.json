@@ -31,6 +31,34 @@
   ],
   "rewrites": [
     {
+      "source": "/api/auth/login",
+      "destination": "/api/auth?action=login"
+    },
+    {
+      "source": "/api/auth/logout",
+      "destination": "/api/auth?action=logout"
+    },
+    {
+      "source": "/api/auth/me",
+      "destination": "/api/auth?action=me"
+    },
+    {
+      "source": "/api/auth/password-reset-request",
+      "destination": "/api/auth?action=password-reset-request"
+    },
+    {
+      "source": "/api/auth/password-reset",
+      "destination": "/api/auth?action=password-reset"
+    },
+    {
+      "source": "/api/auth/refresh",
+      "destination": "/api/auth?action=refresh"
+    },
+    {
+      "source": "/api/auth/session",
+      "destination": "/api/auth?action=session"
+    },
+    {
       "source": "/uichan",
       "destination": "/index.html"
     }

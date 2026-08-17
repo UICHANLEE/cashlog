@@ -19,7 +19,7 @@ vi.mock('./profileResponse.js', () => ({
   toProfileResponse: mocks.toProfileResponse,
 }))
 
-import handler from '../../api/auth/session.js'
+import handler from '../../api/auth.js'
 
 const responseMock = () => {
   const response = {
@@ -53,6 +53,7 @@ describe('secure auth session exchange', () => {
       method: 'POST',
       headers: {},
       body: { refreshToken: 'callback-refresh', remember: true },
+      query: { action: 'session' },
       socket: {},
     } as never, response as never)
 
@@ -69,7 +70,13 @@ describe('secure auth session exchange', () => {
 
   it('rejects a missing refresh token before contacting Supabase', async () => {
     const response = responseMock()
-    await handler({ method: 'POST', headers: {}, body: {}, socket: {} } as never, response as never)
+    await handler({
+      method: 'POST',
+      headers: {},
+      body: {},
+      query: { action: 'session' },
+      socket: {},
+    } as never, response as never)
 
     expect(mocks.authRefresh).not.toHaveBeenCalled()
     expect(response.status).toHaveBeenCalledWith(400)
