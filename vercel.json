@@ -9,10 +9,7 @@
     "api/events.ts": {
       "regions": ["icn1"]
     },
-    "api/uichan/events.ts": {
-      "regions": ["icn1"]
-    },
-    "api/uichan/status.ts": {
+    "api/uichan.ts": {
       "regions": ["icn1"]
     }
   },
@@ -57,6 +54,14 @@
     {
       "source": "/api/auth/session",
       "destination": "/api/auth?action=session"
+    },
+    {
+      "source": "/api/uichan/events",
+      "destination": "/api/uichan?action=events"
+    },
+    {
+      "source": "/api/uichan/status",
+      "destination": "/api/uichan?action=status"
     },
     {
       "source": "/uichan",

@@ -224,6 +224,12 @@ npm run dev
 
 CLI로 배포하려면: `npm i -g vercel` 후 프로젝트 루트에서 `vercel` / `vercel --prod`.
 
+Vercel 함수 엔트리포인트는 현재 **8개**입니다. `/api/uichan/events`와
+`/api/uichan/status`는 `api/uichan.ts` 한 함수로 라우팅하며 공개 URL은 그대로
+유지합니다. `npm run build` 전에 함수 수를 자동 검사하므로 `api/` 엔트리포인트가
+12개를 넘으면 배포 빌드가 실패합니다. 새 API를 추가하기 전에는 기존 도메인
+라우터의 `action` 분기로 합칠 수 있는지 먼저 확인합니다.
+
 ## 스크립트
 
 | 명령 | 설명 |
@@ -233,6 +239,7 @@ CLI로 배포하려면: `npm i -g vercel` 후 프로젝트 루트에서 `vercel`
 | `npm run preview` | 빌드 결과 미리보기 |
 | `npm run test` | Vitest 실행 |
 | `npm run lint` | ESLint |
+| `npm run check:vercel-functions` | Vercel 함수 엔트리포인트 12개 이하 검증 |
 
 ## 문서
 

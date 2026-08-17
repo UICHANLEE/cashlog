@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "npm run check:vercel-functions",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test": "vitest run",
+    "check:vercel-functions": "node scripts/check-vercel-functions.mjs",
     "check:product-analyzer": "node scripts/check-product-analyzer.mjs",
     "check:macbook-catai": "bash infra/macbook-catai/verify.sh",
     "preview": "vite preview"
