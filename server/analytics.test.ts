@@ -62,4 +62,41 @@ describe('analytics event normalization', () => {
       events: [{ name: 'page_view' }],
     }, null)).toThrow('사용 로그 세션을 확인하지 못했어요.')
   })
+
+  it('accepts bounded behavior timing fields without accepting free-form labels', () => {
+    const [event] = normalizeAnalyticsBatch({
+      sessionId: '123e4567-e89b-12d3-a456-426614174000',
+      events: [{
+        name: 'action_clicked',
+        path: '/signup.html?invite=private',
+        properties: {
+          scope: 'page',
+          view: 'signup',
+          view_id: '123e4567-e89b-12d3-a456-426614174000',
+          action_id: 'auth.signup.submit',
+          action_type: 'button',
+          action_sequence: 2,
+          time_to_action_ms: 12_345.4,
+          scroll_depth_pct: 140,
+          reason: 'user@example.com clicked this button',
+        },
+      }],
+    }, null)
+
+    expect(event).toMatchObject({
+      event_name: 'action_clicked',
+      path: '/signup.html',
+      properties: {
+        scope: 'page',
+        view: 'signup',
+        view_id: '123e4567-e89b-12d3-a456-426614174000',
+        action_id: 'auth.signup.submit',
+        action_type: 'button',
+        action_sequence: 2,
+        time_to_action_ms: 12_345,
+        scroll_depth_pct: 100,
+      },
+    })
+    expect(event.properties).not.toHaveProperty('reason')
+  })
 })

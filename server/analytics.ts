@@ -6,7 +6,13 @@ import { getAuthUser, serviceRequest } from './auth/supabase.js'
 
 export const ANALYTICS_EVENT_NAMES = [
   'page_view',
+  'page_duration',
   'view_opened',
+  'view_duration',
+  'first_action',
+  'action_clicked',
+  'form_started',
+  'form_submitted',
   'account_panel_opened',
   'auth_started',
   'auth_succeeded',
@@ -53,7 +59,53 @@ const PROPERTY_KEYS = new Set([
   'viewport',
   'connection',
   'authenticated',
+  'scope',
+  'view_id',
+  'action_id',
+  'action_type',
+  'action_sequence',
+  'duration_ms',
+  'total_duration_ms',
+  'time_to_action_ms',
+  'scroll_depth_pct',
+  'reason',
 ])
+
+const TOKEN_PROPERTY_KEYS = new Set([
+  'page',
+  'view',
+  'source',
+  'mode',
+  'provider',
+  'result',
+  'media_type',
+  'analysis_mode',
+  'entry_kind',
+  'story_type',
+  'pet_kind',
+  'action',
+  'status',
+  'error_name',
+  'error_code',
+  'device',
+  'viewport',
+  'connection',
+  'scope',
+  'view_id',
+  'action_id',
+  'action_type',
+  'reason',
+])
+
+const TOKEN_VALUE = /^[a-z0-9/][a-z0-9_.:/-]{0,79}$/i
+const BOOLEAN_PROPERTY_KEYS = new Set(['has_media', 'has_location', 'authenticated'])
+const NUMBER_LIMITS: Record<string, [number, number]> = {
+  action_sequence: [1, 10_000],
+  duration_ms: [0, 86_400_000],
+  total_duration_ms: [0, 86_400_000],
+  time_to_action_ms: [0, 86_400_000],
+  scroll_depth_pct: [0, 100],
+}
 
 export type AnalyticsInput = {
   name?: unknown
@@ -108,11 +160,14 @@ const normalizeProperties = (raw: unknown) => {
   const output: Record<string, string | number | boolean> = {}
   for (const [key, value] of Object.entries(raw).slice(0, 20)) {
     if (!PROPERTY_KEYS.has(key)) continue
-    if (typeof value === 'boolean') output[key] = value
-    else if (typeof value === 'number' && Number.isFinite(value)) {
-      output[key] = Math.max(-1_000_000, Math.min(1_000_000, value))
-    } else if (typeof value === 'string') {
-      output[key] = value.trim().slice(0, 80)
+    if (BOOLEAN_PROPERTY_KEYS.has(key)) {
+      if (typeof value === 'boolean') output[key] = value
+    } else if (key in NUMBER_LIMITS && typeof value === 'number' && Number.isFinite(value)) {
+      const [minimum, maximum] = NUMBER_LIMITS[key] ?? [-1_000_000, 1_000_000]
+      output[key] = Math.round(Math.max(minimum, Math.min(maximum, value)))
+    } else if (TOKEN_PROPERTY_KEYS.has(key) && typeof value === 'string') {
+      const candidate = value.trim().slice(0, 80)
+      if (TOKEN_VALUE.test(candidate)) output[key] = candidate
     }
   }
   return output

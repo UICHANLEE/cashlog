@@ -134,9 +134,9 @@ AUTH_RATE_LIMIT_SALT=long-random-secret
 
 ### 사용자 활동 로그
 
-`/uichan`은 로그인한 관리자만 볼 수 있는 운영 화면입니다. 페이지 방문, 인증, 사진 선택·분석, 기록 저장, 스토리, 캐릭터 상호작용과 클라이언트 오류를 확인할 수 있습니다. 금액, 메모, 사진·영상, 위치, 이메일, 토큰은 제품 로그에 저장하지 않습니다.
+`/uichan`은 로그인한 관리자만 볼 수 있는 운영 화면입니다. 페이지·앱 화면별 체류시간, 첫 행동까지 걸린 시간, 버튼·링크 클릭 순서, 인증, 사진 선택·분석, 기록 저장, 스토리, 캐릭터 상호작용과 클라이언트 오류를 확인할 수 있습니다. 금액, 메모, 사진·영상, 위치, 이메일, 토큰, 입력 내용과 클릭 좌표는 제품 로그에 저장하지 않습니다.
 
-Supabase에서 [`supabase/migrations/202608030001_user_event_logs.sql`](supabase/migrations/202608030001_user_event_logs.sql)을 실행하고 Vercel에 아래 서버 전용 값을 추가한 뒤 재배포합니다.
+Supabase에서 [`supabase/migrations/202608030001_user_event_logs.sql`](supabase/migrations/202608030001_user_event_logs.sql)과 [`supabase/migrations/202608140001_behavior_analytics.sql`](supabase/migrations/202608140001_behavior_analytics.sql)을 순서대로 실행하고 Vercel에 아래 서버 전용 값을 추가한 뒤 재배포합니다.
 
 ```env
 CASHLOG_ADMIN_EMAILS=owner@example.com

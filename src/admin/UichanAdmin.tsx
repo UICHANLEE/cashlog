@@ -38,8 +38,24 @@ type EventSummary = {
   activeSessions24h?: number
   signedInUsers7d?: number
   clientErrors24h?: number
+  avgDwellMs24h?: number
+  engagedViews24h?: number
+  avgFirstActionMs24h?: number
+  actionClicks24h?: number
   topEvents7d?: Array<{ name: string; count: number }>
   topPaths7d?: Array<{ path: string; count: number }>
+  engagement7d?: Array<{
+    scope: 'page' | 'view'
+    path: string
+    view: string
+    views: number
+    completedViews: number
+    avgDwellMs: number
+    avgScrollDepthPct: number
+    firstActionRate: number
+    avgFirstActionMs: number
+  }>
+  topActions7d?: Array<{ actionId: string; count: number; avgTimeToActionMs: number }>
 }
 
 type UserEvent = {
@@ -67,7 +83,13 @@ type Period = '24h' | '7d' | '30d' | 'all'
 
 const eventLabels: Record<string, string> = {
   page_view: '페이지 방문',
+  page_duration: '페이지 체류',
   view_opened: '앱 화면 이동',
+  view_duration: '앱 화면 체류',
+  first_action: '첫 행동',
+  action_clicked: '버튼·링크 클릭',
+  form_started: '폼 입력 시작',
+  form_submitted: '폼 제출',
   account_panel_opened: '계정 메뉴 열기',
   auth_started: '인증 시작',
   auth_succeeded: '인증 성공',
@@ -112,6 +134,33 @@ const formatEventTime = (raw: string) => {
     minute: '2-digit',
     second: '2-digit',
   }).format(date)
+}
+
+const formatDuration = (milliseconds?: number) => {
+  const value = Math.max(0, Number(milliseconds) || 0)
+  if (value < 1_000) return `${Math.round(value)}ms`
+  if (value < 60_000) return `${(value / 1_000).toFixed(value < 10_000 ? 1 : 0)}초`
+  const minutes = Math.floor(value / 60_000)
+  const seconds = Math.round(value % 60_000 / 1_000)
+  return `${minutes}분 ${seconds}초`
+}
+
+const propertyLabels: Record<string, string> = {
+  action_id: '행동',
+  action_sequence: '순서',
+  action_type: '유형',
+  duration_ms: '구간 체류',
+  total_duration_ms: '누적 체류',
+  time_to_action_ms: '화면 진입 후',
+  scroll_depth_pct: '스크롤',
+  view: '화면',
+  reason: '종료 이유',
+}
+
+const formatProperty = (key: string, value: string | number | boolean) => {
+  if (key.endsWith('_ms') && typeof value === 'number') return formatDuration(value)
+  if (key === 'scroll_depth_pct') return `${value}%`
+  return String(value)
 }
 
 const sinceFor = (period: Period) => {
@@ -163,16 +212,18 @@ function MetricCard({
   value,
   detail,
   tone,
+  valueLabel,
 }: {
   label: string
   value: number
   detail: string
   tone: 'mint' | 'sun' | 'coral' | 'sky'
+  valueLabel?: string
 }) {
   return (
     <article className={`admin-metric-card tone-${tone}`}>
       <span>{label}</span>
-      <strong>{value.toLocaleString('ko-KR')}</strong>
+      <strong>{valueLabel ?? value.toLocaleString('ko-KR')}</strong>
       <small>{detail}</small>
     </article>
   )
@@ -245,6 +296,7 @@ export function UichanAdmin() {
     Boolean(status?.cashlog?.productAnalyzerConfigured) &&
     analyzerOk
   const topEventMax = Math.max(1, ...(summary.topEvents7d ?? []).map((item) => item.count))
+  const topActionMax = Math.max(1, ...(summary.topActions7d ?? []).map((item) => item.count))
 
   if (access !== 'allowed' && !loading) {
     const needsLogin = access === 'login'
@@ -305,6 +357,13 @@ export function UichanAdmin() {
         <MetricCard label="클라이언트 오류" value={summary.clientErrors24h ?? 0} detail="최근 24시간" tone="coral" />
       </section>
 
+      <section className="admin-metrics admin-behavior-metrics" aria-label="행동 분석 요약">
+        <MetricCard label="평균 화면 체류" value={summary.avgDwellMs24h ?? 0} valueLabel={formatDuration(summary.avgDwellMs24h)} detail="실제로 화면이 보인 시간" tone="sky" />
+        <MetricCard label="첫 행동까지" value={summary.avgFirstActionMs24h ?? 0} valueLabel={formatDuration(summary.avgFirstActionMs24h)} detail="화면 진입 후 평균" tone="sun" />
+        <MetricCard label="버튼·링크 클릭" value={summary.actionClicks24h ?? 0} detail="최근 24시간" tone="mint" />
+        <MetricCard label="측정 완료 화면" value={summary.engagedViews24h ?? 0} detail="최근 24시간" tone="coral" />
+      </section>
+
       <section className="admin-grid" aria-label="연결 상태">
         <article className="admin-card">
           <div className="section-heading">
@@ -315,6 +374,52 @@ export function UichanAdmin() {
           <AdminRow label="분석 파이프라인" value={pipeline} ok={pipeline === 'product'} />
           <AdminRow label="이미지 API 경로" value={imageApiUrl} ok={imageApiUrl.includes('/api/analyze-image')} />
           <AdminRow label="Supabase 공개 설정" value={supabaseConfig ? supabaseConfig.url : '미설정'} ok={Boolean(supabaseConfig)} />
+        </article>
+
+        <article className="admin-card admin-card-wide admin-engagement-card">
+          <div className="section-heading">
+            <p className="eyebrow">Engagement</p>
+            <h2>화면별 체류와 첫 행동</h2>
+            <p>브라우저에서 실제로 화면이 보인 시간만 합산합니다.</p>
+          </div>
+          <div className="admin-engagement-table" role="table" aria-label="최근 7일 화면별 행동 지표">
+            <div className="admin-engagement-head" role="row">
+              <span role="columnheader">화면</span>
+              <span role="columnheader">방문</span>
+              <span role="columnheader">평균 체류</span>
+              <span role="columnheader">첫 행동률</span>
+              <span role="columnheader">첫 행동까지</span>
+              <span role="columnheader">스크롤</span>
+            </div>
+            {(summary.engagement7d ?? []).map((item) => (
+              <div className="admin-engagement-row" role="row" key={`${item.scope}:${item.path}:${item.view}`}>
+                <strong role="cell"><small>{item.scope === 'page' ? '페이지' : '앱 화면'}</small>{item.view}<em>{item.path}</em></strong>
+                <span role="cell">{item.views.toLocaleString('ko-KR')}<small>완료 {item.completedViews}</small></span>
+                <span role="cell">{formatDuration(item.avgDwellMs)}</span>
+                <span role="cell">{Number(item.firstActionRate).toFixed(1)}%</span>
+                <span role="cell">{formatDuration(item.avgFirstActionMs)}</span>
+                <span role="cell">{item.avgScrollDepthPct}%</span>
+              </div>
+            ))}
+            {(summary.engagement7d ?? []).length === 0 && <p className="admin-empty">화면 체류 데이터가 쌓이면 여기에 표시됩니다.</p>}
+          </div>
+        </article>
+
+        <article className="admin-card">
+          <div className="section-heading">
+            <p className="eyebrow">Top actions</p>
+            <h2>많이 누른 버튼</h2>
+          </div>
+          <div className="admin-breakdown admin-action-breakdown">
+            {(summary.topActions7d ?? []).map((item) => (
+              <div key={item.actionId}>
+                <span title={item.actionId}>{item.actionId}</span>
+                <i aria-hidden><b style={{ width: `${Math.max(4, item.count / topActionMax * 100)}%` }} /></i>
+                <strong>{item.count.toLocaleString('ko-KR')}<small>{formatDuration(item.avgTimeToActionMs)}</small></strong>
+              </div>
+            ))}
+            {(summary.topActions7d ?? []).length === 0 && <p className="admin-empty">아직 버튼 클릭이 없어요.</p>}
+          </div>
         </article>
 
         <article className="admin-card">
@@ -398,7 +503,7 @@ export function UichanAdmin() {
                   {event.userId ? <><UserRoundCheck size={14} aria-hidden />계정 {event.userId.slice(0, 8)}</> : <>익명 {event.sessionId}</>}
                 </div>
                 <div className="admin-event-properties">
-                  {Object.entries(event.properties).map(([key, value]) => <span key={key}>{key}: {String(value)}</span>)}
+                  {Object.entries(event.properties).map(([key, value]) => <span key={key}>{propertyLabels[key] ?? key}: {formatProperty(key, value)}</span>)}
                   {Object.keys(event.properties).length === 0 && <span>추가 속성 없음</span>}
                 </div>
               </article>

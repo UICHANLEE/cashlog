@@ -110,6 +110,7 @@ import { createLocalMediaStore } from './services/localMediaStore'
 import {
   isAnalyticsEnabled,
   setAnalyticsEnabled,
+  setAnalyticsView,
   trackEvent,
 } from './services/analytics'
 import { signalSoftImpact } from './motion/haptics'
@@ -148,6 +149,12 @@ type ExpenseFormChange = <K extends keyof ExpenseForm>(
 
 const STORAGE_KEY = 'cashlog.expenses'
 const PET_STORAGE_KEY = 'cashlog.pet'
+const calendarAmountFormatter = new Intl.NumberFormat('ko-KR', {
+  notation: 'compact',
+  maximumFractionDigits: 1,
+})
+
+const formatCalendarAmount = (amount: number) => calendarAmountFormatter.format(amount)
 
 const todayIsoDate = () => new Date().toISOString().slice(0, 10)
 
@@ -307,7 +314,7 @@ function CashlogApp() {
   }, [])
 
   useEffect(() => {
-    trackEvent('view_opened', { view: activeView })
+    setAnalyticsView(activeView)
   }, [activeView])
 
   const stopCamera = useCallback(() => {
@@ -1651,6 +1658,7 @@ function CashlogApp() {
         <button
           type="button"
           className={`icon-button account-trigger${showAccount ? ' is-open' : ''}`}
+          data-analytics-action="account.toggle"
           aria-label={showAccount ? '계정 메뉴 닫기' : '계정 메뉴 열기'}
           onClick={() => setShowAccount((open) => {
             if (!open) trackEvent('account_panel_opened', { authenticated: Boolean(session) })
@@ -1670,6 +1678,7 @@ function CashlogApp() {
         <button
           type="button"
           className="daily-story-button"
+          data-analytics-action="story.day.open"
           disabled={dayStorySlides.length === 0}
           aria-disabled={dayStorySlides.length === 0}
           aria-describedby={dayStorySlides.length === 0 ? 'day-story-lock-hint' : undefined}
@@ -1733,19 +1742,19 @@ function CashlogApp() {
                 끄면 위치 권한을 요청하거나 새 위치를 저장하지 않습니다. 언제든 다시 변경할 수 있어요.
               </p>
               <div className="account-actions">
-                <button type="button" className="ghost-button" onClick={syncWithCloud}>지금 동기화</button>
+                <button type="button" className="ghost-button" data-analytics-action="account.sync" onClick={syncWithCloud}>지금 동기화</button>
                 <a className="ghost-button" href="/profile.html">프로필 관리</a>
-                <button type="button" className="ghost-button" onClick={handleSignOut}>로그아웃</button>
+                <button type="button" className="ghost-button" data-analytics-action="auth.logout" onClick={handleSignOut}>로그아웃</button>
               </div>
             </>
             ) : (
-              <form className="account-form" onSubmit={handleAuthSubmit}>
+              <form className="account-form" data-analytics-form={`auth.${authMode}`} onSubmit={handleAuthSubmit}>
                 <div className="social-login-buttons" aria-label="간편 로그인">
-                  <button type="button" className="social-login google" onClick={() => handleSocialLogin('google')}>
+                  <button type="button" className="social-login google" data-analytics-action="auth.google" onClick={() => handleSocialLogin('google')}>
                     <span className="social-mark google-mark" aria-hidden>G</span>
                     Google로 계속하기
                   </button>
-                  <button type="button" className="social-login kakao" onClick={() => handleSocialLogin('kakao')}>
+                  <button type="button" className="social-login kakao" data-analytics-action="auth.kakao" onClick={() => handleSocialLogin('kakao')}>
                     <span className="social-mark kakao-mark" aria-hidden>톡</span>
                     카카오로 계속하기
                   </button>
@@ -1848,7 +1857,7 @@ function CashlogApp() {
                     <p className="consent-note consent-protection">선택하지 않으면 위치 권한을 요청하거나 위치를 수집·전송·저장하지 않습니다. 동의해도 기기 권한을 별도로 허용해야 하며, 계정 메뉴에서 언제든 철회할 수 있습니다.</p>
                   </fieldset>
                 )}
-                <button type="submit">{authMode === 'signUp' ? '가입하고 시작' : authMode === 'magic' ? '메일 링크 받기' : '로그인'}</button>
+                <button type="submit" data-analytics-action={`auth.${authMode}.submit`}>{authMode === 'signUp' ? '가입하고 시작' : authMode === 'magic' ? '메일 링크 받기' : '로그인'}</button>
               </form>
             )}
           <label className="account-location-setting account-analytics-setting">
@@ -1858,12 +1867,13 @@ function CashlogApp() {
               onChange={(event) => {
                 const enabled = event.target.checked
                 setAnalyticsEnabled(enabled)
+                if (enabled) setAnalyticsView(activeView)
                 setAnalyticsEnabledState(isAnalyticsEnabled())
               }}
             />
             <span>
               <strong>사용성 로그</strong>
-              <small>금액·메모·사진·위치 없이 기능 이용과 오류를 보내요. 로그인 중에는 계정과 연결될 수 있어요.</small>
+              <small>입력 내용 없이 화면 체류시간, 버튼 이용과 오류를 보내요. 로그인 중에는 계정과 연결될 수 있어요.</small>
             </span>
           </label>
           {authMessage && <small className="account-message">{authMessage}</small>}
@@ -1947,6 +1957,7 @@ function CashlogApp() {
               <button
                 type="button"
                 className="ghost-button story-launch-btn"
+                data-analytics-action="story.month.open"
                 disabled={monthStorySlides.length === 0}
                 aria-disabled={monthStorySlides.length === 0}
                 aria-describedby={monthStorySlides.length === 0 ? 'month-story-lock-hint' : undefined}
@@ -1974,7 +1985,14 @@ function CashlogApp() {
                 const dayExpenses = getExpensesForDate(expenses, day.isoDate)
                 const spent = dayExpenseTotal(dayExpenses)
                 const earned = dayIncomeTotal(dayExpenses)
-                const hasPhoto = dayExpenses.some((expense) => expense.source === 'photo')
+                const dayPhotos = dayExpenses.filter((expense) => Boolean(expense.imageUrl?.trim()))
+                const coverPhoto = dayPhotos[dayPhotos.length - 1]
+                const dayLabel = [
+                  day.isoDate,
+                  dayPhotos.length > 0 ? `사진 ${dayPhotos.length}장` : '사진 없음',
+                  spent > 0 ? `지출 ${formatCurrency(spent)}` : '',
+                  earned > 0 ? `수입 ${formatCurrency(earned)}` : '',
+                ].filter(Boolean).join(', ')
 
                 return (
                   <button
@@ -1982,19 +2000,47 @@ function CashlogApp() {
                     key={day.isoDate}
                     className={[
                       'calendar-day',
+                      coverPhoto ? 'has-photo' : '',
                       day.inCurrentMonth ? '' : 'muted',
                       day.isoDate === selectedDate ? 'selected' : '',
                     ].join(' ')}
+                    aria-label={dayLabel}
+                    data-analytics-action="calendar.day.select"
                     onClick={() => setSelectedDate(day.isoDate)}
                   >
-                    <span>{day.day}</span>
-                    <span className="calendar-day-money">
-                      {spent > 0 && <strong>{formatCurrency(spent)}</strong>}
-                      {earned > 0 && (
-                        <small className="calendar-day-income">수입 {formatCurrency(earned)}</small>
+                    {coverPhoto?.imageUrl && (
+                      <img
+                        className="calendar-day-cover"
+                        src={coverPhoto.imageUrl}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    )}
+                    {coverPhoto && <span className="calendar-day-shade" aria-hidden="true" />}
+                    <span className="calendar-day-content">
+                      <span className="calendar-day-date">{day.day}</span>
+                      <span className="calendar-day-money">
+                        {spent > 0 && (
+                          <strong title={`지출 ${formatCurrency(spent)}`}>
+                            {formatCalendarAmount(spent)}
+                          </strong>
+                        )}
+                        {earned > 0 && (
+                          <small
+                            className="calendar-day-income"
+                            title={`수입 ${formatCurrency(earned)}`}
+                          >
+                            +{formatCalendarAmount(earned)}
+                          </small>
+                        )}
+                      </span>
+                      {dayPhotos.length > 1 && (
+                        <small className="calendar-day-photo" aria-hidden="true">
+                          +{dayPhotos.length - 1}
+                        </small>
                       )}
                     </span>
-                    {hasPhoto && <small className="calendar-day-photo">사진 로그</small>}
                   </button>
                 )
               })}
@@ -2109,7 +2155,7 @@ function CashlogApp() {
           </div>
 
           <div className="capture-dock" aria-label="빠른 기록">
-            <button type="button" className="capture-primary" onClick={openPhotoCapture} aria-label={isFirstSession ? '가입 없이 3초 만에 영수증 기록하기' : '카메라로 영수증 기록하기'}>
+            <button type="button" className="capture-primary" data-analytics-action="record.camera.primary" onClick={openPhotoCapture} aria-label={isFirstSession ? '가입 없이 3초 만에 영수증 기록하기' : '카메라로 영수증 기록하기'}>
               <span className="camera-shutter" aria-hidden>
                 <Camera size={31} strokeWidth={2.2} />
               </span>
@@ -2119,13 +2165,13 @@ function CashlogApp() {
               </span>
             </button>
             <div className="capture-alternatives">
-              <label className="dock-secondary" title="사진 보관함">
+              <label className="dock-secondary" title="사진 보관함" data-analytics-action="record.gallery.primary">
                 <ImageIcon size={18} aria-hidden />
                 <span>앨범에서 고르기</span>
                 <input type="file" accept="image/*" onChange={handleGalleryPick} aria-label="갤러리에서 사진 선택" />
               </label>
               <span aria-hidden>·</span>
-              <button type="button" className="dock-secondary" onClick={openManual} aria-label="직접 입력">
+              <button type="button" className="dock-secondary" data-analytics-action="record.manual.primary" onClick={openManual} aria-label="직접 입력">
                 <Pencil size={18} aria-hidden />
                 <span>직접 입력</span>
               </button>
@@ -2141,6 +2187,7 @@ function CashlogApp() {
         <motion.button
           type="button"
           className={activeView === 'diary' ? 'active' : ''}
+          data-analytics-action="nav.diary"
           aria-label="하루 타임라인"
           aria-pressed={activeView === 'diary'}
           onClick={() => navigateToView('diary')}
@@ -2152,6 +2199,7 @@ function CashlogApp() {
         <motion.button
           type="button"
           className={activeView === 'calendar' ? 'active' : ''}
+          data-analytics-action="nav.calendar"
           aria-label="달력"
           aria-pressed={activeView === 'calendar'}
           onClick={() => navigateToView('calendar')}
@@ -2163,6 +2211,7 @@ function CashlogApp() {
         <motion.button
           type="button"
           className={activeView === 'pets' ? 'active' : ''}
+          data-analytics-action="nav.pets"
           aria-label={selectedPetName}
           aria-pressed={activeView === 'pets'}
           onClick={() => navigateToView('pets')}
@@ -2222,6 +2271,7 @@ function CashlogApp() {
               <button
                 type="button"
                 className="icon-button"
+                data-analytics-action="record.sheet.close"
                 aria-label="기록 창 닫기"
                 onClick={closeAddSheet}
               >
@@ -2235,6 +2285,7 @@ function CashlogApp() {
                 <button
                   type="button"
                   className="choice-card"
+                  data-analytics-action="record.camera.choice"
                   aria-label="카메라로 촬영"
                   onClick={() => setAddMode('photo')}
                 >
@@ -2245,6 +2296,7 @@ function CashlogApp() {
                 <button
                   type="button"
                   className="choice-card"
+                  data-analytics-action="record.manual.choice"
                   aria-label="직접 입력"
                   onClick={openManual}
                 >
@@ -2278,11 +2330,11 @@ function CashlogApp() {
                       </button>
                     </div>
                     <div className="photo-source-row" role="group" aria-label="미디어 가져오기">
-                      <button type="button" className="camera-start-button" onClick={startCamera}>
+                      <button type="button" className="camera-start-button" data-analytics-action="record.camera.start" onClick={startCamera}>
                         <Camera size={20} aria-hidden />
                         {captureKind === 'video' ? '카메라로 녹화' : '카메라 촬영'}
                       </button>
-                      <label className="file-picker file-picker-inline">
+                      <label className="file-picker file-picker-inline" data-analytics-action="record.gallery.sheet">
                         <ImageIcon size={20} aria-hidden /> 갤러리에서 선택
                         <input
                           type="file"

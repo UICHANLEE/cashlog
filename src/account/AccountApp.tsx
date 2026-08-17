@@ -250,14 +250,14 @@ const SignupPage = () => {
     }
   }
   return <AccountShell eyebrow="NEW CASHLOGGER" title="내 기록을 오래 간직해요">
-    <form ref={formRef} className="account-form-page" onSubmit={submit} noValidate>
+    <form ref={formRef} className="account-form-page" data-analytics-form="auth.signup" onSubmit={submit} noValidate>
       <label className="consent-master">
         <input type="checkbox" checked={allRequiredConsents} onChange={(event) => setAllRequiredConsents(event.target.checked)} />
         <span><strong>필수 항목 모두 동의</strong><small>위치는 선택이며 포함되지 않아요.</small></span>
       </label>
       <div className="account-social-buttons" aria-label="간편 회원가입">
-        <button type="button" className="account-social google" onClick={() => startSocialSignup('google')}><span aria-hidden>G</span>Google로 계속하기</button>
-        <button type="button" className="account-social kakao" onClick={() => startSocialSignup('kakao')}><span aria-hidden>톡</span>카카오로 계속하기</button>
+        <button type="button" className="account-social google" data-analytics-action="auth.signup.google" onClick={() => startSocialSignup('google')}><span aria-hidden>G</span>Google로 계속하기</button>
+        <button type="button" className="account-social kakao" data-analytics-action="auth.signup.kakao" onClick={() => startSocialSignup('kakao')}><span aria-hidden>톡</span>카카오로 계속하기</button>
       </div>
       <div className="account-divider"><span>또는 이메일로 가입</span></div>
       <div className="form-field"><label htmlFor="signup-nickname">닉네임</label><input id="signup-nickname" name="nickname" required value={values.nickname} maxLength={30} autoComplete="nickname" onChange={(event) => setValues({ ...values, nickname: event.target.value })} aria-invalid={Boolean(errors.nickname)} aria-describedby={errors.nickname ? 'signup-nickname-error' : undefined} /><FieldError id="signup-nickname-error" message={errors.nickname} /></div>
@@ -280,7 +280,7 @@ const SignupPage = () => {
         <p className="consent-protection">선택 동의를 하지 않으면 위치 권한을 요청하거나 위치를 수집하지 않습니다. 사진과 위치는 다른 사용자에게 공개하거나 판매하지 않으며, 위치 동의는 계정 메뉴에서 언제든 철회할 수 있습니다.</p>
       </div>
       {message && <p className="form-message error" role="alert">{message}</p>}
-      <button className="primary-submit" disabled={loading}>{loading ? <><LoaderCircle className="spin" size={19} aria-hidden /> 계정 만드는 중</> : '가입하고 기록 시작'}</button>
+      <button className="primary-submit" data-analytics-action="auth.signup.submit" disabled={loading}>{loading ? <><LoaderCircle className="spin" size={19} aria-hidden /> 계정 만드는 중</> : '가입하고 기록 시작'}</button>
       <p className="form-switch">이미 계정이 있나요? <a href="/login.html">로그인</a></p>
     </form>
   </AccountShell>
@@ -319,13 +319,13 @@ const LoginPage = () => {
     }
   }
   return <AccountShell eyebrow="WELCOME BACK" title="오늘의 소비도 같이 적어요">
-    <form ref={formRef} className="account-form-page login-form" onSubmit={submit} noValidate>
+    <form ref={formRef} className="account-form-page login-form" data-analytics-form="auth.login" onSubmit={submit} noValidate>
       {message && <p className="form-message success" role="status"><ShieldCheck size={18} aria-hidden />{message}</p>}
       <div className="form-field"><label htmlFor="login-email">이메일</label><input id="login-email" name="email" required type="email" value={email} autoComplete="email" onChange={(event) => setEmail(event.target.value)} aria-invalid={Boolean(errors.email)} aria-describedby={errors.email ? 'login-email-error' : undefined} /><FieldError id="login-email-error" message={errors.email} /></div>
       <PasswordInput id="login-password" label="비밀번호" value={password} onChange={setPassword} autoComplete="current-password" error={errors.password} />
       <div className="login-options"><label className="remember-row"><input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} /><span>로그인 상태 유지</span></label><a href="/forgot-password.html">비밀번호 재설정</a></div>
       {errors.form && <p className="form-message error" role="alert">{errors.form}</p>}
-      <button className="primary-submit" disabled={loading}>{loading ? <><LoaderCircle className="spin" size={19} aria-hidden /> 로그인 중</> : '로그인'}</button>
+      <button className="primary-submit" data-analytics-action="auth.login.submit" disabled={loading}>{loading ? <><LoaderCircle className="spin" size={19} aria-hidden /> 로그인 중</> : '로그인'}</button>
       <p className="form-switch">처음 오셨나요? <a href="/signup.html">회원가입</a></p>
     </form>
   </AccountShell>
@@ -361,11 +361,11 @@ const ForgotPasswordPage = () => {
     }
   }
   return <AccountShell eyebrow="ACCOUNT RECOVERY" title="비밀번호를 다시 만들어요">
-    <form ref={formRef} className="account-form-page login-form" onSubmit={submit} noValidate>
+    <form ref={formRef} className="account-form-page login-form" data-analytics-form="auth.password_reset_request" onSubmit={submit} noValidate>
       <p className="account-helper">가입한 이메일을 입력하면 재설정 링크를 보내드려요. 가입 여부는 보안을 위해 같은 문구로 안내합니다.</p>
       <div className="form-field"><label htmlFor="forgot-email">이메일</label><input id="forgot-email" name="email" required type="email" value={email} autoComplete="email" onChange={(event) => setEmail(event.target.value)} aria-invalid={Boolean(error)} aria-describedby={error ? 'forgot-email-error' : undefined} /><FieldError id="forgot-email-error" message={error} /></div>
       {message && <p className="form-message success" role="status"><ShieldCheck size={18} aria-hidden />{message}</p>}
-      <button className="primary-submit" disabled={loading}>{loading ? <><LoaderCircle className="spin" size={19} aria-hidden /> 메일 보내는 중</> : '재설정 링크 받기'}</button>
+      <button className="primary-submit" data-analytics-action="auth.password_reset_request.submit" disabled={loading}>{loading ? <><LoaderCircle className="spin" size={19} aria-hidden /> 메일 보내는 중</> : '재설정 링크 받기'}</button>
       <p className="form-switch"><a href="/login.html">로그인으로 돌아가기</a></p>
     </form>
   </AccountShell>
@@ -411,13 +411,13 @@ const ResetPasswordPage = () => {
   }
   return <AccountShell eyebrow="ACCOUNT RECOVERY" title="새 비밀번호를 정해요">
     {!accessToken ? <div className="account-state" role="alert"><KeyRound size={34} aria-hidden /><h2>재설정 링크를 확인해 주세요</h2><p>링크가 만료됐거나 올바르지 않아요. 새 링크를 요청해 주세요.</p><a className="primary-link" href="/forgot-password.html">재설정 링크 다시 받기</a></div> :
-      <form ref={formRef} className="account-form-page login-form" onSubmit={submit} noValidate>
+      <form ref={formRef} className="account-form-page login-form" data-analytics-form="auth.password_reset" onSubmit={submit} noValidate>
         <PasswordInput id="reset-password" label="새 비밀번호" value={password} onChange={setPassword} autoComplete="new-password" error={errors.password} />
         <div className="password-rules" aria-live="polite"><span className={checks.length ? 'pass' : ''}><Check size={13} aria-hidden />8자 이상</span><span className={checks.groups ? 'pass' : ''}><Check size={13} aria-hidden />문자 종류 2개</span></div>
         <PasswordInput id="reset-password-confirm" label="새 비밀번호 확인" value={passwordConfirm} onChange={setPasswordConfirm} autoComplete="new-password" error={errors.passwordConfirm} />
         {errors.form && <p className="form-message error" role="alert">{errors.form}</p>}
         {message && <p className="form-message success" role="status"><ShieldCheck size={18} aria-hidden />{message}</p>}
-        {message ? <a className="primary-link" href="/login.html">새 비밀번호로 로그인</a> : <button className="primary-submit" disabled={loading}>{loading ? '변경하는 중' : '비밀번호 변경'}</button>}
+        {message ? <a className="primary-link" href="/login.html">새 비밀번호로 로그인</a> : <button className="primary-submit" data-analytics-action="auth.password_reset.submit" disabled={loading}>{loading ? '변경하는 중' : '비밀번호 변경'}</button>}
       </form>}
   </AccountShell>
 }
@@ -538,11 +538,11 @@ const ProfilePage = () => {
   if (loadError || !user) return <AccountShell eyebrow="MY CASHLOG" title="프로필을 불러오지 못했어요"><div className="account-state" role="alert"><RefreshCw size={34} aria-hidden /><p>{loadError || '프로필 정보가 비어 있어요.'}</p><button className="secondary-submit" onClick={() => { setLoading(true); setLoadError(''); setLoadAttempt((current) => current + 1) }}>다시 시도</button><a href="/login.html">로그인으로 이동</a></div></AccountShell>
   return <AccountShell eyebrow="MY CASHLOG" title={`${user.nickname}님의 기록 보관함`}>
     <div className="profile-summary"><div className="profile-avatar">{imageUrl ? <img src={imageUrl} alt={`${user.nickname} 프로필`} onError={() => setImageFailed(true)} /> : <UserRound size={42} aria-hidden />}</div><div><strong>{user.nickname}</strong><span>{user.email}</span><small>{new Intl.DateTimeFormat('ko-KR', { dateStyle: 'long' }).format(new Date(user.createdAt))} 가입 · {user.status === 'ACTIVE' ? '정상' : user.status}</small></div></div>
-    <form className="account-form-page profile-form" onSubmit={save} noValidate>
+    <form className="account-form-page profile-form" data-analytics-form="profile.update" onSubmit={save} noValidate>
       <AvatarPicker preview={imageUrl} onFile={chooseImage} onRemove={() => { setFile(null); setPreview(''); setRemoveImage(true); setImageFailed(false) }} />
       <div className="form-field"><label htmlFor="profile-nickname">닉네임</label><input id="profile-nickname" name="nickname" required value={nickname} maxLength={30} autoComplete="nickname" onChange={(event) => setNickname(event.target.value)} aria-invalid={Boolean(error && validateNicknameInput(nickname))} /></div>
       {message && <p className="form-message success" role="status">{message}</p>}{error && <p className="form-message error" role="alert">{error}</p>}
-      <button className="primary-submit" disabled={saving}>{saving ? '저장하는 중' : '프로필 저장'}</button>
+      <button className="primary-submit" data-analytics-action="profile.update.submit" disabled={saving}>{saving ? '저장하는 중' : '프로필 저장'}</button>
     </form>
     <form className="password-change" onSubmit={passwordSubmit} noValidate><h2>비밀번호 바꾸기</h2><PasswordInput id="new-password" label="새 비밀번호" value={password} onChange={setPassword} autoComplete="new-password" error={passwordErrors.password} /><PasswordInput id="new-password-confirm" label="새 비밀번호 확인" value={passwordConfirm} onChange={setPasswordConfirm} autoComplete="new-password" error={passwordErrors.passwordConfirm} />{passwordErrors.form && <p className="form-message error" role="alert">{passwordErrors.form}</p>}<button className="secondary-submit" disabled={passwordSaving}>{passwordSaving ? '변경하는 중' : '비밀번호 변경'}</button></form>
     <div className="danger-actions"><button disabled={Boolean(accountAction)} onClick={() => void handleLogout()}><LogOut size={17} aria-hidden />{accountAction === 'logout' ? '로그아웃 중' : '로그아웃'}</button><button disabled={Boolean(accountAction)} onClick={() => void handleDelete()}><Trash2 size={17} aria-hidden />{accountAction === 'delete' ? '탈퇴 처리 중' : '회원탈퇴'}</button></div>

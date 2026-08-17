@@ -194,6 +194,58 @@ describe('Cashlog photo MVP', () => {
     expect(await screen.findByRole('dialog', { name: /월 기록/ })).toBeInTheDocument()
   })
 
+  it('fills a recorded calendar day with its latest photo and photo count', async () => {
+    const user = userEvent.setup()
+    const now = new Date()
+    const localDate = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, '0'),
+      String(now.getDate()).padStart(2, '0'),
+    ].join('-')
+    const firstPhoto = createExpenseFromAnalysis({
+      analysis: {
+        suggestedAmount: 4800,
+        suggestedCategory: 'meal_cafe',
+        suggestedTitle: '아침 카페',
+        suggestedMemo: '',
+        confidence: 0.9,
+        rawText: '',
+      },
+      imageUrl: 'https://cdn.example.com/morning.webp',
+      dateTime: `${localDate}T01:00:00.000Z`,
+    })
+    const latestPhoto = createExpenseFromAnalysis({
+      analysis: {
+        suggestedAmount: 9200,
+        suggestedCategory: 'meal_dining',
+        suggestedTitle: '저녁 식사',
+        suggestedMemo: '',
+        confidence: 0.92,
+        rawText: '',
+      },
+      imageUrl: 'https://cdn.example.com/evening.webp',
+      dateTime: `${localDate}T12:00:00.000Z`,
+    })
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([
+      { ...firstPhoto, localDate },
+      { ...latestPhoto, localDate },
+    ]))
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '달력' }))
+
+    const day = await screen.findByRole('button', {
+      name: new RegExp(`${localDate}, 사진 2장, 지출 14,000원`),
+    })
+    expect(day).toHaveClass('has-photo')
+    expect(within(day).getByText('+1')).toBeInTheDocument()
+    expect(within(day).getByText('1.4만')).toBeInTheDocument()
+    expect(day.querySelector('.calendar-day-cover')).toHaveAttribute(
+      'src',
+      'https://cdn.example.com/evening.webp',
+    )
+  })
+
   it('renders a real 404 for an unknown address', () => {
     history.replaceState(null, '', '/definitely-not-a-cashlog-page')
     render(<App />)
