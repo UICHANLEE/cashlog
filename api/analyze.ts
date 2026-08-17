@@ -1,6 +1,6 @@
 /**
  * Vercel Serverless — compact Vision/OCR analyzer
- * 영수증·결제 화면·사진/영상 포스터 프레임 → 지출 추천 JSON
+ * 소비 사진·영수증·결제 화면·영상 포스터 프레임 → 지출 추천 JSON
  *
  * 클라이언트는 여기로 base64만 보냄. API 키는 Vercel 환경변수 OPENAI_API_KEY.
  *
@@ -147,8 +147,8 @@ async function visionToAnalysis(
   const { apiBase, model, engine } = modelConfig
 
   const leafList = ALLOWED_LEAF_IDS.join(', ')
-  const system = `당신은 한국 가계부 앱 Cashlog 의 영수증 분석기입니다.
-이미지에서 총 지출 금액(숫자)과 가장 맞는 지출 카테고리를 추론합니다.
+  const system = `당신은 한국 가계부 앱 Cashlog 의 소비 사진 분석기입니다.
+사진 속 피사체·장소·텍스트·결제 정보를 바탕으로 총 지출 금액(숫자)과 가장 맞는 지출 카테고리를 추론합니다.
 반드시 JSON 한 객체만 출력하세요. 코드펜스·설명 금지.
 
 필수 키:

@@ -29,7 +29,7 @@ describe('Cashlog photo MVP', () => {
 
     expect(screen.getByRole('button', { name: /하루 스토리/i })).toBeDisabled()
     expect(screen.getByText('선택한 날짜에 기록을 하나 남기면 하루 스토리가 열려요.')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /영수증 찍으면/ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /사진으로 남기면/ })).toBeInTheDocument()
     expect(screen.queryByText('총 지출 0원')).not.toBeInTheDocument()
     expect(screen.getByText('로그인')).toBeInTheDocument()
   })
@@ -257,7 +257,7 @@ describe('Cashlog photo MVP', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: '가입 없이 3초 만에 영수증 기록하기' }))
+    await user.click(screen.getByRole('button', { name: '가입 없이 3초 만에 사진으로 기록하기' }))
 
     expect(screen.getByRole('heading', { name: '사진으로 기록' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '카메라 촬영' })).toBeInTheDocument()
@@ -279,7 +279,7 @@ describe('Cashlog photo MVP', () => {
     })
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: '가입 없이 3초 만에 영수증 기록하기' }))
+    await user.click(screen.getByRole('button', { name: '가입 없이 3초 만에 사진으로 기록하기' }))
 
     expect(await screen.findByRole('heading', { name: '장면 촬영' })).toBeInTheDocument()
     expect(document.querySelector('.add-sheet')).toHaveClass('is-camera-live')

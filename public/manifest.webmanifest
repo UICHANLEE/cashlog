@@ -1,7 +1,7 @@
 {
   "name": "Cashlog - 캐릭터와 함께 쓰는 사진 가계부",
   "short_name": "Cashlog",
-  "description": "영수증 사진으로 소비를 기록하고 캐릭터와 함께 하루와 한 달을 돌아보는 가계부",
+  "description": "일상의 소비 사진으로 기록하고 캐릭터와 함께 하루와 한 달을 돌아보는 가계부",
   "lang": "ko-KR",
   "start_url": "/",
   "scope": "/",

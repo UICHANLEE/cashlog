@@ -22,7 +22,7 @@
 - Fonts and typography: Gaegu is used for the handwritten display voice and Gowun Dodum for supporting copy. Body labels remain at readable mobile sizes with zero negative letter spacing.
 - Spacing and layout rhythm: no horizontal overflow (`scrollWidth: 390`). The primary camera action and bottom navigation remain visible together at 390 x 844. Empty-state height exceeds the viewport by only 7 px and does not hide a primary control.
 - Colors and visual tokens: existing paper, ink, coral, mint, and yellow tokens match the source. Contrast remains strong around buttons and form fields.
-- Image quality and asset fidelity: the generated cafe-and-receipt photo is sharp and appropriately cropped; the existing transparent 3D pet asset has no visible halo. Lucide supplies all new UI icons.
+- Image quality and asset fidelity: the generated cafe-moment photo is sharp and appropriately cropped; the existing transparent 3D pet asset has no visible halo. Lucide supplies all new UI icons.
 - Copy and content: Korean microcopy is concise, camera-first, and keeps developer configuration language out of the user surface.
 
 **Interaction Verification**

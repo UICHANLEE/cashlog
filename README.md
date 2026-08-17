@@ -1,12 +1,12 @@
 # Cashlog
 
 사진 한 장으로 지출을 남기고, 하루를 일기처럼 요약하는 **사진 기반 웹 가계부** MVP입니다.  
-기본은 **mock 분석**(파일명 휴리스틱)이고, 선택 시 **서버 연동 Vision(OpenAI)** 으로 실제 영수증 분석이 가능합니다.
+기본은 **mock 분석**(파일명 휴리스틱)이고, 선택 시 **서버 연동 Vision(OpenAI)** 으로 실제 소비 사진 분석이 가능합니다.
 
 ## 주요 기능
 
 - **월 캘린더**: 날짜별 지출 합계, 사진 로그 여부 표시
-- **사진 우선 기록**: 가입 없이 영수증을 촬영하고, 앨범 선택이나 직접 입력은 보조 경로로 제공
+- **사진 우선 기록**: 가입 없이 소비 순간을 촬영하고, 앨범 선택이나 직접 입력은 보조 경로로 제공
 - **사진·영상 흐름**: 사진 또는 영상으로 기록. 영상은 첫 장면(포스터)을 잡아 **mock 또는 Vision API** 가 금액·카테고리·제목·메모를 제안 (수정 후 저장)
 - **상품 사진 카테고리 추천 구조**: B안 문서 기준 `/api/analyze-image` → 상품 item 탐지 결과 → 카테고리 추천 → 사용자 수정 피드백 저장
 - **펫 놀이터**: 기록을 남길수록 고양이·강아지가 함께 레벨업, 레벨에 따라 코디(옷) 해금·갈아입히기
@@ -31,7 +31,7 @@
 2. **프론트**: `VITE_PHOTO_ANALYSIS_MODE=remote` — 기본 호출 주소는 `현재 도메인/api/analyze` 입니다.
    - 상품 사진 B안 파이프라인은 `VITE_IMAGE_ANALYSIS_PIPELINE=product` 와 `/api/analyze-image` 를 사용합니다.
 3. **로컬 상품 사진 분석**: FastAPI 모델 서버(8010)와 `npm run dev`(Vite)를 함께 실행합니다. Vite 설정이 `/api/analyze-image`를 FastAPI로 프록시합니다.
-   - 기존 receipt 분석은 `vercel dev`(API, 보통 포트 3000)와 `npm run dev`를 함께 실행합니다. Vite 설정이 나머지 `/api`를 3000으로 프록시합니다.
+   - 기존 JSON 사진 분석은 `vercel dev`(API, 보통 포트 3000)와 `npm run dev`를 함께 실행합니다. Vite 설정이 나머지 `/api`를 3000으로 프록시합니다.
 4. **Vercel**: 프로젝트 환경 변수에 **`OPENAI_API_KEY`** 추가. `OPENAI_VISION_MODEL` 은 생략 시 `gpt-4o-mini` .
 
 서버 처리 코드: [`api/analyze.ts`](api/analyze.ts) — 카테고리 소분류 id 는 `cashlog.ts` 와 목록 동기화가 필요합니다.

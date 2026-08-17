@@ -11,12 +11,12 @@ export const mockAnalyzePhoto = async (file: File): Promise<PhotoAnalysis> => {
       suggestedTitle: '이동 기록',
       suggestedMemo: '사진 속 이동 내역을 대중교통으로 분류했어요.',
       confidence: 0.82,
-      rawText: '교통 영수증 14,200원',
+      rawText: '대중교통 이동 14,200원',
       engine: 'mock',
       model: 'cashlog-local-heuristic',
-      ocrText: '교통 영수증 14,200원',
-      detectedObjects: ['교통 영수증', '이동 내역'],
-      categoryReason: '파일명과 영수증 단서가 대중교통 지출에 가까워요.',
+      ocrText: '대중교통 이동 14,200원',
+      detectedObjects: ['대중교통', '이동 내역'],
+      categoryReason: '파일명과 이동 단서가 대중교통 지출에 가까워요.',
     }
   }
 
@@ -27,11 +27,11 @@ export const mockAnalyzePhoto = async (file: File): Promise<PhotoAnalysis> => {
       suggestedTitle: '이동 기록',
       suggestedMemo: '사진 속 이동 내역을 택시·주차·유류로 분류했어요.',
       confidence: 0.82,
-      rawText: '교통 영수증 14,200원',
+      rawText: '택시 이동 14,200원',
       engine: 'mock',
       model: 'cashlog-local-heuristic',
-      ocrText: '교통 영수증 14,200원',
-      detectedObjects: ['택시', '교통 영수증'],
+      ocrText: '택시 이동 14,200원',
+      detectedObjects: ['택시', '차량 이동'],
       categoryReason: '택시/차량 이동 단서가 있어 교통·차량 지출로 분류했어요.',
     }
   }
@@ -56,13 +56,13 @@ export const mockAnalyzePhoto = async (file: File): Promise<PhotoAnalysis> => {
     suggestedAmount: 5200,
     suggestedCategory: 'meal_cafe',
     suggestedTitle: '오늘의 카페 기록',
-    suggestedMemo: '사진에서 카페 영수증처럼 보이는 기록을 발견했어요.',
+    suggestedMemo: '사진에서 카페와 음료 단서를 발견했어요.',
     confidence: 0.88,
-    rawText: '카페 영수증 5,200원',
+    rawText: '카페 음료 5,200원',
     engine: 'mock',
     model: 'cashlog-local-heuristic',
-    ocrText: '카페 영수증 5,200원',
-    detectedObjects: ['컵', '카페 영수증', '디저트'],
+    ocrText: '카페 음료 5,200원',
+    detectedObjects: ['컵', '카페', '디저트'],
     categoryReason: '카페와 음료 단서가 가장 강해 카페·디저트로 추천했어요.',
   }
 }

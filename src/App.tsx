@@ -2052,7 +2052,7 @@ function CashlogApp() {
           {isFirstSession ? (
             <section className="first-session-intro" aria-labelledby="first-session-title">
               <p className="eyebrow">가계부 쓰다 포기한 사람을 위한 가계부</p>
-              <h1 id="first-session-title">영수증 찍으면,<br />가계부가 써져요</h1>
+              <h1 id="first-session-title">사진으로 남기면,<br />가계부가 써져요</h1>
               <p className="first-session-copy">
                 금액과 카테고리는 먼저 정리하고, <strong>{selectedPetName}</strong>는 기록할수록 함께 자라요.
               </p>
@@ -2114,7 +2114,7 @@ function CashlogApp() {
               isFirstSession ? (
                 <div className="timeline-empty-moment first-session-demo" aria-label="사진 기록 결과 예시">
                   <div className="timeline-empty-photo">
-                    <img src="/cafe-receipt-moment.png" alt="아이스 아메리카노와 영수증 기록 예시" />
+                    <img src="/cafe-moment.webp" alt="아이스 아메리카노와 디저트 소비 사진 기록 예시" />
                     <span><Camera size={14} aria-hidden /> 찍기 전</span>
                   </div>
                   <div className="demo-result">
@@ -2155,12 +2155,12 @@ function CashlogApp() {
           </div>
 
           <div className="capture-dock" aria-label="빠른 기록">
-            <button type="button" className="capture-primary" data-analytics-action="record.camera.primary" onClick={openPhotoCapture} aria-label={isFirstSession ? '가입 없이 3초 만에 영수증 기록하기' : '카메라로 영수증 기록하기'}>
+            <button type="button" className="capture-primary" data-analytics-action="record.camera.primary" onClick={openPhotoCapture} aria-label={isFirstSession ? '가입 없이 3초 만에 사진으로 기록하기' : '카메라로 사진 기록하기'}>
               <span className="camera-shutter" aria-hidden>
                 <Camera size={31} strokeWidth={2.2} />
               </span>
               <span className="capture-primary-copy">
-                <strong>{isFirstSession ? '가입 없이 3초 만에 기록' : '영수증 찍어 기록'}</strong>
+                <strong>{isFirstSession ? '가입 없이 3초 만에 기록' : '사진으로 기록'}</strong>
                 <small>{isFirstSession ? '사진 한 장이면 바로 시작해요' : '금액과 카테고리를 먼저 정리해요'}</small>
               </span>
             </button>
