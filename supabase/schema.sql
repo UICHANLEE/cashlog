@@ -552,6 +552,7 @@ create policy "cashlog users read own profile images"
 -- coordinates, and auth tokens are intentionally excluded.
 create table if not exists public.cashlog_event_logs (
   id uuid primary key default gen_random_uuid(),
+  client_event_id text not null default gen_random_uuid()::text,
   user_id uuid references auth.users(id) on delete set null,
   session_hash text not null check (char_length(session_hash) = 64),
   event_name text not null check (char_length(event_name) between 3 and 64),
@@ -561,6 +562,8 @@ create table if not exists public.cashlog_event_logs (
   received_at timestamptz not null default now()
 );
 
+create unique index if not exists cashlog_event_logs_client_event_id_idx
+  on public.cashlog_event_logs (client_event_id);
 create index if not exists cashlog_event_logs_occurred_idx
   on public.cashlog_event_logs (occurred_at desc);
 create index if not exists cashlog_event_logs_name_occurred_idx

@@ -50,6 +50,7 @@ type StoryReelProps = {
   slides: StorySlide[]
   onClose: () => void
   onReady?: () => void
+  onMediaReady?: (mediaType: 'image' | 'video' | 'none') => void
   autoAdvanceMs?: number
 }
 
@@ -123,6 +124,7 @@ export function StoryReel({
   slides,
   onClose,
   onReady,
+  onMediaReady,
   autoAdvanceMs = 6500,
 }: StoryReelProps) {
   const [index, setIndex] = useState(0)
@@ -137,6 +139,7 @@ export function StoryReel({
   const suppressTapRef = useRef(false)
   const viewportWidthRef = useRef(0)
   const readyReportedRef = useRef(false)
+  const mediaReadyReportedRef = useRef(false)
   const [motionBurst, setMotionBurst] = useState<MotionBurst | null>(null)
   const prefersReducedMotion = useReducedMotion()
   const dragX = useMotionValue(0)
@@ -163,6 +166,19 @@ export function StoryReel({
       if (paintedFrame) window.cancelAnimationFrame(paintedFrame)
     }
   }, [onReady])
+
+  const reportMediaReady = useCallback((mediaType: 'image' | 'video' | 'none') => {
+    if (mediaReadyReportedRef.current) return
+    mediaReadyReportedRef.current = true
+    onMediaReady?.(mediaType)
+  }, [onMediaReady])
+
+  useEffect(() => {
+    const firstSlide = slides[0]
+    if (!firstSlide || firstSlide.imageUrl || firstSlide.videoUrl) return
+    const frame = window.requestAnimationFrame(() => reportMediaReady('none'))
+    return () => window.cancelAnimationFrame(frame)
+  }, [reportMediaReady, slides])
 
   const clearMotionTimer = useCallback(() => {
     if (motionClearRef.current) {
@@ -559,9 +575,16 @@ export function StoryReel({
             muted
             loop
             playsInline
+            onLoadedData={() => index === 0 && reportMediaReady('video')}
           />
         ) : slide.imageUrl ? (
-          <img src={slide.imageUrl} alt="" className="story-reel-photo" draggable={false} />
+          <img
+            src={slide.imageUrl}
+            alt=""
+            className="story-reel-photo"
+            draggable={false}
+            onLoad={() => index === 0 && reportMediaReady('image')}
+          />
         ) : (
           <div
             className={`story-reel-text-pane ${slideIsIncome(slide) ? 'is-income' : 'is-expense'}`}

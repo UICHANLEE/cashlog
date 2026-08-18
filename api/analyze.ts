@@ -357,8 +357,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     finishTiming(200)
     res.status(200).json(out)
   } catch (e) {
-    const message = e instanceof Error ? e.message : '서버 오류'
     finishTiming(502, e instanceof Error ? e.name : 'UnknownError')
-    res.status(502).json({ error: message })
+    res.status(502).json({
+      code: 'VISION_ANALYSIS_UNAVAILABLE',
+      error: '지금은 사진을 분석하지 못했어요. 잠시 후 다시 시도해 주세요.',
+    })
   }
 }

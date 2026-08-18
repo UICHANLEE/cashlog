@@ -110,6 +110,7 @@ import { createCategoryFeedbackPayload } from './domain/productImage'
 import { createLocalMediaStore } from './services/localMediaStore'
 import {
   createAnalyticsTraceId,
+  hasAnalyticsPreference,
   isAnalyticsEnabled,
   setAnalyticsEnabled,
   setAnalyticsView,
@@ -285,6 +286,7 @@ function CashlogApp() {
   const storyTraceRef = useRef<StoryTrace | null>(null)
   const viewTraceRef = useRef<ViewTrace | null>(null)
   const [analysis, setAnalysis] = useState<PhotoAnalysis | null>(null)
+  const [analysisRating, setAnalysisRating] = useState<'correct' | 'incorrect' | null>(null)
   const [trainingImageConsent, setTrainingImageConsent] = useState(false)
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
   const [cameraError, setCameraError] = useState<string | null>(null)
@@ -326,6 +328,7 @@ function CashlogApp() {
   const [locationCollectionConsent, setLocationCollectionConsent] = useState(false)
   const [isSavingLocationConsent, setIsSavingLocationConsent] = useState(false)
   const [analyticsEnabled, setAnalyticsEnabledState] = useState(isAnalyticsEnabled)
+  const [analyticsPreferenceSet, setAnalyticsPreferenceSet] = useState(hasAnalyticsPreference)
   const [, setSyncStatus] = useState('Supabase 미연결 · 로컬 저장 중')
   const authClient = useMemo(() => createCashlogAuthClient(), [])
   const localMedia = useMemo(() => createLocalMediaStore(), [])
@@ -399,6 +402,7 @@ function CashlogApp() {
       return ''
     })
     setAnalysis(null)
+    setAnalysisRating(null)
     setPhotoAssistMessage('')
     setIsAnalyzingPhoto(false)
     setTrainingImageConsent(false)
@@ -512,6 +516,7 @@ function CashlogApp() {
       return URL.createObjectURL(file)
     })
     setAnalysis(null)
+    setAnalysisRating(null)
     setIsAnalyzingPhoto(true)
     trackEvent('analysis_started', {
       trace_id: trace.id,
@@ -541,6 +546,7 @@ function CashlogApp() {
         analysis_mode: import.meta.env.VITE_PHOTO_ANALYSIS_MODE ?? 'mock',
         pipeline: nextAnalysis.operational?.pipeline ?? trace.pipeline,
         operation: 'photo_analysis',
+        server_request_id: nextAnalysis.operational?.serverRequestId,
         status: nextAnalysis.status ?? 'final',
         duration_ms: elapsedAppMs(trace.startedAt),
         server_duration_ms: nextAnalysis.operational?.serverDurationMs,
@@ -565,6 +571,7 @@ function CashlogApp() {
         analysis_mode: import.meta.env.VITE_PHOTO_ANALYSIS_MODE ?? 'mock',
         pipeline: operational?.pipeline ?? trace.pipeline,
         operation: 'photo_analysis',
+        server_request_id: operational?.serverRequestId,
         status: 'failed',
         duration_ms: elapsedAppMs(trace.startedAt),
         server_duration_ms: operational?.serverDurationMs,
@@ -574,6 +581,7 @@ function CashlogApp() {
         payload_kb: operational?.payloadKb ?? Math.round(file.size / 1024),
         http_status: operational?.httpStatus,
         error_name: e instanceof Error ? e.name : 'Error',
+        error_code: e instanceof AnalysisRequestError ? e.code : 'INVALID_ANALYSIS_RESPONSE',
       })
       analysisTraceRef.current = null
       setPhotoAssistMessage('사진은 준비됐어요. 금액과 카테고리를 직접 확인해 주세요.')
@@ -1691,6 +1699,7 @@ function CashlogApp() {
         operation: 'category_confirmation',
         model: analysis.model,
         engine: analysis.engine,
+        server_request_id: analysis.operational?.serverRequestId,
         suggested_category: analysis.suggestedCategory,
         selected_category: selectedCategory,
         corrected: selectedCategory !== analysis.suggestedCategory,
@@ -1718,6 +1727,7 @@ function CashlogApp() {
     photoFileRef.current = null
     setVideoPreview('')
     setAnalysis(null)
+    setAnalysisRating(null)
     analysisTraceRef.current = null
     setTrainingImageConsent(false)
     resetEntryContext()
@@ -1727,6 +1737,23 @@ function CashlogApp() {
 
   const updateForm: ExpenseFormChange = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }))
+  }
+
+  const rateAnalysis = (rating: 'correct' | 'incorrect') => {
+    if (!analysis || analysisRating === rating) return
+    setAnalysisRating(rating)
+    trackEvent('analysis_rating', {
+      trace_id: analysisTraceRef.current?.id ?? analysis.requestId,
+      server_request_id: analysis.operational?.serverRequestId,
+      pipeline: analysis.operational?.pipeline ?? import.meta.env.VITE_IMAGE_ANALYSIS_PIPELINE ?? 'receipt',
+      operation: 'category_rating',
+      model: analysis.model,
+      suggested_category: analysis.suggestedCategory,
+      selected_category: migrateCategoryId(String(form.category)),
+      feedback_source: 'explicit',
+      rating,
+      confidence_pct: Math.round(analysis.confidence * 100),
+    })
   }
 
   const closeStory = useCallback(() => {
@@ -1759,6 +1786,20 @@ function CashlogApp() {
       story_type: trace.storyType,
       operation: 'story_render',
       duration_ms: elapsedAppMs(trace.startedAt),
+      slide_count: trace.slideCount,
+      status: 'ready',
+    })
+  }, [])
+
+  const handleStoryMediaReady = useCallback((mediaType: 'image' | 'video' | 'none') => {
+    const trace = storyTraceRef.current
+    if (!trace) return
+    trackEvent('story_media_ready', {
+      trace_id: trace.id,
+      story_type: trace.storyType,
+      operation: 'story_media_ready',
+      duration_ms: elapsedAppMs(trace.startedAt),
+      media_type: mediaType,
       slide_count: trace.slideCount,
       status: 'ready',
     })
@@ -1838,6 +1879,13 @@ function CashlogApp() {
     }))
   }
 
+  const chooseAnalyticsPreference = (enabled: boolean) => {
+    setAnalyticsEnabled(enabled)
+    if (enabled) setAnalyticsView(activeView)
+    setAnalyticsEnabledState(isAnalyticsEnabled())
+    setAnalyticsPreferenceSet(true)
+  }
+
   return (
     <main className="app-shell timeline-app-shell">
       <header className="timeline-topbar">
@@ -1874,6 +1922,20 @@ function CashlogApp() {
           <Sparkles size={16} aria-hidden /> 하루 스토리
         </button>
       </header>
+
+      {!analyticsPreferenceSet && (
+        <section className="analytics-consent" aria-label="사용성 로그 선택">
+          <div>
+            <strong>사용 경험 개선에 참여할까요?</strong>
+            <p>사진·금액·입력 내용은 빼고 화면 시간, 버튼 사용, 오류와 처리 속도만 기록해요.</p>
+          </div>
+          <div className="analytics-consent-actions">
+            <button type="button" onClick={() => chooseAnalyticsPreference(false)}>사용 안 함</button>
+            <button type="button" className="primary" onClick={() => chooseAnalyticsPreference(true)}>허용</button>
+            <a href="/privacy.html" target="_blank" rel="noopener noreferrer">자세히</a>
+          </div>
+        </section>
+      )}
       {dayStorySlides.length === 0 && (
         <p id="day-story-lock-hint" className="story-lock-hint">
           선택한 날짜에 기록을 하나 남기면 하루 스토리가 열려요.
@@ -2052,6 +2114,7 @@ function CashlogApp() {
                 setAnalyticsEnabled(enabled)
                 if (enabled) setAnalyticsView(activeView)
                 setAnalyticsEnabledState(isAnalyticsEnabled())
+                setAnalyticsPreferenceSet(true)
               }}
             />
             <span>
@@ -2657,6 +2720,25 @@ function CashlogApp() {
                     ) : analysis.detectedObjects?.length ? (
                       <small>단서: {analysis.detectedObjects.slice(0, 3).join(', ')}</small>
                     ) : null}
+                    <div className="analysis-rating" role="group" aria-label="카테고리 추천 평가">
+                      <span>추천이 맞았나요?</span>
+                      <button
+                        type="button"
+                        className={analysisRating === 'correct' ? 'active' : ''}
+                        aria-pressed={analysisRating === 'correct'}
+                        onClick={() => rateAnalysis('correct')}
+                      >
+                        맞아요
+                      </button>
+                      <button
+                        type="button"
+                        className={analysisRating === 'incorrect' ? 'active' : ''}
+                        aria-pressed={analysisRating === 'incorrect'}
+                        onClick={() => rateAnalysis('incorrect')}
+                      >
+                        다시 고를게요
+                      </button>
+                    </div>
                     <div className="pet-context-question pet-context-question-compact">
                       <PetPortrait
                         kind={petState.selectedKind}
@@ -2754,6 +2836,7 @@ function CashlogApp() {
             slides={dayStorySlides}
             onClose={closeStory}
             onReady={handleStoryReady}
+            onMediaReady={handleStoryMediaReady}
           />
         </Suspense>
       )}
@@ -2766,6 +2849,7 @@ function CashlogApp() {
             slides={monthStorySlides}
             onClose={closeStory}
             onReady={handleStoryReady}
+            onMediaReady={handleStoryMediaReady}
           />
         </Suspense>
       )}

@@ -518,6 +518,7 @@ export type PhotoAnalysis = {
   /** 운영 성능 계측용 숫자만 보관한다. 이미지/OCR/위치는 포함하지 않는다. */
   operational?: {
     pipeline?: string
+    serverRequestId?: string
     requestDurationMs?: number
     serverDurationMs?: number
     modelDurationMs?: number

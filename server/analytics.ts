@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto'
+import { createHmac, randomUUID } from 'node:crypto'
 import type { VercelRequest } from '@vercel/node'
 import { ACCESS_COOKIE, readCookies } from './auth/cookies.js'
 import { ApiError } from './auth/http.js'
@@ -23,9 +23,11 @@ export const ANALYTICS_EVENT_NAMES = [
   'analysis_succeeded',
   'analysis_failed',
   'analysis_feedback',
+  'analysis_rating',
   'record_saved',
   'story_opened',
   'story_rendered',
+  'story_media_ready',
   'view_ready',
   'pet_interacted',
   'pet_customized',
@@ -91,6 +93,10 @@ const PROPERTY_KEYS = new Set([
   'http_status',
   'corrected',
   'needs_review',
+  'release',
+  'server_request_id',
+  'feedback_source',
+  'rating',
 ])
 
 const TOKEN_PROPERTY_KEYS = new Set([
@@ -125,6 +131,10 @@ const TOKEN_PROPERTY_KEYS = new Set([
   'selected_category',
   'operation',
   'confidence_band',
+  'release',
+  'server_request_id',
+  'feedback_source',
+  'rating',
 ])
 
 const TOKEN_VALUE = /^[a-z0-9/][a-z0-9_.:/-]{0,79}$/i
@@ -153,6 +163,7 @@ const NUMBER_LIMITS: Record<string, [number, number]> = {
 }
 
 export type AnalyticsInput = {
+  id?: unknown
   name?: unknown
   occurredAt?: unknown
   path?: unknown
@@ -165,6 +176,7 @@ export type AnalyticsBatchInput = {
 }
 
 type AnalyticsRow = {
+  client_event_id: string
   user_id: string | null
   session_hash: string
   event_name: AnalyticsEventName
@@ -240,6 +252,10 @@ export const normalizeAnalyticsBatch = (
       throw new ApiError(400, 'INVALID_ANALYTICS_EVENT', '지원하지 않는 사용 로그 이벤트예요.')
     }
     return {
+      client_event_id:
+        typeof event.id === 'string' && /^[A-Za-z0-9_-]{16,96}$/.test(event.id)
+          ? event.id
+          : randomUUID(),
       user_id: userId,
       session_hash: sessionHash,
       event_name: name,
@@ -261,9 +277,12 @@ export const optionalAnalyticsUserId = async (req: VercelRequest) => {
 }
 
 export const storeAnalyticsRows = async (rows: AnalyticsRow[]) => {
-  const response = await serviceRequest('/rest/v1/cashlog_event_logs', {
+  const response = await serviceRequest('/rest/v1/cashlog_event_logs?on_conflict=client_event_id', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    headers: {
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=ignore-duplicates,return=minimal',
+    },
     body: JSON.stringify(rows),
   })
   if (!response.ok) {
@@ -279,15 +298,6 @@ export const readAnalyticsSummary = async () => {
   })
   if (!response.ok) throw new ApiError(503, 'ANALYTICS_QUERY_FAILED', '사용 로그 요약을 불러오지 못했어요.')
   return response.json() as Promise<Record<string, unknown>>
-}
-
-export const pruneAnalyticsRows = async (retentionDays = 90) => {
-  const response = await serviceRequest('/rest/v1/rpc/cashlog_prune_event_logs', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ p_days: retentionDays }),
-  })
-  return response.ok
 }
 
 export const listAnalyticsRows = async ({

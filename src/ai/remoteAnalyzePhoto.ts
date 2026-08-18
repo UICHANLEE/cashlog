@@ -3,6 +3,7 @@ import {
   AnalysisRequestError,
   analysisNow,
   elapsedAnalysisMs,
+  readServerRequestId,
   readTimingHeader,
 } from './analysisTiming'
 import { fileToPureBase64 } from './imageToBase64'
@@ -19,12 +20,29 @@ export async function remoteAnalyzePhoto(
   const mimeType = file.type || 'image/jpeg'
 
   const networkStartedAt = analysisNow()
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ imageBase64, mimeType, filename: file.name }),
-    signal: AbortSignal.timeout(20_000),
-  })
+  let res: Response
+  try {
+    res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageBase64, mimeType, filename: file.name }),
+      signal: AbortSignal.timeout(20_000),
+    })
+  } catch (error) {
+    throw new AnalysisRequestError(
+      error instanceof DOMException && error.name === 'TimeoutError'
+        ? '사진 분석 시간이 초과됐어요. 다시 시도해 주세요.'
+        : '사진 분석 서버에 연결하지 못했어요.',
+      {
+        pipeline: 'receipt',
+        requestDurationMs: elapsedAnalysisMs(requestStartedAt),
+        preprocessDurationMs,
+        networkDurationMs: elapsedAnalysisMs(networkStartedAt),
+        payloadKb: Math.round(file.size / 1024),
+      },
+      error instanceof DOMException && error.name === 'TimeoutError' ? 'TIMEOUT' : 'NETWORK_ERROR',
+    )
+  }
 
   const text = await res.text()
   const networkDurationMs = elapsedAnalysisMs(networkStartedAt)
@@ -37,6 +55,7 @@ export async function remoteAnalyzePhoto(
 
   const operational = {
     pipeline: 'receipt',
+    serverRequestId: readServerRequestId(res),
     requestDurationMs: elapsedAnalysisMs(requestStartedAt),
     serverDurationMs: readTimingHeader(res, 'X-Cashlog-total-Time-Ms'),
     modelDurationMs: readTimingHeader(res, 'X-Cashlog-model-Time-Ms'),
@@ -47,11 +66,15 @@ export async function remoteAnalyzePhoto(
   }
 
   if (!res.ok) {
-    const err =
-      typeof (body as Record<string, unknown>).error === 'string'
+    const err = res.status >= 500
+      ? '지금은 사진을 분석하지 못했어요. 잠시 후 다시 시도해 주세요.'
+      : typeof (body as Record<string, unknown>).error === 'string'
         ? ((body as Record<string, unknown>).error as string)
-        : text || `분석 요청 실패 (${res.status})`
-    throw new AnalysisRequestError(err, operational)
+        : `분석 요청 실패 (${res.status})`
+    const code = typeof (body as Record<string, unknown>).code === 'string'
+      ? String((body as Record<string, unknown>).code)
+      : `HTTP_${res.status}`
+    throw new AnalysisRequestError(err, operational, code)
   }
 
   const o = body as Record<string, unknown>

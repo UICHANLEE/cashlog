@@ -34,6 +34,19 @@ describe('Cashlog photo MVP', () => {
     expect(screen.getByText('로그인')).toBeInTheDocument()
   })
 
+  it('waits for an explicit analytics choice and remembers consent', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    expect(screen.getByRole('region', { name: '사용성 로그 선택' })).toBeInTheDocument()
+    expect(localStorage.getItem('cashlog.analytics.preference')).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: '허용' }))
+
+    expect(screen.queryByRole('region', { name: '사용성 로그 선택' })).not.toBeInTheDocument()
+    expect(localStorage.getItem('cashlog.analytics.preference')).toBe('enabled')
+  })
+
   it('keeps the login form discoverable before the backend is configured', async () => {
     const user = userEvent.setup()
     render(<App />)
@@ -527,20 +540,31 @@ describe('Cashlog photo MVP', () => {
           ? {
               checkedAt: '2026-08-03T00:00:00.000Z',
               summary: {
-                operationalVersion: 1,
+                operationalVersion: 2,
                 events24h: 12,
                 activeSessions24h: 3,
                 signedInUsers7d: 2,
                 clientErrors24h: 0,
                 topEvents7d: [{ name: 'page_view', count: 6 }],
+                analysisAttempts24h: 20,
+                analysisSucceeded24h: 18,
+                analysisFailed24h: 1,
+                analysisAbandoned24h: 1,
+                analysisPending24h: 0,
+                analysisCompletionRate24h: 95,
                 analysisSuccessRate24h: 94.5,
                 analysisP50Ms7d: 820,
                 analysisP95Ms7d: 2100,
                 modelP95Ms7d: 1700,
                 categoryAcceptanceRate7d: 81.2,
                 feedbackSamples7d: 16,
+                explicitFeedbackSamples7d: 10,
+                explicitCorrectRate7d: 90,
                 storyP50Ms7d: 130,
                 storyRenderRate24h: 100,
+                storyOpens24h: 4,
+                storyRendered24h: 4,
+                storyAbandoned24h: 0,
                 operationBreakdown7d: [{
                   operation: 'photo_analysis',
                   count: 12,
@@ -556,6 +580,32 @@ describe('Cashlog photo MVP', () => {
                   p50DurationMs: 130,
                   p95DurationMs: 220,
                   avgSlides: 5,
+                }],
+                categoryConfusion7d: [{
+                  suggestedCategory: 'meal_cafe',
+                  selectedCategory: 'meal_dining',
+                  count: 2,
+                }],
+                releasePerformance7d: [{
+                  release: 'abcdef123456',
+                  successes: 18,
+                  failures: 1,
+                  avgDurationMs: 900,
+                  p95DurationMs: 2100,
+                }],
+                analysisFailures7d: [{
+                  pipeline: 'product',
+                  model: 'cashlog-model',
+                  errorCode: 'ANALYZER_UNAVAILABLE',
+                  count: 1,
+                }],
+                hourlyOperations48h: [{
+                  bucket: '2026-08-03T00:00:00.000Z',
+                  analysisAttempts: 3,
+                  analysisSucceeded: 2,
+                  analysisFailed: 1,
+                  storiesReady: 1,
+                  clientErrors: 0,
                 }],
               },
               total: 1,
@@ -602,6 +652,8 @@ describe('Cashlog photo MVP', () => {
     expect(screen.getByText('사용자 활동 로그')).toBeInTheDocument()
     expect(screen.getByText('기능별 처리 시간')).toBeInTheDocument()
     expect(screen.getByText('하루·한 달 스토리 표시 시간')).toBeInTheDocument()
+    expect(screen.getByText('자주 다시 고른 카테고리')).toBeInTheDocument()
+    expect(screen.getByText('배포 버전별 판독 성능')).toBeInTheDocument()
     expect(screen.getByText('94.5%')).toBeInTheDocument()
     expect(screen.getAllByText('페이지 방문').length).toBeGreaterThan(0)
   })

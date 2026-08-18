@@ -61,6 +61,9 @@ type EventSummary = {
   analysisAttempts24h?: number
   analysisSucceeded24h?: number
   analysisFailed24h?: number
+  analysisAbandoned24h?: number
+  analysisPending24h?: number
+  analysisCompletionRate24h?: number
   analysisSuccessRate24h?: number
   analysisP50Ms7d?: number
   analysisP95Ms7d?: number
@@ -70,8 +73,11 @@ type EventSummary = {
   feedbackSamples7d?: number
   categoryAcceptanceRate7d?: number
   categoryCorrectionRate7d?: number
+  explicitFeedbackSamples7d?: number
+  explicitCorrectRate7d?: number
   storyOpens24h?: number
   storyRendered24h?: number
+  storyAbandoned24h?: number
   storyRenderRate24h?: number
   storyP50Ms7d?: number
   storyP95Ms7d?: number
@@ -103,6 +109,32 @@ type EventSummary = {
     p50DurationMs: number
     p95DurationMs: number
     avgSlides: number
+  }>
+  categoryConfusion7d?: Array<{
+    suggestedCategory: string
+    selectedCategory: string
+    count: number
+  }>
+  releasePerformance7d?: Array<{
+    release: string
+    successes: number
+    failures: number
+    avgDurationMs: number
+    p95DurationMs: number
+  }>
+  analysisFailures7d?: Array<{
+    pipeline: string
+    model: string
+    errorCode: string
+    count: number
+  }>
+  hourlyOperations48h?: Array<{
+    bucket: string
+    analysisAttempts: number
+    analysisSucceeded: number
+    analysisFailed: number
+    storiesReady: number
+    clientErrors: number
   }>
 }
 
@@ -148,9 +180,11 @@ const eventLabels: Record<string, string> = {
   analysis_succeeded: '사진 분석 성공',
   analysis_failed: '사진 분석 실패',
   analysis_feedback: '카테고리 확인',
+  analysis_rating: '추천 직접 평가',
   record_saved: '기록 저장',
   story_opened: '스토리 열기',
   story_rendered: '스토리 표시 완료',
+  story_media_ready: '스토리 미디어 준비',
   view_ready: '화면 표시 완료',
   pet_interacted: '캐릭터 상호작용',
   pet_customized: '캐릭터 꾸미기',
@@ -225,6 +259,10 @@ const propertyLabels: Record<string, string> = {
   http_status: 'HTTP',
   corrected: '사용자 수정',
   needs_review: '확인 필요',
+  release: '배포 버전',
+  server_request_id: '서버 요청 ID',
+  feedback_source: '평가 방식',
+  rating: '직접 평가',
 }
 
 const formatProperty = (key: string, value: string | number | boolean) => {
@@ -242,9 +280,11 @@ const formatProperty = (key: string, value: string | number | boolean) => {
 const operationLabels: Record<string, string> = {
   photo_analysis: '사진 카테고리 판독',
   story_render: '스토리 첫 화면',
+  story_media_ready: '스토리 미디어 준비',
   view_transition: '앱 화면 이동',
   camera_open: '카메라 열기',
   record_save: '기록 저장',
+  category_rating: '카테고리 직접 평가',
 }
 
 const storyLabels: Record<string, string> = {
@@ -386,6 +426,20 @@ export function UichanAdmin() {
     analyzerOk
   const topEventMax = Math.max(1, ...(summary.topEvents7d ?? []).map((item) => item.count))
   const topActionMax = Math.max(1, ...(summary.topActions7d ?? []).map((item) => item.count))
+  const operationalAlerts = [
+    (summary.analysisAttempts24h ?? 0) > 0 && Number(summary.analysisCompletionRate24h ?? 0) < 98
+      ? `분석 완료율 ${Number(summary.analysisCompletionRate24h ?? 0).toFixed(1)}% · 중도 이탈 ${summary.analysisAbandoned24h ?? 0}건`
+      : null,
+    (summary.analysisP95Ms7d ?? 0) > 5_000
+      ? `사진 판독 P95 ${formatDuration(summary.analysisP95Ms7d)} · 목표 5초 초과`
+      : null,
+    (summary.storyOpens24h ?? 0) > 0 && Number(summary.storyRenderRate24h ?? 0) < 98
+      ? `스토리 미디어 준비율 ${Number(summary.storyRenderRate24h ?? 0).toFixed(1)}%`
+      : null,
+    (summary.clientErrors24h ?? 0) > 0
+      ? `클라이언트 오류 ${summary.clientErrors24h}건`
+      : null,
+  ].filter((item): item is string => Boolean(item))
 
   if (access !== 'allowed' && !loading) {
     const needsLogin = access === 'login'
@@ -453,10 +507,20 @@ export function UichanAdmin() {
         <MetricCard label="측정 완료 화면" value={summary.engagedViews24h ?? 0} detail="최근 24시간" tone="coral" />
       </section>
 
-      {summary.operationalVersion !== 1 && (
+      {summary.operationalVersion !== 2 && (
         <section className="admin-migration-notice" role="status">
           <AlertTriangle size={18} aria-hidden />
-          <span><strong>운영 성능 집계 준비가 필요해요.</strong> Supabase에서 <code>202608180001_operational_analytics.sql</code>을 적용해 주세요.</span>
+          <span><strong>운영 성능 집계 업데이트가 필요해요.</strong> Supabase에서 <code>202608180002_operational_analytics_hardening.sql</code>을 적용해 주세요.</span>
+        </section>
+      )}
+
+      {operationalAlerts.length > 0 && (
+        <section className="admin-alert-strip" aria-label="운영 경고">
+          <AlertTriangle size={19} aria-hidden />
+          <div>
+            <strong>확인이 필요한 지표</strong>
+            {operationalAlerts.map((alert) => <span key={alert}>{alert}</span>)}
+          </div>
         </section>
       )}
 
@@ -467,6 +531,13 @@ export function UichanAdmin() {
           valueLabel={`${Number(summary.analysisSuccessRate24h ?? 0).toFixed(1)}%`}
           detail={`24시간 ${summary.analysisSucceeded24h ?? 0}건 성공 · ${summary.analysisFailed24h ?? 0}건 실패`}
           tone="mint"
+        />
+        <MetricCard
+          label="분석 완료율"
+          value={summary.analysisCompletionRate24h ?? 0}
+          valueLabel={`${Number(summary.analysisCompletionRate24h ?? 0).toFixed(1)}%`}
+          detail={`중도 이탈 ${summary.analysisAbandoned24h ?? 0}건 · 진행 중 ${summary.analysisPending24h ?? 0}건`}
+          tone="sun"
         />
         <MetricCard label="사진 판독 P50" value={summary.analysisP50Ms7d ?? 0} valueLabel={formatDuration(summary.analysisP50Ms7d)} detail="최근 7일 사용자 체감 중앙값" tone="sky" />
         <MetricCard label="사진 판독 P95" value={summary.analysisP95Ms7d ?? 0} valueLabel={formatDuration(summary.analysisP95Ms7d)} detail="느린 5% 경계" tone="coral" />
@@ -488,12 +559,19 @@ export function UichanAdmin() {
           detail="모델 자체 점수이며 실제 정확도와 다름"
           tone="sun"
         />
-        <MetricCard label="스토리 표시 P50" value={summary.storyP50Ms7d ?? 0} valueLabel={formatDuration(summary.storyP50Ms7d)} detail="버튼부터 첫 슬라이드까지" tone="sky" />
+        <MetricCard
+          label="명시적 정답 평가"
+          value={summary.explicitCorrectRate7d ?? 0}
+          valueLabel={`${Number(summary.explicitCorrectRate7d ?? 0).toFixed(1)}%`}
+          detail={`맞아요/다시 고를게요 · ${summary.explicitFeedbackSamples7d ?? 0}건`}
+          tone="mint"
+        />
+        <MetricCard label="스토리 준비 P50" value={summary.storyP50Ms7d ?? 0} valueLabel={formatDuration(summary.storyP50Ms7d)} detail="버튼부터 첫 미디어 준비까지" tone="sky" />
         <MetricCard
           label="스토리 표시 완료율"
           value={summary.storyRenderRate24h ?? 0}
           valueLabel={`${Number(summary.storyRenderRate24h ?? 0).toFixed(1)}%`}
-          detail={`24시간 ${summary.storyRendered24h ?? 0}/${summary.storyOpens24h ?? 0}회`}
+          detail={`24시간 ${summary.storyRendered24h ?? 0}/${summary.storyOpens24h ?? 0}회 · 이탈 ${summary.storyAbandoned24h ?? 0}`}
           tone="coral"
         />
       </section>
@@ -573,6 +651,86 @@ export function UichanAdmin() {
               </div>
             ))}
             {(summary.categoryQuality7d ?? []).length === 0 && <p className="admin-empty">카테고리 확인 표본이 쌓이면 여기에 표시됩니다.</p>}
+          </div>
+        </article>
+
+        <article className="admin-card admin-quality-card">
+          <div className="section-heading">
+            <p className="eyebrow">Category confusion · 7 days</p>
+            <h2>자주 다시 고른 카테고리</h2>
+          </div>
+          <div className="admin-quality-list admin-confusion-list">
+            {(summary.categoryConfusion7d ?? []).map((item) => (
+              <div key={`${item.suggestedCategory}:${item.selectedCategory}`}>
+                <strong>{formatCategoryLabel(migrateCategoryId(item.suggestedCategory))}</strong>
+                <span aria-hidden>→</span>
+                <span>{formatCategoryLabel(migrateCategoryId(item.selectedCategory))}</span>
+                <small>{item.count}건</small>
+              </div>
+            ))}
+            {(summary.categoryConfusion7d ?? []).length === 0 && <p className="admin-empty">수정된 카테고리 조합이 아직 없어요.</p>}
+          </div>
+        </article>
+
+        <article className="admin-card admin-quality-card">
+          <div className="section-heading">
+            <p className="eyebrow">Failures · 7 days</p>
+            <h2>분석 실패 원인</h2>
+          </div>
+          <div className="admin-quality-list">
+            {(summary.analysisFailures7d ?? []).map((item) => (
+              <div key={`${item.pipeline}:${item.model}:${item.errorCode}`}>
+                <strong>{item.errorCode}</strong>
+                <span>{item.pipeline}</span>
+                <small>{item.model} · {item.count}건</small>
+              </div>
+            ))}
+            {(summary.analysisFailures7d ?? []).length === 0 && <p className="admin-empty">최근 분석 실패가 없어요.</p>}
+          </div>
+        </article>
+
+        <article className="admin-card admin-card-wide admin-operation-card">
+          <div className="section-heading">
+            <p className="eyebrow">Release performance · 7 days</p>
+            <h2>배포 버전별 판독 성능</h2>
+          </div>
+          <div className="admin-data-table admin-release-table" role="table" aria-label="배포 버전별 분석 성능">
+            <div className="admin-data-head" role="row">
+              <span role="columnheader">버전</span><span role="columnheader">성공</span><span role="columnheader">실패</span><span role="columnheader">평균</span><span role="columnheader">P95</span>
+            </div>
+            {(summary.releasePerformance7d ?? []).map((item) => (
+              <div className="admin-data-row" role="row" key={item.release}>
+                <strong role="cell" title={item.release}>{item.release.slice(0, 12)}</strong>
+                <span role="cell">{item.successes}건</span>
+                <span role="cell" className={item.failures > 0 ? 'admin-danger-value' : ''}>{item.failures}건</span>
+                <span role="cell">{formatDuration(item.avgDurationMs)}</span>
+                <span role="cell">{formatDuration(item.p95DurationMs)}</span>
+              </div>
+            ))}
+            {(summary.releasePerformance7d ?? []).length === 0 && <p className="admin-empty">새 버전 이벤트가 쌓이면 비교할 수 있어요.</p>}
+          </div>
+        </article>
+
+        <article className="admin-card admin-card-wide admin-operation-card">
+          <div className="section-heading">
+            <p className="eyebrow">Hourly operations · 48 hours</p>
+            <h2>시간대별 운영 추이</h2>
+          </div>
+          <div className="admin-data-table admin-hourly-table" role="table" aria-label="최근 48시간 운영 추이">
+            <div className="admin-data-head" role="row">
+              <span role="columnheader">시간</span><span role="columnheader">시도</span><span role="columnheader">성공</span><span role="columnheader">실패</span><span role="columnheader">스토리</span><span role="columnheader">앱 오류</span>
+            </div>
+            {(summary.hourlyOperations48h ?? []).map((item) => (
+              <div className="admin-data-row" role="row" key={item.bucket}>
+                <strong role="cell">{new Intl.DateTimeFormat('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit' }).format(new Date(item.bucket))}</strong>
+                <span role="cell">{item.analysisAttempts}</span>
+                <span role="cell">{item.analysisSucceeded}</span>
+                <span role="cell" className={item.analysisFailed > 0 ? 'admin-danger-value' : ''}>{item.analysisFailed}</span>
+                <span role="cell">{item.storiesReady}</span>
+                <span role="cell" className={item.clientErrors > 0 ? 'admin-danger-value' : ''}>{item.clientErrors}</span>
+              </div>
+            ))}
+            {(summary.hourlyOperations48h ?? []).length === 0 && <p className="admin-empty">시간대별 이벤트가 아직 없어요.</p>}
           </div>
         </article>
 

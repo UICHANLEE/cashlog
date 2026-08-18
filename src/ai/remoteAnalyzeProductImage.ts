@@ -4,6 +4,7 @@ import {
   AnalysisRequestError,
   analysisNow,
   elapsedAnalysisMs,
+  readServerRequestId,
   readTimingHeader,
 } from './analysisTiming'
 
@@ -65,11 +66,28 @@ export async function remoteAnalyzeProductImage(
   form.append('image', optimizedFile)
 
   const networkStartedAt = analysisNow()
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    body: form,
-    signal: AbortSignal.timeout(20_000),
-  })
+  let response: Response
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      body: form,
+      signal: AbortSignal.timeout(20_000),
+    })
+  } catch (error) {
+    throw new AnalysisRequestError(
+      error instanceof DOMException && error.name === 'TimeoutError'
+        ? '상품 분석 시간이 초과됐어요. 다시 시도해 주세요.'
+        : '상품 분석 서버에 연결하지 못했어요.',
+      {
+        pipeline: 'product',
+        requestDurationMs: elapsedAnalysisMs(requestStartedAt),
+        preprocessDurationMs,
+        networkDurationMs: elapsedAnalysisMs(networkStartedAt),
+        payloadKb: Math.round(optimizedFile.size / 1024),
+      },
+      error instanceof DOMException && error.name === 'TimeoutError' ? 'TIMEOUT' : 'NETWORK_ERROR',
+    )
+  }
 
   const text = await response.text()
   const networkDurationMs = elapsedAnalysisMs(networkStartedAt)
@@ -82,6 +100,7 @@ export async function remoteAnalyzeProductImage(
 
   const operational = {
     pipeline: 'product',
+    serverRequestId: readServerRequestId(response),
     requestDurationMs: elapsedAnalysisMs(requestStartedAt),
     serverDurationMs: readTimingHeader(response, 'X-Cashlog-total-Time-Ms'),
     modelDurationMs: readTimingHeader(response, 'X-Cashlog-analyzer-Time-Ms'),
@@ -92,11 +111,17 @@ export async function remoteAnalyzeProductImage(
   }
 
   if (!response.ok) {
-    const error = errorMessageFromResponseBody(
-      body as Record<string, unknown>,
-      text || `상품 분석 요청 실패 (${response.status})`,
-    )
-    throw new AnalysisRequestError(error, operational)
+    const responseBody = body as Record<string, unknown>
+    const error = response.status >= 500
+      ? '지금은 상품을 분석하지 못했어요. 잠시 후 다시 시도해 주세요.'
+      : errorMessageFromResponseBody(responseBody, `상품 분석 요청 실패 (${response.status})`)
+    const rawErrorCode = typeof responseBody.error_code === 'string'
+      ? responseBody.error_code
+      : typeof responseBody.code === 'string'
+        ? responseBody.code
+        : null
+    const errorCode = rawErrorCode ?? `HTTP_${response.status}`
+    throw new AnalysisRequestError(error, operational, errorCode)
   }
 
   const analysis = normalizeProductImageAnalysis(body)

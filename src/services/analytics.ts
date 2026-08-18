@@ -1,3 +1,11 @@
+import {
+  clearAnalyticsEvents,
+  putAnalyticsEvent,
+  readAnalyticsEvents,
+  removeAnalyticsEvents,
+  type AnalyticsOutboxEvent,
+} from './analyticsOutbox'
+
 export type AnalyticsEventName =
   | 'page_view'
   | 'page_duration'
@@ -17,9 +25,11 @@ export type AnalyticsEventName =
   | 'analysis_succeeded'
   | 'analysis_failed'
   | 'analysis_feedback'
+  | 'analysis_rating'
   | 'record_saved'
   | 'story_opened'
   | 'story_rendered'
+  | 'story_media_ready'
   | 'view_ready'
   | 'pet_interacted'
   | 'pet_customized'
@@ -33,6 +43,7 @@ export type AnalyticsEventName =
 export type AnalyticsProperties = Record<string, string | number | boolean | undefined>
 
 type QueuedEvent = {
+  id: string
   name: AnalyticsEventName
   occurredAt: string
   path: string
@@ -41,8 +52,12 @@ type QueuedEvent = {
 
 const SESSION_KEY = 'cashlog.analytics.session'
 const DISABLED_KEY = 'cashlog.analytics.disabled'
+const PREFERENCE_KEY = 'cashlog.analytics.preference'
 const queue: QueuedEvent[] = []
 let flushTimer: ReturnType<typeof setTimeout> | null = null
+let flushInFlight: Promise<void> | null = null
+let persistenceChain = Promise.resolve()
+let retryAttempt = 0
 let initialized = false
 let listenersBound = false
 let pageState: ViewState | null = null
@@ -62,7 +77,9 @@ type ViewState = {
 }
 
 const MAX_DURATION_MS = 24 * 60 * 60 * 1000
+const MAX_RETRY_DELAY_MS = 60_000
 const SAFE_IDENTIFIER = /^[a-z0-9][a-z0-9_.:/-]{0,79}$/i
+const CLIENT_RELEASE = String(import.meta.env.VITE_CASHLOG_RELEASE || 'local').slice(0, 40)
 
 const monotonicNow = () => typeof performance === 'undefined' ? Date.now() : performance.now()
 
@@ -109,9 +126,9 @@ const isEnabled = () => {
   if (typeof window === 'undefined' || import.meta.env.MODE === 'test') return false
   if (navigator.doNotTrack === '1') return false
   try {
-    return localStorage.getItem(DISABLED_KEY) !== '1'
+    return localStorage.getItem(PREFERENCE_KEY) === 'enabled'
   } catch {
-    return true
+    return false
   }
 }
 
@@ -302,33 +319,60 @@ const bindBehaviorListeners = () => {
   }, { passive: true })
 }
 
+const scheduleFlush = (delayMs: number) => {
+  if (flushTimer) clearTimeout(flushTimer)
+  flushTimer = setTimeout(() => void flushAnalytics(), delayMs)
+}
+
+const retryDelay = () => Math.min(MAX_RETRY_DELAY_MS, 1_000 * 2 ** Math.min(retryAttempt, 6))
+
 export const flushAnalytics = async (preferBeacon = false) => {
-  if (flushTimer) {
-    clearTimeout(flushTimer)
-    flushTimer = null
-  }
-  if (!isEnabled() || queue.length === 0) return
-  const events = queue.splice(0, 20)
-  const payload = JSON.stringify({ sessionId: getSessionId(), events })
-  if (preferBeacon && typeof navigator.sendBeacon === 'function') {
-    const accepted = navigator.sendBeacon('/api/events', new Blob([payload], { type: 'application/json' }))
-    if (accepted) {
-      if (queue.length > 0) void flushAnalytics(true)
+  if (flushInFlight) return flushInFlight
+  flushInFlight = (async () => {
+    if (flushTimer) {
+      clearTimeout(flushTimer)
+      flushTimer = null
+    }
+    if (!isEnabled()) return
+    await persistenceChain
+    const persisted = await readAnalyticsEvents(20)
+    const events = persisted.length > 0 ? persisted : queue.slice(0, 20)
+    if (events.length === 0) return
+    const payload = JSON.stringify({ sessionId: getSessionId(), events })
+    if (preferBeacon && typeof navigator.sendBeacon === 'function') {
+      const accepted = navigator.sendBeacon('/api/events', new Blob([payload], { type: 'application/json' }))
+      if (accepted) {
+        retryAttempt += 1
+        scheduleFlush(retryDelay())
+        return
+      }
+    }
+    try {
+      const response = await fetch('/api/events', {
+        method: 'POST',
+        credentials: 'include',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+      })
+      if (!response.ok) throw new Error(`Analytics HTTP ${response.status}`)
+      const ids = events.map((event) => event.id)
+      await removeAnalyticsEvents(ids)
+      const idSet = new Set(ids)
+      for (let index = queue.length - 1; index >= 0; index -= 1) {
+        if (idSet.has(queue[index].id)) queue.splice(index, 1)
+      }
+      retryAttempt = 0
+    } catch {
+      retryAttempt += 1
+      scheduleFlush(retryDelay())
       return
     }
-  }
-  try {
-    await fetch('/api/events', {
-      method: 'POST',
-      credentials: 'include',
-      keepalive: true,
-      headers: { 'Content-Type': 'application/json' },
-      body: payload,
-    })
-  } catch {
-    // Analytics must never block the user's primary task.
-  }
-  if (queue.length > 0) void flushAnalytics()
+    if ((await readAnalyticsEvents(1)).length > 0 || queue.length > 0) scheduleFlush(0)
+  })().finally(() => {
+    flushInFlight = null
+  })
+  return flushInFlight
 }
 
 export const trackEvent = (
@@ -336,12 +380,21 @@ export const trackEvent = (
   properties: AnalyticsProperties = {},
 ) => {
   if (!isEnabled()) return
-  queue.push({
+  const event: QueuedEvent = {
+    id: createAnalyticsTraceId(),
     name,
     occurredAt: new Date().toISOString(),
     path: window.location.pathname,
-    properties: compactProperties(properties),
-  })
+    properties: compactProperties({ ...properties, release: CLIENT_RELEASE }),
+  }
+  queue.push(event)
+  persistenceChain = persistenceChain
+    .then(() => putAnalyticsEvent(event as AnalyticsOutboxEvent))
+    .then(() => {
+      const index = queue.findIndex((item) => item.id === event.id)
+      if (index >= 0) queue.splice(index, 1)
+    })
+    .catch(() => undefined)
   if (queue.length >= 10) {
     void flushAnalytics()
     return
@@ -351,6 +404,7 @@ export const trackEvent = (
 
 export const setAnalyticsEnabled = (enabled: boolean) => {
   try {
+    localStorage.setItem(PREFERENCE_KEY, enabled ? 'enabled' : 'disabled')
     if (enabled) localStorage.removeItem(DISABLED_KEY)
     else localStorage.setItem(DISABLED_KEY, '1')
   } catch {
@@ -358,6 +412,9 @@ export const setAnalyticsEnabled = (enabled: boolean) => {
   }
   if (!enabled) {
     queue.splice(0, queue.length)
+    persistenceChain = persistenceChain
+      .then(() => clearAnalyticsEvents())
+      .catch(() => clearAnalyticsEvents())
     pageState = null
     virtualViewState = null
   }
@@ -395,9 +452,17 @@ export const setAnalyticsView = (view: string) => {
 export const isAnalyticsEnabled = () => {
   if (navigator.doNotTrack === '1') return false
   try {
-    return localStorage.getItem(DISABLED_KEY) !== '1'
+    return localStorage.getItem(PREFERENCE_KEY) === 'enabled'
   } catch {
-    return true
+    return false
+  }
+}
+
+export const hasAnalyticsPreference = () => {
+  try {
+    return localStorage.getItem(PREFERENCE_KEY) === 'enabled' || localStorage.getItem(PREFERENCE_KEY) === 'disabled'
+  } catch {
+    return false
   }
 }
 
@@ -415,6 +480,7 @@ export const initializeAnalytics = () => {
     viewport: viewportBucket(),
     connection: connectionKind(),
   })
+  scheduleFlush(0)
   window.addEventListener('error', (event) => {
     trackEvent('client_error', {
       error_name: event.error instanceof Error ? event.error.name : 'Error',

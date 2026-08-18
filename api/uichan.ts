@@ -2,7 +2,6 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import {
   isAnalyticsEventName,
   listAnalyticsRows,
-  pruneAnalyticsRows,
   readAnalyticsSummary,
 } from '../server/analytics.js'
 import { requireAdminUser } from '../server/auth/admin.js'
@@ -129,7 +128,6 @@ const sendEvents = async (req: VercelRequest, res: VercelResponse) => {
     throw new ApiError(400, 'INVALID_DATE_FILTER', '조회 기간을 확인해 주세요.')
   }
 
-  await pruneAnalyticsRows(90)
   const [summary, result] = await Promise.all([
     readAnalyticsSummary(),
     listAnalyticsRows({

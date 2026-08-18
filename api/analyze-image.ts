@@ -491,17 +491,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     setTimingHeaders(200)
     res.status(200).json(toV1Response(analysis, requestId, modelVersion))
   } catch (e) {
-    const message = e instanceof Error ? e.message : 'SERVER_ERROR'
     setTimingHeaders(502, e instanceof Error ? e.name : 'UnknownError')
     res.status(502).json({
       success: false,
+      code: 'ANALYZER_UNAVAILABLE',
       recommended_category: 'misc_uncat',
       confidence: 0,
-      reason: message,
+      reason: '지금은 상품을 분석하지 못했어요. 잠시 후 다시 시도해 주세요.',
       items: [],
       need_user_check: true,
-      error_code: 'SERVER_ERROR',
-      error: message,
+      error_code: 'ANALYZER_UNAVAILABLE',
+      error: '상품 분석 서버를 사용할 수 없어요.',
     })
   }
 }

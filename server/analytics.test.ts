@@ -13,6 +13,7 @@ describe('analytics event normalization', () => {
     const [event] = normalizeAnalyticsBatch({
       sessionId: '123e4567-e89b-12d3-a456-426614174000',
       events: [{
+        id: 'event_123e4567-e89b-12d3-a456-426614174000',
         name: 'record_saved',
         path: '/?token=secret#private',
         occurredAt,
@@ -31,6 +32,7 @@ describe('analytics event normalization', () => {
     }, 'user-1')
 
     expect(event).toMatchObject({
+      client_event_id: 'event_123e4567-e89b-12d3-a456-426614174000',
       user_id: 'user-1',
       event_name: 'record_saved',
       path: '/',
@@ -120,6 +122,8 @@ describe('analytics event normalization', () => {
           payload_kb: 25_000,
           item_count: 3,
           needs_review: false,
+          release: 'abcdef123456',
+          server_request_id: 'request_1234567890abcdef',
           ocr_text: '카드번호와 영수증 원문',
           image_base64: 'private-image-data',
           latitude: 37.5,
@@ -141,9 +145,33 @@ describe('analytics event normalization', () => {
       payload_kb: 10_240,
       item_count: 3,
       needs_review: false,
+      release: 'abcdef123456',
+      server_request_id: 'request_1234567890abcdef',
     })
     expect(event.properties).not.toHaveProperty('ocr_text')
     expect(event.properties).not.toHaveProperty('image_base64')
     expect(event.properties).not.toHaveProperty('latitude')
+  })
+
+  it('accepts explicit model ratings but strips free-form feedback', () => {
+    const [event] = normalizeAnalyticsBatch({
+      sessionId: '123e4567-e89b-12d3-a456-426614174000',
+      events: [{
+        name: 'analysis_rating',
+        properties: {
+          trace_id: '123e4567-e89b-12d3-a456-426614174001',
+          rating: 'correct',
+          feedback_source: 'analysis_review',
+          memo: '사용자가 입력한 비공개 설명',
+        },
+      }],
+    }, null)
+
+    expect(event.properties).toEqual({
+      trace_id: '123e4567-e89b-12d3-a456-426614174001',
+      rating: 'correct',
+      feedback_source: 'analysis_review',
+    })
+    expect(event.client_event_id).toMatch(/^[0-9a-f-]{36}$/)
   })
 })

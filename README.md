@@ -141,6 +141,7 @@ Supabase에서 아래 마이그레이션을 순서대로 실행하고 Vercel에 
 1. [`supabase/migrations/202608030001_user_event_logs.sql`](supabase/migrations/202608030001_user_event_logs.sql)
 2. [`supabase/migrations/202608140001_behavior_analytics.sql`](supabase/migrations/202608140001_behavior_analytics.sql)
 3. [`supabase/migrations/202608180001_operational_analytics.sql`](supabase/migrations/202608180001_operational_analytics.sql)
+4. [`supabase/migrations/202608180002_operational_analytics_hardening.sql`](supabase/migrations/202608180002_operational_analytics_hardening.sql)
 
 ```env
 CASHLOG_ADMIN_EMAILS=owner@example.com

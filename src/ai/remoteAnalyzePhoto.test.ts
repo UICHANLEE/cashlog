@@ -24,6 +24,7 @@ describe('remoteAnalyzePhoto', () => {
         'Content-Type': 'application/json',
         'X-Cashlog-total-Time-Ms': '950.1',
         'X-Cashlog-model-Time-Ms': '810.6',
+        'X-Request-ID': 'request_1234567890abcdef',
       },
     })))
 
@@ -35,6 +36,7 @@ describe('remoteAnalyzePhoto', () => {
     expect(result.suggestedCategory).toBe('meal_cafe')
     expect(result.operational).toMatchObject({
       pipeline: 'receipt',
+      serverRequestId: 'request_1234567890abcdef',
       serverDurationMs: 950,
       modelDurationMs: 811,
       httpStatus: 200,
@@ -45,12 +47,13 @@ describe('remoteAnalyzePhoto', () => {
 
   it('keeps timing metadata on failed requests for failure-rate analysis', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(
-      JSON.stringify({ error: 'model unavailable' }),
+      JSON.stringify({ error: 'private upstream failure details', code: 'VISION_ANALYSIS_UNAVAILABLE' }),
       {
         status: 502,
         headers: {
           'Content-Type': 'application/json',
           'X-Cashlog-total-Time-Ms': '1200',
+          'X-Request-ID': 'request_failed_123456',
         },
       },
     )))
@@ -63,9 +66,27 @@ describe('remoteAnalyzePhoto', () => {
     expect(error).toBeInstanceOf(AnalysisRequestError)
     expect((error as AnalysisRequestError).operational).toMatchObject({
       pipeline: 'receipt',
+      serverRequestId: 'request_failed_123456',
       serverDurationMs: 1200,
       httpStatus: 502,
     })
+    expect((error as AnalysisRequestError).code).toBe('VISION_ANALYSIS_UNAVAILABLE')
+    expect((error as Error).message).toBe('지금은 사진을 분석하지 못했어요. 잠시 후 다시 시도해 주세요.')
     expect((error as AnalysisRequestError).operational.modelDurationMs).toBeUndefined()
+  })
+
+  it('turns network failures into a bounded operational error', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new TypeError('private network details')
+    }))
+
+    const error = await remoteAnalyzePhoto(
+      new File(['jpeg-bytes'], 'coffee.jpg', { type: 'image/jpeg' }),
+      '/api/analyze',
+    ).catch((reason: unknown) => reason)
+
+    expect(error).toBeInstanceOf(AnalysisRequestError)
+    expect((error as AnalysisRequestError).code).toBe('NETWORK_ERROR')
+    expect((error as Error).message).toBe('사진 분석 서버에 연결하지 못했어요.')
   })
 })

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { AnalysisRequestError } from './analysisTiming'
 import { optimizeProductImageUpload, remoteAnalyzeProductImage } from './remoteAnalyzeProductImage'
 
 describe('remoteAnalyzeProductImage', () => {
@@ -71,6 +72,7 @@ describe('remoteAnalyzeProductImage', () => {
               'Content-Type': 'application/json',
               'X-Cashlog-total-Time-Ms': '842.4',
               'X-Cashlog-analyzer-Time-Ms': '701.7',
+              'X-Request-ID': 'request_product_123456',
             },
           },
         ),
@@ -91,6 +93,7 @@ describe('remoteAnalyzeProductImage', () => {
     expect(result.taxonomyVersion).toBe('13.33.1')
     expect(result.operational).toMatchObject({
       pipeline: 'product',
+      serverRequestId: 'request_product_123456',
       serverDurationMs: 842,
       modelDurationMs: 702,
       httpStatus: 200,
@@ -111,5 +114,30 @@ describe('remoteAnalyzeProductImage', () => {
     await expect(
       remoteAnalyzeProductImage(new File(['image'], 'empty.jpg', { type: 'image/jpeg' }), '/api/analyze-image'),
     ).rejects.toThrow('image file or imageBase64 is required')
+  })
+
+  it('preserves a safe error code and request identifier on failures', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ error: 'private upstream failure details', code: 'ANALYZER_UNAVAILABLE' }), {
+          status: 503,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Request-ID': 'request_product_failed',
+          },
+        }),
+      ),
+    )
+
+    const error = await remoteAnalyzeProductImage(
+      new File(['image'], 'meal.jpg', { type: 'image/jpeg' }),
+      '/api/analyze-image',
+    ).catch((reason: unknown) => reason)
+
+    expect(error).toBeInstanceOf(AnalysisRequestError)
+    expect((error as AnalysisRequestError).code).toBe('ANALYZER_UNAVAILABLE')
+    expect((error as Error).message).toBe('지금은 상품을 분석하지 못했어요. 잠시 후 다시 시도해 주세요.')
+    expect((error as AnalysisRequestError).operational.serverRequestId).toBe('request_product_failed')
   })
 })

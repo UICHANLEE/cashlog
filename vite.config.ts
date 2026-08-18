@@ -8,10 +8,19 @@ const productAnalyzerProxyTarget =
   process.env.CATAI_DEV_PROXY_TARGET?.trim() ||
   'http://127.0.0.1:8010'
 const productAnalyzerHeaders = getProductAnalyzerConfig().headers
+const cashlogRelease = (
+  process.env.VERCEL_GIT_COMMIT_SHA ||
+  process.env.GITHUB_SHA ||
+  process.env.npm_package_version ||
+  'local'
+).slice(0, 40)
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  define: {
+    'import.meta.env.VITE_CASHLOG_RELEASE': JSON.stringify(cashlogRelease),
+  },
   build: {
     // The optional Three.js pet renderer is isolated and loaded only after opening the pet tab.
     chunkSizeWarningLimit: 550,
